@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase D (tools & harvesting modes) done. This document describes the
+Status: Phase E (workshop, crafting & economy) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -102,11 +102,13 @@ Rust's built-in `core` crate and breaks macro expansions.
 ## 4. Game states
 
 ```
-Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused}
+Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop}
   │                           ▲                           │
   └──(invalid data)──► log + exit      └──Main Menu (pause)──┘
 ```
 
+* `Inventory` (basket / Tool Shop) and `Paused` stop game time; `Workshop`
+  (the workbench screen) keeps it running so a batch binds while you watch.
 * State-scoped entities despawn on exit. The 3D region scene is *not*
   state-scoped: it is built once per region and shown behind the title screen
   (slow orbit camera) and in game.
@@ -216,6 +218,31 @@ profiling ever shows a need.
   procedural; animations are driven by real game events (a pick happened),
   not by key presses.
 
+## 7c. Workshop and crafting (Phase E)
+
+* **Placement:** regions with `workshop: true` get a cottage landmark from
+  `RegionLayout::place_landmarks` (next to the spawn, away from the path,
+  door facing the spawn). `layout::workshop` holds its dimensions; walls (with
+  a door gap) and furniture are box colliders, and the four stations are
+  `Interactable` spheres picked by `pick_interactable` (eye ray). Rendering
+  places the mesh, the lamp and the vases from the same numbers
+  (`layout::to_world` converts workshop-local positions).
+* **Interaction:** `LookTarget.station` names the station in view; E sets
+  `OpenScreen` and enters `PlayState::Workshop` (workbench, display) or
+  `Inventory` (tool shelf → Tool Shop tab, storage → basket).
+* **Core (`game/crafting.rs`):** `refresh_recipes` records discoveries
+  whenever tools, species or levels change. `plan_craft(recipe, count,
+  keep)` is a pure preview that picks named species first, then distinct
+  species, then the most plentiful flowers, never touching flowers reserved
+  for *other* required bouquets, and checks the reserve for the batch as a
+  whole. `craft` validates (discovered, workbench free, batch ≤ capacity,
+  plan) and only then consumes flowers and starts a saved `CraftJob`;
+  `tick` advances it and delivers bouquets and XP. Selling bouquets earns
+  coins like flowers.
+* **Presentation:** `ui::workshop` renders the plan the core computed, so
+  the screen can't disagree with what binding will do; `rendering::bouquets`
+  rebuilds the vase bouquets when the owned bouquets change.
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -250,7 +277,9 @@ profiling ever shows a need.
   looks, jumps, picks five flowers by aiming and pressing E, opens the
   basket, pauses (saves). Run 2 restarts, continues, and verifies the picked
   flowers are still picked, absent from the world and in the basket, and the
-  player resumes where they stood. Injected input is authoritative (real
+  player resumes where they stood. Later phases extend it: tools and every
+  harvesting mode (Phase D), walking into the workshop, binding bouquets at
+  the workbench and checking they persist (Phase E). Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 
 ## 10. Performance monitoring

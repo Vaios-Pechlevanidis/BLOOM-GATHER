@@ -1,6 +1,6 @@
 //! The basket (inventory) screen: every species with its count, rarity and
-//! collection status, sorting and filtering, and selling — plus a Tool Shop
-//! tab (until the workshop building arrives in Phase E). Keys 1/2 switch tabs.
+//! collection status, sorting and filtering, and selling — plus the Tool Shop
+//! tab when opened at the workshop's tool shelf. Keys 1/2 switch tabs.
 //!
 //! Selling goes through the session, which enforces the keepsake reserve:
 //! flowers still needed for a required bouquet are shown as "kept" and
@@ -14,8 +14,10 @@ use super::widgets::{spawn_button, ButtonVariant};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, PlayState, Session};
 use crate::input::Bindings;
+use crate::interaction::OpenScreen;
 use crate::rendering::color;
 use bloom_core::game::{ToolLock, ToolStatus};
+use bloom_core::world::InteractableKind;
 
 pub struct InventoryPlugin;
 
@@ -62,6 +64,8 @@ enum Tab {
 #[derive(Resource, Default)]
 struct View {
     tab: Tab,
+    /// Opened at the tool shelf: the Tool Shop tab is available.
+    at_shelf: bool,
     sort: Sort,
     filter: Filter,
     /// The grid must be rebuilt (contents, sort or filter changed).
@@ -103,13 +107,23 @@ fn toggle(
         match state.get() {
             PlayState::Playing => next.set(PlayState::Inventory),
             PlayState::Inventory => next.set(PlayState::Playing),
+            PlayState::Workshop => next.set(PlayState::Playing),
             PlayState::Paused => {}
         }
     }
 }
 
-fn spawn_screen(mut commands: Commands, mut view: ResMut<View>) {
+fn spawn_screen(mut commands: Commands, mut view: ResMut<View>, mut open: ResMut<OpenScreen>) {
     view.stale = true;
+    // The shop lives at the tool shelf in the workshop; Tab (or the storage
+    // chest) opens the basket.
+    view.at_shelf = open.0.take() == Some(InteractableKind::ToolShelf);
+    view.tab = if view.at_shelf {
+        Tab::Shop
+    } else {
+        Tab::Basket
+    };
+    let at_shelf = view.at_shelf;
     commands
         .spawn((
             StateScoped(PlayState::Inventory),
@@ -159,12 +173,14 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>) {
                         ButtonVariant::Compact,
                         Action::Tab(Tab::Basket),
                     );
-                    spawn_button(
-                        tabs,
-                        "2  Tool shop",
-                        ButtonVariant::Compact,
-                        Action::Tab(Tab::Shop),
-                    );
+                    if at_shelf {
+                        spawn_button(
+                            tabs,
+                            "2  Tool shop",
+                            ButtonVariant::Compact,
+                            Action::Tab(Tab::Shop),
+                        );
+                    }
                 });
 
                 card.spawn((
@@ -281,7 +297,7 @@ fn tab_keys(keys: Res<ButtonInput<KeyCode>>, bindings: Res<Bindings>, mut view: 
     let [basket, shop, ..] = bindings.tool_slots;
     let tab = if keys.just_pressed(basket) {
         Tab::Basket
-    } else if keys.just_pressed(shop) {
+    } else if keys.just_pressed(shop) && view.at_shelf {
         Tab::Shop
     } else {
         return;

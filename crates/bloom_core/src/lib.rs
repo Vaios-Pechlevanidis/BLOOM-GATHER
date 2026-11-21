@@ -26,4 +26,6 @@ pub mod rng;
 pub mod world;
 
 pub use data::{DataError, GameData};
-pub use game::{BatchOutcome, Game, GameError, GameEvent, GameState, ToolStatus};
+pub use game::{
+    BatchOutcome, CraftPlan, Game, GameError, GameEvent, GameState, RecipeStatus, ToolStatus,
+};

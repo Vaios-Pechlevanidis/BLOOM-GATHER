@@ -11,6 +11,7 @@ mod pause_menu;
 pub mod theme;
 mod toasts;
 mod widgets;
+mod workshop;
 
 pub use toasts::Toast;
 
@@ -28,6 +29,7 @@ impl Plugin for UiPlugin {
             debug_overlay::DebugOverlayPlugin,
             inventory::InventoryPlugin,
             toasts::ToastsPlugin,
+            workshop::WorkshopPlugin,
         ));
     }
 }

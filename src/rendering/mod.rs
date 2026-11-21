@@ -4,6 +4,7 @@
 //! Rendering only *reads* game state. Placement and collision come from
 //! `bloom_core`, so what you see and what you bump into always agree.
 
+mod bouquets;
 mod camera;
 mod critters;
 mod grass;
@@ -31,6 +32,7 @@ impl Plugin for RenderingPlugin {
             sky::SkyPlugin,
             landmarks::LandmarksPlugin,
             critters::CrittersPlugin,
+            bouquets::BouquetsPlugin,
         ));
     }
 }

@@ -5,6 +5,7 @@
 //! Temporary procedural art (see TODO.md), in the same style as the trees.
 
 use bevy::prelude::*;
+use bevy::render::view::RenderLayers;
 use bloom_core::world::LandmarkKind;
 
 use super::meshes::{hash3, lin, mix, MeshBuilder};
@@ -37,21 +38,359 @@ fn spawn_landmarks(
     let bench = meshes.add(bench());
     let well = meshes.add(well());
     let sign = meshes.add(signpost());
+    let cottage = meshes.add(workshop());
     for l in &scene.layout.landmarks {
         let mesh = match l.kind {
             LandmarkKind::Bench => bench.clone(),
             LandmarkKind::Well => well.clone(),
             LandmarkKind::Signpost => sign.clone(),
+            LandmarkKind::Workshop => cottage.clone(),
         };
-        commands.spawn((
+        let mut e = commands.spawn((
             SceneEntity,
             Mesh3d(mesh),
             MeshMaterial3d(material.clone()),
             Transform::from_xyz(l.position.x, l.base, l.position.y)
                 .with_rotation(Quat::from_rotation_y(l.yaw)),
         ));
+        if l.kind == LandmarkKind::Workshop {
+            // A warm lamp under the roof so the interior isn't left in shadow.
+            e.with_children(|w| {
+                w.spawn((
+                    PointLight {
+                        color: Color::srgb(1.0, 0.86, 0.66),
+                        intensity: 90_000.0,
+                        range: 9.0,
+                        shadows_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_xyz(0.0, 2.35, -0.6),
+                    RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
+                ));
+            });
+        }
     }
 }
+
+/// The florist's cottage: plank floor, plaster walls with a timber frame and
+/// windows, a door gap at the front (+Z), a gable roof with a chimney, and
+/// the furniture the player uses (positions match the colliders and
+/// interactables in `bloom_core::world::layout`).
+fn workshop() -> Mesh {
+    use bloom_core::world::layout::workshop::{DOOR_HALF_WIDTH, HALF, WALL, WALL_HEIGHT};
+    let mut b = MeshBuilder::default();
+    let plaster = lin(Color::srgb_u8(242, 232, 212));
+    let plaster_shade = lin(Color::srgb_u8(222, 208, 182));
+    let timber = lin(Color::srgb_u8(118, 86, 62));
+    let roof = lin(Color::srgb_u8(170, 102, 82));
+    let roof_dark = lin(Color::srgb_u8(132, 78, 64));
+    let plank = move |p: Vec3| {
+        mix(
+            lin(Color::srgb_u8(150, 112, 80)),
+            lin(Color::srgb_u8(186, 146, 106)),
+            hash3(Vec3::new(p.x * 0.0, 0.0, (p.z * 3.0).floor())) * 0.5 + 0.5,
+        )
+    };
+    let wall_paint = move |p: Vec3| {
+        mix(
+            plaster_shade,
+            plaster,
+            (p.y * 0.5 + 0.5).clamp(0.0, 1.0) + hash3(p * 4.0) * 0.05,
+        )
+    };
+    let none = Quat::IDENTITY;
+    let h = WALL_HEIGHT;
+    let t = WALL;
+
+    // Floor.
+    cuboid(
+        &mut b,
+        Vec3::new(HALF.x * 2.0, 0.12, HALF.y * 2.0),
+        Vec3::new(0.0, 0.02, 0.0),
+        none,
+        plank,
+    );
+    // Walls: back, sides, and the front split around the door.
+    cuboid(
+        &mut b,
+        Vec3::new(HALF.x * 2.0 + t, h, t),
+        Vec3::new(0.0, h / 2.0, -HALF.y),
+        none,
+        wall_paint,
+    );
+    for x in [-HALF.x, HALF.x] {
+        cuboid(
+            &mut b,
+            Vec3::new(t, h, HALF.y * 2.0),
+            Vec3::new(x, h / 2.0, 0.0),
+            none,
+            wall_paint,
+        );
+    }
+    let side = HALF.x - DOOR_HALF_WIDTH;
+    for dir in [-1.0f32, 1.0] {
+        cuboid(
+            &mut b,
+            Vec3::new(side, h, t),
+            Vec3::new(dir * (DOOR_HALF_WIDTH + side / 2.0), h / 2.0, HALF.y),
+            none,
+            wall_paint,
+        );
+    }
+    // Lintel above the door.
+    cuboid(
+        &mut b,
+        Vec3::new(DOOR_HALF_WIDTH * 2.0, 0.55, t),
+        Vec3::new(0.0, h - 0.27, HALF.y),
+        none,
+        wall_paint,
+    );
+    // Timber frame: corner posts, sill and top beams, door frame.
+    let tw = move |_: Vec3| timber;
+    for (x, z) in [
+        (-HALF.x, -HALF.y),
+        (HALF.x, -HALF.y),
+        (-HALF.x, HALF.y),
+        (HALF.x, HALF.y),
+    ] {
+        cuboid(
+            &mut b,
+            Vec3::new(0.22, h, 0.22),
+            Vec3::new(x, h / 2.0, z),
+            none,
+            tw,
+        );
+    }
+    for z in [-HALF.y, HALF.y] {
+        cuboid(
+            &mut b,
+            Vec3::new(HALF.x * 2.0 + 0.3, 0.18, 0.3),
+            Vec3::new(0.0, h, z),
+            none,
+            tw,
+        );
+    }
+    for x in [-HALF.x, HALF.x] {
+        cuboid(
+            &mut b,
+            Vec3::new(0.3, 0.18, HALF.y * 2.0 + 0.3),
+            Vec3::new(x, h, 0.0),
+            none,
+            tw,
+        );
+    }
+    for x in [-DOOR_HALF_WIDTH, DOOR_HALF_WIDTH] {
+        cuboid(
+            &mut b,
+            Vec3::new(0.14, h - 0.55, 0.32),
+            Vec3::new(x, (h - 0.55) / 2.0, HALF.y),
+            none,
+            tw,
+        );
+    }
+    // Windows: dark panes with a cross frame on the side walls and the back.
+    let pane = lin(Color::srgb_u8(120, 150, 160));
+    for (center, normal_x) in [
+        (Vec3::new(-HALF.x, 1.45, -0.6), true),
+        (Vec3::new(HALF.x, 1.45, 0.4), true),
+        (Vec3::new(-1.6, 1.45, -HALF.y), false),
+        (Vec3::new(1.6, 1.45, -HALF.y), false),
+    ] {
+        let (size, bar_v, bar_h) = if normal_x {
+            (
+                Vec3::new(t + 0.04, 0.8, 1.0),
+                Vec3::new(t + 0.08, 0.86, 0.07),
+                Vec3::new(t + 0.08, 0.07, 1.06),
+            )
+        } else {
+            (
+                Vec3::new(1.0, 0.8, t + 0.04),
+                Vec3::new(0.07, 0.86, t + 0.08),
+                Vec3::new(1.06, 0.07, t + 0.08),
+            )
+        };
+        cuboid(&mut b, size, center, none, move |_| pane);
+        cuboid(&mut b, bar_v, center, none, tw);
+        cuboid(&mut b, bar_h, center, none, tw);
+    }
+    // Gable roof (two slopes) and gable ends.
+    let pitch: f32 = 0.62;
+    let run = HALF.x + 0.45;
+    let slope = run / pitch.cos();
+    for dir in [-1.0f32, 1.0] {
+        let center = Vec3::new(dir * run / 2.0, h + run * pitch.tan() / 2.0, 0.0);
+        let rot = Quat::from_rotation_z(-dir * pitch);
+        cuboid(
+            &mut b,
+            Vec3::new(slope, 0.12, HALF.y * 2.0 + 0.7),
+            center,
+            rot,
+            move |p| mix(roof_dark, roof, ((p.x * 9.0).sin() * 0.5 + 0.5) * 0.6 + 0.3),
+        );
+    }
+    let peak = run * pitch.tan();
+    for z in [-HALF.y, HALF.y] {
+        // Stepped plaster triangle under each gable.
+        for k in 0..6 {
+            let y = h + (k as f32 + 0.5) * peak / 6.0;
+            let w = (HALF.x * 2.0) * (1.0 - (k as f32 + 0.5) / 6.0);
+            cuboid(
+                &mut b,
+                Vec3::new(w, peak / 6.0 + 0.01, t),
+                Vec3::new(0.0, y, z),
+                none,
+                wall_paint,
+            );
+        }
+    }
+    // Chimney.
+    let brick = lin(Color::srgb_u8(168, 110, 92));
+    cuboid(
+        &mut b,
+        Vec3::new(0.55, 1.6, 0.55),
+        Vec3::new(1.9, h + 1.1, -1.4),
+        none,
+        move |p| mix(brick * 0.85, brick, hash3(p * 6.0) * 0.5 + 0.5),
+    );
+
+    // --- Furniture (matches the colliders) ---
+    // Workbench along the back wall, with a ribbon spool and loose flowers.
+    cuboid(
+        &mut b,
+        Vec3::new(2.5, 0.08, 0.84),
+        Vec3::new(0.0, 0.92, -2.35),
+        none,
+        wood(true),
+    );
+    for x in [-1.15f32, 1.15] {
+        for z in [-2.7f32, -2.0] {
+            cuboid(
+                &mut b,
+                Vec3::new(0.08, 0.9, 0.08),
+                Vec3::new(x, 0.45, z),
+                none,
+                wood(false),
+            );
+        }
+    }
+    let pink = lin(Color::srgb_u8(238, 190, 190));
+    b.add(
+        &Mesh::from(Cylinder::new(0.09, 0.08)),
+        Transform::from_xyz(-0.7, 1.0, -2.45)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        move |_| pink,
+    );
+    for (i, c) in [
+        (250, 247, 238),
+        (246, 224, 128),
+        (226, 120, 104),
+        (128, 150, 216),
+        (226, 160, 196),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let col = lin(Color::srgb_u8(c.0, c.1, c.2));
+        let x = 0.1 + i as f32 * 0.18;
+        b.add(
+            &Sphere::new(1.0).mesh().ico(1).expect("valid icosphere"),
+            Transform::from_xyz(x, 0.98, -2.3 + (i % 2) as f32 * 0.12)
+                .with_scale(Vec3::new(0.05, 0.02, 0.05)),
+            move |_| col,
+        );
+    }
+    // Tool shelf on the left wall with hanging tools.
+    cuboid(
+        &mut b,
+        Vec3::new(0.5, 2.0, 2.3),
+        Vec3::new(-3.05, 1.0, -0.6),
+        none,
+        wood(false),
+    );
+    for y in [0.6f32, 1.2, 1.8] {
+        cuboid(
+            &mut b,
+            Vec3::new(0.62, 0.05, 2.36),
+            Vec3::new(-2.98, y, -0.6),
+            none,
+            wood(true),
+        );
+    }
+    let metal = lin(Color::srgb_u8(170, 176, 182));
+    for (i, z) in [-1.4f32, -0.9, -0.4, 0.1].into_iter().enumerate() {
+        cuboid(
+            &mut b,
+            Vec3::new(0.04, 0.45, 0.04),
+            Vec3::new(-2.72, 1.45, z),
+            none,
+            wood(true),
+        );
+        let head = if i % 2 == 0 {
+            Vec3::new(0.05, 0.05, 0.22)
+        } else {
+            Vec3::new(0.05, 0.16, 0.05)
+        };
+        cuboid(&mut b, head, Vec3::new(-2.72, 1.2, z), none, move |_| metal);
+    }
+    // Storage chest by the right wall.
+    cuboid(
+        &mut b,
+        Vec3::new(0.84, 0.62, 0.68),
+        Vec3::new(2.85, 0.33, -1.2),
+        none,
+        wood(false),
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.88, 0.1, 0.72),
+        Vec3::new(2.85, 0.68, -1.2),
+        none,
+        wood(true),
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.9, 0.06, 0.05),
+        Vec3::new(2.85, 0.5, -0.85),
+        none,
+        move |_| metal,
+    );
+    // Display table near the door, with three vases (bouquets go in them).
+    cuboid(
+        &mut b,
+        Vec3::new(1.24, 0.07, 0.84),
+        Vec3::new(2.5, 0.82, 1.5),
+        none,
+        wood(true),
+    );
+    for x in [1.98f32, 3.02] {
+        for z in [1.15f32, 1.85] {
+            cuboid(
+                &mut b,
+                Vec3::new(0.07, 0.8, 0.07),
+                Vec3::new(x, 0.4, z),
+                none,
+                wood(false),
+            );
+        }
+    }
+    let glaze = lin(Color::srgb_u8(156, 178, 138));
+    for slot in DISPLAY_SLOTS {
+        b.add(
+            &Mesh::from(Cylinder::new(0.075, 0.2)),
+            Transform::from_xyz(slot.x, 0.95, slot.y),
+            move |p| mix(glaze * 0.8, glaze, p.y + 0.5),
+        );
+    }
+    b.build()
+}
+
+/// Vase positions on the display table (workshop-local x, z); bouquets are
+/// placed in them.
+pub const DISPLAY_SLOTS: [Vec2; 3] = [
+    Vec2::new(2.12, 1.5),
+    Vec2::new(2.5, 1.62),
+    Vec2::new(2.88, 1.45),
+];
 
 fn wood(light: bool) -> impl Fn(Vec3) -> LinearRgba + Copy {
     let dark = lin(Color::srgb_u8(128, 96, 70));

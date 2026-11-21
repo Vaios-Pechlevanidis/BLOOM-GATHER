@@ -136,8 +136,16 @@ consumed atomically; nothing is consumed on failure.
 All eight are required for completion. A recipe is **discovered** when the
 player owns all its tools and has discovered every species it names.
 
-**Ingredient selection:** the player can let the workshop auto-fill (uses the
-most plentiful non-reserved species first) or pick species manually.
+**At the workbench** (walk into the cottage and press E at the bench): the
+recipe list shows every recipe; locked ones say what is still needed (tools,
+species to find, level). The selected recipe shows its requirements, its
+price next to what its flowers would sell for raw, and the exact flowers a
+batch will use. The player chooses a quantity (-/+, Max, arrow keys) up to
+the batch capacity and may mark species to *keep out* of the bouquet; the
+rest is filled automatically from the most plentiful flowers. Binding takes
+`craft_time_secs` per bouquet of play time (the job is saved); bouquets and
+crafting XP arrive when it finishes. The Bouquets tab (or pressing E at the
+display table) sells them. Finished bouquets stand in the display's vases.
 
 **Reserve:** while a required recipe has never been crafted, the exact flowers
 it needs (e.g. 2 Roses for Romantic) are *set aside*: they can't be sold or

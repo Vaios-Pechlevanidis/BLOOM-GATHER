@@ -22,4 +22,6 @@ pub enum PlayState {
     Paused,
     /// The inventory (basket) screen is open.
     Inventory,
+    /// The workbench screen is open (crafting keeps running).
+    Workshop,
 }

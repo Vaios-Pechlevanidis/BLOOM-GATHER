@@ -89,19 +89,30 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Smoke test buys tools, opens the shop, uses every mode through real input and verifies tools
   and picks persist across a restart; injected held keys now behave like real held keys
 
-## Phase E: Workshop, crafting & economy ⬜ (next)
+## Phase E: Workshop, crafting & economy ✅
 
-- ⬜ A cottage workshop building near the spawn (walk-in, collision, landmark placement in core)
-- ⬜ Interactables: workbench → crafting, storage → basket, tool display → tool shop (moves the
-  shop out of the basket screen), bouquet display
-- ⬜ Core crafting: recipe discovery, ingredient selection (auto-fill + manual), validation, atomic
-  batch crafting, craft timer, keepsake reserve applies to other recipes, bouquet inventory
-- ⬜ Selling bouquets; bouquet 3D models on the display
-- ⬜ Tests: tool requirements, ingredient consumption, nothing consumed on failure, reserve
+- ✅ Walk-in florist's cottage near the spawn (Sunny Meadow, `workshop: true` in data): placed by
+  core layout, flattened ground, walls with a door gap, furniture colliders, warm interior lamp
+- ✅ Interactables (core `pick_interactable`): workbench and bouquet display → workbench screen,
+  tool shelf → Tool Shop, storage chest → basket; HUD prompts with live details
+- ✅ Tool Shop moved out of the basket: the shop tab only exists when opened at the tool shelf
+- ✅ Core crafting (`game/crafting.rs`): recipe discovery (tools, named species, level) with
+  "still needed" reasons, `plan_craft` auto-fill from the most plentiful flowers, keep-out
+  species, batch capacity from tools, keepsake reserve for *other* required bouquets checked for
+  the whole batch, atomic consume, saved craft timer, bouquets + XP on completion, selling
+- ✅ Workbench screen: recipe list, requirements, price vs. raw flower value, exact ingredient
+  plan, quantity (-/+/Max, arrows), keep-out chips, Bind (Enter), progress bar; Bouquets tab
+  with Sell 1 / Sell all / Sell every bouquet; keys 1/2, Esc closes; crafting keeps running
+- ✅ Procedural bouquets (recipe colours, stems, leaves, ribbon) in the display table's vases
+- ✅ Tests: 10 crafting tests (incl. crafting every required bouquet from the whole world in
+  rarest-first and careless cheapest-first order) + 3 workshop layout tests; 121 tests in all
+- ✅ Smoke test walks into the workshop, opens the workbench with E, binds 3 Simple Bouquets,
+  checks the Bouquets tab and the display, and verifies bouquets and basket persist across a
+  restart
 
 ## Later phases ⬜
 
-U Upgrades & skill tree · P Progression & achievements · F Remaining regions ·
+U Upgrades (next) & skill tree · P Progression & achievements · F Remaining regions ·
 Z Completion & ending · G Polish & release
 
 ## Temporary assets (replace before release)
@@ -109,7 +120,7 @@ Z Completion & ending · G Polish & release
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
 - Sound effects and ambience: synthesised in `src/audio.rs`
-- Landmarks, butterflies, bees, clouds: procedural meshes
+- Landmarks, workshop cottage and furniture, bouquets, butterflies, bees, clouds: procedural meshes
 - First-person hand and tools: procedural meshes in `src/viewmodel.rs`
 - Terrain: vertex colours only (no textures, no grass yet)
 - Sky: flat clear colour + fog (no sky gradient or clouds yet)
@@ -120,7 +131,7 @@ Z Completion & ending · G Polish & release
 - Shutdown occasionally stalls, so far only on the first launch after a rebuild (likely
   pipeline compilation still running). Mitigated: after the final save the game forces the
   exit after 5 s, keeping the exit code. Root cause still to find (Bevy upgrade may fix it).
-- Adding landmarks in Phase C moved where flowers are placed, so saves made with the Phase B
+- Adding landmarks in Phase C (and the workshop in Phase E) moved where flowers are placed, so saves made with the Phase B
   build no longer match the world; the game detects this, keeps the old file as
   `save.unreadable-*` and starts fresh. Before 1.0, layout changes can do this again; after
   1.0, seeds and placement are frozen (content version + migration).

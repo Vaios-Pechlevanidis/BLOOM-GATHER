@@ -18,9 +18,15 @@ use crate::economy::Coins;
 use crate::progression::Xp;
 use crate::world::{FlowerField, RegionLayout};
 
+mod crafting;
+
+pub use crafting::{CraftJob, CraftPlan, RecipeLock, RecipeStatus};
+
 /// Everything that is saved. Keys are content ids (not indices) so saves
-/// survive content being reordered.
+/// survive content being reordered. Missing fields (saves from older
+/// builds) take their defaults.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct GameState {
     pub coins: Coins,
     /// Lifetime XP; the level is derived from it.
@@ -34,19 +40,28 @@ pub struct GameState {
     /// Lifetime harvested count per species (to know what the world still holds).
     pub harvested_per_species: BTreeMap<String, u32>,
     pub completed_regions: BTreeSet<String>,
-    /// Owned tools (Phase D/E).
+    /// Owned tools.
     pub tools: BTreeSet<String>,
-    /// Bouquets crafted per recipe id (Phase E).
+    /// Bouquets ever bound, per recipe id.
     pub crafted: BTreeMap<String, u32>,
+    /// Recipes the player has discovered.
+    pub discovered_recipes: BTreeSet<String>,
+    /// Finished bouquets waiting to be sold, per recipe id.
+    pub bouquets: BTreeMap<String, u32>,
+    /// The batch being bound at the workbench, if any.
+    pub craft_job: Option<CraftJob>,
     pub stats: Stats,
     /// Where the player stood when the game was saved.
     pub player: Option<PlayerPose>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct Stats {
     pub flowers_harvested: u64,
     pub flowers_sold: u64,
+    pub bouquets_crafted: u64,
+    pub bouquets_sold: u64,
     pub coins_earned: Coins,
     pub playtime_secs: f64,
 }
@@ -75,6 +90,24 @@ pub enum GameEvent {
     },
     RegionCompleted {
         region: usize,
+        coins: Coins,
+    },
+    RecipeDiscovered {
+        recipe: usize,
+    },
+    CraftStarted {
+        recipe: usize,
+        count: u32,
+    },
+    /// A batch finished binding. `first` = the recipe's first ever batch.
+    BouquetsReady {
+        recipe: usize,
+        count: u32,
+        first: bool,
+    },
+    BouquetsSold {
+        recipe: usize,
+        count: u32,
         coins: Coins,
     },
     ToolBought {
@@ -120,6 +153,23 @@ pub enum GameError {
     ModeLocked,
     /// The basket/sweep/area would gather nothing.
     NothingInReach,
+    UnknownRecipe,
+    /// The recipe isn't discovered yet (missing tools, species or level).
+    RecipeLocked(Vec<RecipeLock>),
+    /// The workbench is still binding the previous batch.
+    Busy,
+    BatchTooLarge {
+        max: u32,
+    },
+    /// Not enough suitable flowers in the basket.
+    MissingFlowers {
+        detail: String,
+    },
+    /// Doing this would use flowers needed for a required bouquet.
+    KeepsakesNeeded,
+    NoBouquets {
+        have: u32,
+    },
     /// Some of these flowers are set aside for required bouquets.
     Reserved {
         sellable: u32,
@@ -148,6 +198,15 @@ impl std::fmt::Display for GameError {
             }
             GameError::ModeLocked => write!(f, "you don't have a tool for that yet"),
             GameError::NothingInReach => write!(f, "no flowers there to gather"),
+            GameError::UnknownRecipe => write!(f, "unknown recipe"),
+            GameError::RecipeLocked(_) => write!(f, "you haven't discovered that recipe yet"),
+            GameError::Busy => write!(f, "the workbench is still busy"),
+            GameError::BatchTooLarge { max } => write!(f, "the workbench can bind {max} at a time"),
+            GameError::MissingFlowers { detail } => write!(f, "{detail}"),
+            GameError::KeepsakesNeeded => {
+                write!(f, "that would use flowers set aside for a required bouquet")
+            }
+            GameError::NoBouquets { have } => write!(f, "only {have} of those bouquets left"),
             GameError::NotEnoughFlowers { have } => write!(f, "only {have} in the basket"),
             GameError::Reserved { sellable } => {
                 write!(
@@ -328,6 +387,28 @@ impl Game {
                 return bad(format!("basket holds more '{id}' than were ever picked"));
             }
         }
+        let recipe_ids = game
+            .state
+            .discovered_recipes
+            .iter()
+            .chain(game.state.bouquets.keys())
+            .chain(game.state.crafted.keys())
+            .chain(game.state.craft_job.iter().map(|j| &j.recipe));
+        for id in recipe_ids {
+            if data.recipe(id).is_none() {
+                return bad(format!("unknown recipe '{id}'"));
+            }
+        }
+        if let Some(job) = &game.state.craft_job {
+            let ok = |v: f32| v.is_finite() && v >= 0.0;
+            if job.count == 0 || !ok(job.remaining_secs) || !ok(job.total_secs) {
+                return bad("the workbench job is malformed".into());
+            }
+        }
+        // Recipes the player now qualifies for (e.g. after a content
+        // update), without announcing them as fresh discoveries.
+        game.refresh_recipes();
+        game.events.clear();
         Ok(game)
     }
 
@@ -435,6 +516,7 @@ impl Game {
     pub fn tick(&mut self, dt: f32) {
         self.harvest_cooldown = (self.harvest_cooldown - dt).max(0.0);
         self.state.stats.playtime_secs += dt as f64;
+        self.progress_craft(dt);
     }
 
     /// The flower the player is looking at, if any is within reach.
@@ -765,12 +847,18 @@ impl Game {
             self.events
                 .push(GameEvent::RegionCompleted { region, coins });
         }
-        self.state.xp += *xp;
+        self.award_xp(level_before, *xp);
+        completed
+    }
+
+    /// Add XP, announce level-ups and newly qualified recipes.
+    fn award_xp(&mut self, level_before: u32, xp: Xp) {
+        self.state.xp += xp;
         for level in (level_before + 1)..=self.level() {
             self.events.push(GameEvent::LevelUp { level });
         }
+        self.refresh_recipes();
         self.dirty = true;
-        completed
     }
 
     // ---------------------------------------------------------------------
@@ -821,6 +909,7 @@ impl Game {
                 self.state.coins -= def.price;
                 self.state.tools.insert(def.id.clone());
                 self.events.push(GameEvent::ToolBought { tool });
+                self.refresh_recipes();
                 self.dirty = true;
                 Ok(def.price)
             }
@@ -839,6 +928,12 @@ impl Game {
     /// How many of this species can be sold now without making a required,
     /// not-yet-crafted bouquet impossible to ever complete.
     pub fn sellable(&self, species: usize) -> u32 {
+        self.free_amount(species, None)
+    }
+
+    /// How many of this species can leave the basket (sold, or bound into
+    /// `skip`) without endangering another required bouquet.
+    fn free_amount(&self, species: usize, skip: Option<usize>) -> u32 {
         let have = self.inventory_count(species);
         if have == 0 {
             return 0;
@@ -848,7 +943,7 @@ impl Game {
         let feasible_after = |sold: u32, pool: &[u64]| {
             let mut p = pool.to_vec();
             p[species] += (have - sold) as u64;
-            self.reserve_feasible(&mut p)
+            self.reserve_feasible(&mut p, skip)
         };
         // Feasibility only gets harder the more is sold: binary search.
         let (mut lo, mut hi) = (0u32, have);
@@ -944,12 +1039,19 @@ impl Game {
     /// once from `pool`? Greedy (named species, then distinct species from
     /// the most plentiful, then any) — never more permissive than an exact
     /// solver, so it is a safe guard.
-    fn reserve_feasible(&self, pool: &mut [u64]) -> bool {
+    /// `skip`: a recipe about to be crafted (its own needs no longer count).
+    fn reserve_feasible(&self, pool: &mut [u64], skip: Option<usize>) -> bool {
         let pending: Vec<_> = self
             .data
             .recipes
             .iter()
-            .filter(|r| r.required_for_completion && !self.state.crafted.contains_key(&r.id))
+            .enumerate()
+            .filter(|(i, r)| {
+                Some(*i) != skip
+                    && r.required_for_completion
+                    && !self.state.crafted.contains_key(&r.id)
+            })
+            .map(|(_, r)| r)
             .collect();
         for recipe in &pending {
             for req in &recipe.required_species {

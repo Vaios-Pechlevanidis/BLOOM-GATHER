@@ -210,6 +210,7 @@ fn act(
     scene: Option<Res<RegionScene>>,
     session: Option<ResMut<Session>>,
     selected: Res<SelectedMode>,
+    target: Res<LookTarget>,
     mut aim: ResMut<GroundAim>,
     mut sfx: EventWriter<PlaySfx>,
     mut toasts: EventWriter<Toast>,
@@ -218,6 +219,11 @@ fn act(
         return;
     };
     let eye = camera.translation;
+    // A workshop station in the crosshair takes E instead.
+    if target.station.is_some() && aim.area_start.is_none() {
+        aim.sweeping = false;
+        return;
+    }
     let pressed = Bindings::pressed(&keys, &bindings.interact);
     let just = Bindings::just_pressed(&keys, &bindings.interact);
     let mut feedback =

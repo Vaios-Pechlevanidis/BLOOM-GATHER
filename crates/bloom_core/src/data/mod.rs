@@ -276,6 +276,9 @@ pub struct RegionDef {
     pub palette: RegionPalette,
     pub terrain: TerrainParams,
     pub props: RegionProps,
+    /// The region has the florist's workshop (crafting, tool shop, storage).
+    #[serde(default)]
+    pub workshop: bool,
 }
 
 /// Shape of a region's rolling terrain (see `world::terrain`).
@@ -487,6 +490,14 @@ impl GameData {
 
     pub fn recipe(&self, id: &str) -> Option<&RecipeDef> {
         self.index.recipes.get(id).map(|&i| &self.recipes[i])
+    }
+
+    pub fn recipe_index(&self, id: &str) -> Option<usize> {
+        self.index.recipes.get(id).copied()
+    }
+
+    pub fn tool_index(&self, id: &str) -> Option<usize> {
+        self.index.tools.get(id).copied()
     }
 
     pub fn region(&self, id: &str) -> Option<&RegionDef> {

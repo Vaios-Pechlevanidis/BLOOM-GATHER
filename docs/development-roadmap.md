@@ -45,11 +45,11 @@ prevention, save round-trip (harvested flowers never return).
 Instanced animated grass, wind on flowers and trees, butterflies/bees,
 clouds and sky gradient, ambient audio, harvest sounds, region landmarks.
 
-## Phase D — Tools & harvesting modes ✅ (current)
+## Phase D — Tools & harvesting modes ✅
 First-person hand/scissors/basket/tool models and animations; tool selection;
 Radius, Sweep and Area harvesting in 3D with batched harvesting.
 
-## Phase E — Workshop, crafting & economy
+## Phase E — Workshop, crafting & economy ✅ (current)
 Physical 3D workshop (workbench → crafting, storage → inventory, tool display
 → tool shop, bouquet display); recipes, validation, batch crafting with
 craft timer, keepsake reserve, bouquet models and selling.

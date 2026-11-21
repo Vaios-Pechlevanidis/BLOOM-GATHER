@@ -201,7 +201,8 @@
          palette: (sky: (214, 229, 234), ground: (168, 196, 140), ground_dark: (140, 172, 116),
                    ground_light: (196, 218, 160), path: (226, 211, 182), accent: (232, 212, 140)),
          terrain: (amplitude: 2.2, feature_size: 34.0, octaves: 4, border_rise: 3.5, border_width: 12.0),
-         props: (trees: 12, rocks: 18)),
+         props: (trees: 12, rocks: 18),
+         workshop: true),
         (id: "lavender_fields", name: "Lavender Fields", flower_total: 200, width: 140.0, depth: 100.0, seed: 7002,
          description: "Rolling purple rows that ripple like water in the wind.",
          flowers: [

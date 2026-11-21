@@ -1,13 +1,16 @@
 //! Looking at things and pressing E.
 //!
-//! Every frame a ray from the camera finds the flower in the crosshair
-//! (within interact range); E asks the session to harvest it. The session
-//! validates everything (reach, cooldown, already picked) — this module only
-//! turns input into commands and outcomes into feedback.
+//! Every frame a ray from the camera finds what is in the crosshair within
+//! interact range: a workshop station (workbench, tool shelf, storage chest,
+//! bouquet display) or, with hands/scissors, a flower. E uses the station
+//! (opening its screen) or asks the session to pick the flower. The session
+//! validates everything; this module turns input into commands and outcomes
+//! into feedback.
 
 use bevy::prelude::*;
 use bloom_core::data::HarvestMode;
 use bloom_core::game::{GameError, GameEvent};
+use bloom_core::world::InteractableKind;
 
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{EventsForwarded, GameEventMsg, PlayState, RegionScene, Session};
@@ -22,6 +25,7 @@ pub struct InteractionPlugin;
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LookTarget>()
+            .init_resource::<OpenScreen>()
             .add_systems(OnExit(PlayState::Playing), clear_target)
             .add_systems(
                 Update,
@@ -37,13 +41,30 @@ impl Plugin for InteractionPlugin {
     }
 }
 
-/// What the crosshair is on: a single flower (hands/scissors), or the group
-/// of flowers a basket, rake or cart would gather.
+/// What the crosshair is on: a workshop station, a single flower
+/// (hands/scissors), or the group of flowers a basket, rake or cart would
+/// gather.
 #[derive(Resource, Debug, Default, Clone, PartialEq)]
 pub struct LookTarget {
     pub flower: Option<u32>,
     pub species: Option<usize>,
     pub group: Vec<u32>,
+    /// A station takes precedence over flowers and tools.
+    pub station: Option<InteractableKind>,
+}
+
+/// Which screen (and tab) a station asked to open; read when it opens.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct OpenScreen(pub Option<InteractableKind>);
+
+/// Player-facing name and action of a station.
+pub fn station_text(kind: InteractableKind) -> (&'static str, &'static str) {
+    match kind {
+        InteractableKind::Workbench => ("Workbench", "Bind bouquets"),
+        InteractableKind::ToolShelf => ("Tool shelf", "Buy tools"),
+        InteractableKind::Storage => ("Storage chest", "Open basket"),
+        InteractableKind::BouquetDisplay => ("Bouquet display", "Sell bouquets"),
+    }
 }
 
 fn clear_target(mut target: ResMut<LookTarget>) {
@@ -60,9 +81,19 @@ fn look(
     scene: Option<Res<RegionScene>>,
     session: Option<ResMut<Session>>,
     selected: Res<SelectedMode>,
+    content: Res<crate::game::Content>,
     mut target: ResMut<LookTarget>,
 ) {
-    if selected.0 != HarvestMode::Single {
+    if let (Some(scene), Some((eye, dir))) = (scene.as_deref(), eye_ray(&cameras)) {
+        let station = scene
+            .layout
+            .pick_interactable(eye, dir, content.player.interact_range)
+            .map(|h| h.0);
+        if target.station != station {
+            target.station = station;
+        }
+    }
+    if selected.0 != HarvestMode::Single || target.station.is_some() {
         if target.flower.is_some() {
             target.flower = None;
             target.species = None;
@@ -81,6 +112,7 @@ fn look(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn interact(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
@@ -89,10 +121,24 @@ fn interact(
     cameras: Query<&Transform, With<MainCamera>>,
     scene: Option<Res<RegionScene>>,
     session: Option<ResMut<Session>>,
+    mut open: ResMut<OpenScreen>,
+    mut next: ResMut<NextState<PlayState>>,
     mut sfx: EventWriter<PlaySfx>,
     mut toasts: EventWriter<Toast>,
 ) {
-    if selected.0 != HarvestMode::Single || !Bindings::just_pressed(&keys, &bindings.interact) {
+    if !Bindings::just_pressed(&keys, &bindings.interact) {
+        return;
+    }
+    if let Some(station) = target.station {
+        open.0 = Some(station);
+        sfx.write(PlaySfx::new(Sfx::Click));
+        next.set(match station {
+            InteractableKind::Workbench | InteractableKind::BouquetDisplay => PlayState::Workshop,
+            InteractableKind::ToolShelf | InteractableKind::Storage => PlayState::Inventory,
+        });
+        return;
+    }
+    if selected.0 != HarvestMode::Single {
         return;
     }
     let (Some(scene), Some(mut session), Some((eye, _))) = (scene, session, eye_ray(&cameras))
@@ -171,8 +217,41 @@ fn react_to_events(
                     data.tools[tool].description.clone(),
                 ));
             }
-            GameEvent::FlowersSold { .. } => {
+            GameEvent::FlowersSold { .. } | GameEvent::BouquetsSold { .. } => {
                 sfx.write(PlaySfx::new(Sfx::Coins));
+            }
+            GameEvent::RecipeDiscovered { recipe } => {
+                let r = &data.recipes[recipe];
+                sfx.write(PlaySfx::new(Sfx::Discover));
+                toasts.write(Toast::highlight(
+                    format!("New recipe: {}", r.name),
+                    r.description.clone(),
+                ));
+            }
+            GameEvent::CraftStarted { .. } => {
+                sfx.write(PlaySfx::new(Sfx::Click));
+            }
+            GameEvent::BouquetsReady {
+                recipe,
+                count,
+                first,
+            } => {
+                let r = &data.recipes[recipe];
+                sfx.write(PlaySfx::new(Sfx::Discover));
+                let title = if count == 1 {
+                    format!("{} is ready", r.name)
+                } else {
+                    format!("{count} {}s are ready", r.name)
+                };
+                let body = if first {
+                    format!(
+                        "Your first {}! It sells for {} coins.",
+                        r.name, r.sell_price
+                    )
+                } else {
+                    format!("Each sells for {} coins at the display.", r.sell_price)
+                };
+                toasts.write(Toast::highlight(title, body));
             }
         }
     }

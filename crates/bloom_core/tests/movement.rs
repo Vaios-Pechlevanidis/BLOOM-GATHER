@@ -584,3 +584,123 @@ fn every_region_has_landmarks_off_the_path_and_solid() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// The workshop
+// ---------------------------------------------------------------------------
+
+use bloom_core::world::layout::{to_world, workshop};
+use bloom_core::world::InteractableKind;
+
+/// World (x, z) → the workshop's local frame.
+fn to_local(origin: Vec2, yaw: f32, p: Vec2) -> Vec2 {
+    let d = p - origin;
+    let (s, c) = yaw.sin_cos();
+    Vec2::new(d.x * c - d.y * s, d.x * s + d.y * c)
+}
+
+fn meadow() -> (GameData, RegionLayout) {
+    let d = data();
+    let layout = RegionLayout::generate(&d.regions[0], &d.world);
+    (d, layout)
+}
+
+#[test]
+fn only_the_meadow_has_the_workshop_with_four_stations() {
+    let d = data();
+    for (i, region) in d.regions.iter().enumerate() {
+        let layout = RegionLayout::generate(region, &d.world);
+        let has = layout
+            .landmarks
+            .iter()
+            .any(|l| l.kind == LandmarkKind::Workshop);
+        assert_eq!(has, i == 0, "{}", region.id);
+        assert_eq!(layout.interactables.len(), if i == 0 { 4 } else { 0 });
+    }
+    let (_, layout) = meadow();
+    let w = layout
+        .landmarks
+        .iter()
+        .find(|l| l.kind == LandmarkKind::Workshop)
+        .unwrap();
+    assert!(
+        layout.distance_to_path(w.position) > 7.0,
+        "workshop on the path"
+    );
+    assert!(layout.in_bounds(w.position, 5.0));
+    // Its door faces the spawn.
+    let door = to_world(w.position, w.yaw, Vec2::new(0.0, workshop::HALF.y));
+    assert!(door.distance(layout.spawn) < w.position.distance(layout.spawn));
+}
+
+#[test]
+fn the_door_lets_you_in_and_the_walls_do_not() {
+    let (d, layout) = meadow();
+    let cfg = d.player.clone();
+    let env = Environment {
+        terrain: &layout.terrain,
+        colliders: &layout.colliders,
+    };
+    let w = *layout
+        .landmarks
+        .iter()
+        .find(|l| l.kind == LandmarkKind::Workshop)
+        .unwrap();
+    let walk = |from_local: Vec2, to_local_pt: Vec2, secs: f32| {
+        let from = to_world(w.position, w.yaw, from_local);
+        let to = to_world(w.position, w.yaw, to_local_pt);
+        let mut body = CharacterBody::standing_at(from, &env);
+        for _ in 0..(secs / DT) as usize {
+            let wish = (to - body.ground_position()).normalize_or_zero();
+            body.step(
+                &MoveInput {
+                    wish,
+                    ..Default::default()
+                },
+                DT,
+                &cfg,
+                &env,
+            );
+        }
+        to_local(w.position, w.yaw, body.ground_position())
+    };
+    // Through the door to the middle of the room.
+    let inside = walk(Vec2::new(0.0, 6.5), Vec2::new(0.0, 0.0), 4.0);
+    assert!(inside.length() < 0.5, "didn't get in: {inside}");
+    // Straight at the front wall beside the door: stopped outside.
+    let blocked = walk(Vec2::new(2.3, 6.5), Vec2::new(2.3, 0.0), 4.0);
+    assert!(
+        blocked.y > workshop::HALF.y,
+        "walked through the wall: {blocked}"
+    );
+    // And from behind.
+    let back = walk(Vec2::new(0.0, -6.5), Vec2::new(0.0, 0.0), 4.0);
+    assert!(
+        back.y < -workshop::HALF.y,
+        "walked through the back wall: {back}"
+    );
+}
+
+#[test]
+fn looking_at_the_workbench_targets_it() {
+    let (d, layout) = meadow();
+    let bench = layout
+        .interactables
+        .iter()
+        .find(|i| i.kind == InteractableKind::Workbench)
+        .unwrap();
+    let w = *layout
+        .landmarks
+        .iter()
+        .find(|l| l.kind == LandmarkKind::Workshop)
+        .unwrap();
+    let stand = to_world(w.position, w.yaw, Vec2::new(0.0, -0.6));
+    let eye = Vec3::new(stand.x, w.base + d.player.eye_height, stand.y);
+    let hit = layout.pick_interactable(eye, bench.position - eye, d.player.interact_range);
+    assert_eq!(hit.map(|h| h.0), Some(InteractableKind::Workbench));
+    // Looking away: nothing.
+    assert_eq!(
+        layout.pick_interactable(eye, eye - bench.position, d.player.interact_range),
+        None
+    );
+}

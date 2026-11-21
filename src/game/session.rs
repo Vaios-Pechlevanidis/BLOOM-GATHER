@@ -29,7 +29,9 @@ impl Plugin for SessionPlugin {
             .add_systems(
                 Update,
                 (
-                    tick_session.run_if(in_state(PlayState::Playing)),
+                    // The workbench keeps binding while its screen is open.
+                    tick_session
+                        .run_if(in_state(PlayState::Playing).or(in_state(PlayState::Workshop))),
                     autosave.run_if(in_state(AppState::InGame)),
                 ),
             )

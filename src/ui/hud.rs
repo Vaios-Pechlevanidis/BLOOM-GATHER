@@ -8,9 +8,10 @@ use bevy::prelude::*;
 
 use super::theme::{self, font, palette, radius, space};
 use crate::game::{ActiveRegion, AppState, Content, PlayState, Session};
-use crate::interaction::LookTarget;
+use crate::interaction::{station_text, LookTarget};
 use crate::tools::{mode_name, GroundAim, SelectedMode, MODE_ORDER};
 use bloom_core::data::HarvestMode;
+use bloom_core::world::InteractableKind;
 
 pub struct HudPlugin;
 
@@ -36,6 +37,8 @@ enum Stat {
     Coins,
     Level,
     XpText,
+    /// "Binding 3 Simple Bouquets: 40%" while the workbench works.
+    Job,
 }
 
 #[derive(Component)]
@@ -130,6 +133,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             card.spawn((
                 Stat::XpText,
                 theme::text("", font::CAPTION, palette::INK_SOFT),
+            ));
+            card.spawn((
+                Stat::Job,
+                theme::text("", font::CAPTION, palette::SAGE_DEEP),
             ));
         });
 
@@ -285,6 +292,20 @@ fn update_stats(
             Stat::Collection => format!("Collection {discovered} / {} species", data.species.len()),
             Stat::Coins => format!("{} coins", session.state().coins),
             Stat::Level => format!("Level {level}"),
+            Stat::Job => match session.craft_job() {
+                Some(job) => {
+                    let name = data
+                        .recipe(&job.recipe)
+                        .map_or(job.recipe.as_str(), |r| r.name.as_str());
+                    format!(
+                        "Binding {} {}: {:.0}%",
+                        job.count,
+                        name,
+                        job.progress() * 100.0
+                    )
+                }
+                None => String::new(),
+            },
             Stat::XpText => match progress {
                 Some((into, needed)) => format!("{into} / {needed} XP"),
                 None => "Max level".to_string(),
@@ -326,51 +347,81 @@ fn update_prompt(
     let Some(session) = session else { return };
     let playing = *state.get() == PlayState::Playing;
     let n = target.group.len();
-    let lines: Option<(String, String, &str)> = match selected.0 {
-        HarvestMode::Single => target.species.map(|species| {
-            let s = &session.data().species[species];
-            let detail = if session.is_discovered(species) {
-                s.rarity.label().to_string()
-            } else {
-                format!("{}, not yet in your collection", s.rarity.label())
-            };
-            (s.name.clone(), detail, "Pick")
-        }),
-        HarvestMode::Radius => Some((
-            "Basket".into(),
-            if n > 0 {
-                format!("{n} flower{} in reach", plural(n))
-            } else {
-                "Aim at a patch of flowers".into()
+    let lines: Option<(String, String, &str)> = if let Some(station) = target.station {
+        let (name, action) = station_text(station);
+        let detail = match station {
+            InteractableKind::Workbench => match session.craft_job() {
+                Some(job) => format!("Binding... {:.0}%", job.progress() * 100.0),
+                None => {
+                    let known = (0..session.data().recipes.len())
+                        .filter(|&r| session.is_recipe_discovered(r))
+                        .count();
+                    format!("{known} recipe{} known", plural(known))
+                }
             },
-            "Gather",
-        )),
-        HarvestMode::Sweep => Some((
-            "Garden rake".into(),
-            if n > 0 {
-                format!("{n} flower{} under the rake", plural(n))
-            } else {
-                "Sweep across the flowers".into()
-            },
-            "Hold to sweep",
-        )),
-        HarvestMode::Area => Some(match aim.area_start {
-            Some(_) => (
-                "Flower cart".into(),
-                format!("{n} flower{} marked", plural(n)),
-                "Release to gather",
-            ),
-            None => {
-                let size = session
-                    .mode_params(HarvestMode::Area)
-                    .map_or(Vec2::ZERO, |p| p.size);
-                (
-                    "Flower cart".into(),
-                    format!("Mark a patch up to {:.0} x {:.0} m", size.x, size.y),
-                    "Hold to mark",
-                )
+            InteractableKind::ToolShelf => {
+                let owned = (0..session.data().tools.len())
+                    .filter(|&t| session.owns_tool(t))
+                    .count();
+                format!("{owned} of {} tools owned", session.data().tools.len())
             }
-        }),
+            InteractableKind::Storage => {
+                let held: u32 = session.state().inventory.values().sum();
+                format!("{held} flower{} in the basket", plural(held as usize))
+            }
+            InteractableKind::BouquetDisplay => {
+                let n: u32 = session.state().bouquets.values().sum();
+                format!("{n} bouquet{} to sell", plural(n as usize))
+            }
+        };
+        Some((name.to_string(), detail, action))
+    } else {
+        match selected.0 {
+            HarvestMode::Single => target.species.map(|species| {
+                let s = &session.data().species[species];
+                let detail = if session.is_discovered(species) {
+                    s.rarity.label().to_string()
+                } else {
+                    format!("{}, not yet in your collection", s.rarity.label())
+                };
+                (s.name.clone(), detail, "Pick")
+            }),
+            HarvestMode::Radius => Some((
+                "Basket".into(),
+                if n > 0 {
+                    format!("{n} flower{} in reach", plural(n))
+                } else {
+                    "Aim at a patch of flowers".into()
+                },
+                "Gather",
+            )),
+            HarvestMode::Sweep => Some((
+                "Garden rake".into(),
+                if n > 0 {
+                    format!("{n} flower{} under the rake", plural(n))
+                } else {
+                    "Sweep across the flowers".into()
+                },
+                "Hold to sweep",
+            )),
+            HarvestMode::Area => Some(match aim.area_start {
+                Some(_) => (
+                    "Flower cart".into(),
+                    format!("{n} flower{} marked", plural(n)),
+                    "Release to gather",
+                ),
+                None => {
+                    let size = session
+                        .mode_params(HarvestMode::Area)
+                        .map_or(Vec2::ZERO, |p| p.size);
+                    (
+                        "Flower cart".into(),
+                        format!("Mark a patch up to {:.0} x {:.0} m", size.x, size.y),
+                        "Hold to mark",
+                    )
+                }
+            }),
+        }
     };
     let show = playing && lines.is_some();
     for mut v in &mut prompt {

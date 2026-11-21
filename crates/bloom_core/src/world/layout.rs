@@ -10,7 +10,7 @@
 
 use std::f32::consts::TAU;
 
-use glam::Vec2;
+use glam::{Vec2, Vec3};
 
 use super::collision::{BoxCollider, CircleCollider, ColliderSet};
 use super::terrain::{FlattenArea, Terrain};
@@ -49,6 +49,38 @@ pub enum LandmarkKind {
     Well,
     /// A signpost where the path leaves the region.
     Signpost,
+    /// The florist's cottage workshop (walk-in).
+    Workshop,
+}
+
+/// Things in the world the player can use with E.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InteractableKind {
+    /// Craft bouquets.
+    Workbench,
+    /// Buy tools.
+    ToolShelf,
+    /// Open the basket (inventory).
+    Storage,
+    /// See and sell finished bouquets.
+    BouquetDisplay,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Interactable {
+    pub kind: InteractableKind,
+    /// Centre of the target sphere (world space).
+    pub position: Vec3,
+    pub radius: f32,
+}
+
+/// Workshop dimensions (metres, local space; the door is in the +Z wall).
+pub mod workshop {
+    use glam::Vec2;
+    pub const HALF: Vec2 = Vec2::new(3.5, 3.0);
+    pub const WALL: f32 = 0.25;
+    pub const WALL_HEIGHT: f32 = 2.7;
+    pub const DOOR_HALF_WIDTH: f32 = 0.85;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,6 +110,7 @@ pub struct RegionLayout {
     pub path: Vec<Vec2>,
     pub path_half_width: f32,
     pub landmarks: Vec<Landmark>,
+    pub interactables: Vec<Interactable>,
     pub trees: Vec<TreeProp>,
     pub rocks: Vec<RockProp>,
     /// Scenery trees outside the fence. Unreachable, so no colliders.
@@ -110,7 +143,14 @@ impl RegionLayout {
         let spawn = Vec2::new(0.0, bounds_max.y - 6.0);
         let path = footpath(&mut rng, spawn, bounds_min, bounds_max);
 
-        let mut landmarks = place_landmarks(&mut rng, &path, spawn, bounds_min, bounds_max);
+        let mut landmarks = place_landmarks(
+            &mut rng,
+            &path,
+            spawn,
+            bounds_min,
+            bounds_max,
+            region.workshop,
+        );
         let mut flatten = vec![FlattenArea {
             center: spawn,
             inner_radius: 5.0,
@@ -143,11 +183,13 @@ impl RegionLayout {
             path,
             path_half_width: 1.1,
             landmarks,
+            interactables: Vec::new(),
             trees: Vec::new(),
             rocks: Vec::new(),
             backdrop_trees: Vec::new(),
             colliders: ColliderSet::default(),
         };
+        layout.place_interactables();
         layout.place_trees(&mut rng, region.props.trees);
         layout.place_rocks(&mut rng, region.props.rocks);
         layout.place_backdrop(&mut rng);
@@ -172,6 +214,57 @@ impl RegionLayout {
         let min = self.bounds_min + Vec2::splat(inset);
         let max = self.bounds_max - Vec2::splat(inset);
         Vec2::new(rng.range_f32(min.x, max.x), rng.range_f32(min.y, max.y))
+    }
+
+    fn place_interactables(&mut self) {
+        let Some(w) = self
+            .landmarks
+            .iter()
+            .find(|l| l.kind == LandmarkKind::Workshop)
+            .copied()
+        else {
+            return;
+        };
+        for (kind, local, height) in [
+            (InteractableKind::Workbench, Vec2::new(0.0, -2.35), 1.0),
+            (InteractableKind::ToolShelf, Vec2::new(-3.0, -0.6), 1.2),
+            (InteractableKind::Storage, Vec2::new(2.85, -1.2), 0.6),
+            (InteractableKind::BouquetDisplay, Vec2::new(2.5, 1.5), 1.0),
+        ] {
+            let p = to_world(w.position, w.yaw, local);
+            self.interactables.push(Interactable {
+                kind,
+                position: Vec3::new(p.x, w.base + height, p.y),
+                radius: 0.75,
+            });
+        }
+    }
+
+    /// The interactable whose sphere the ray hits first within `range`.
+    pub fn pick_interactable(
+        &self,
+        origin: Vec3,
+        dir: Vec3,
+        range: f32,
+    ) -> Option<(InteractableKind, f32)> {
+        let dir = dir.normalize_or_zero();
+        self.interactables
+            .iter()
+            .filter_map(|i| {
+                let oc = origin - i.position;
+                let b = oc.dot(dir);
+                let c = oc.length_squared() - i.radius * i.radius;
+                let disc = b * b - c;
+                if c <= 0.0 {
+                    return Some((i.kind, 0.0f32));
+                }
+                if disc < 0.0 || b > 0.0 {
+                    return None;
+                }
+                let t = -b - disc.sqrt();
+                (t <= range).then_some((i.kind, t))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
     }
 
     /// Within `margin` of a landmark's footprint.
@@ -313,6 +406,7 @@ impl RegionLayout {
                     bottom: l.base - 1.0,
                     top: l.base + 2.6,
                 }),
+                LandmarkKind::Workshop => set.boxes.extend(workshop_colliders(l)),
                 LandmarkKind::Signpost => set.circles.push(CircleCollider {
                     center: l.position,
                     radius: 0.14,
@@ -357,12 +451,54 @@ impl RegionLayout {
 
 /// Bench beside the path a third of the way along, signpost where the path
 /// leaves the region, well in an open spot away from both.
+/// Local (x, z) in a landmark's frame → world (x, z). Matches Bevy's
+/// `Quat::from_rotation_y(yaw)`: local +X → (cos, −sin), +Z → (sin, cos).
+pub fn to_world(origin: Vec2, yaw: f32, local: Vec2) -> Vec2 {
+    let (s, c) = yaw.sin_cos();
+    origin + Vec2::new(local.x * c + local.y * s, -local.x * s + local.y * c)
+}
+
+/// Walls (with a door gap in the front) and solid furniture.
+fn workshop_colliders(l: &Landmark) -> Vec<BoxCollider> {
+    use workshop::*;
+    let bx = |center: Vec2, half: Vec2, top: f32| BoxCollider {
+        center: to_world(l.position, l.yaw, center),
+        half_extents: half,
+        angle: -l.yaw,
+        bottom: l.base - 1.0,
+        top: l.base + top,
+    };
+    let t = WALL / 2.0;
+    let side = (HALF.x - DOOR_HALF_WIDTH) / 2.0;
+    vec![
+        bx(Vec2::new(0.0, -HALF.y), Vec2::new(HALF.x, t), WALL_HEIGHT),
+        bx(Vec2::new(-HALF.x, 0.0), Vec2::new(t, HALF.y), WALL_HEIGHT),
+        bx(Vec2::new(HALF.x, 0.0), Vec2::new(t, HALF.y), WALL_HEIGHT),
+        bx(
+            Vec2::new(-(DOOR_HALF_WIDTH + side), HALF.y),
+            Vec2::new(side, t),
+            WALL_HEIGHT,
+        ),
+        bx(
+            Vec2::new(DOOR_HALF_WIDTH + side, HALF.y),
+            Vec2::new(side, t),
+            WALL_HEIGHT,
+        ),
+        // Furniture: workbench, tool shelf, storage chest, display table.
+        bx(Vec2::new(0.0, -2.35), Vec2::new(1.25, 0.42), 0.95),
+        bx(Vec2::new(-3.0, -0.6), Vec2::new(0.32, 1.2), 2.0),
+        bx(Vec2::new(2.85, -1.2), Vec2::new(0.42, 0.34), 0.7),
+        bx(Vec2::new(2.5, 1.5), Vec2::new(0.62, 0.42), 0.85),
+    ]
+}
+
 fn place_landmarks(
     rng: &mut SplitMix64,
     path: &[Vec2],
     spawn: Vec2,
     min: Vec2,
     max: Vec2,
+    with_workshop: bool,
 ) -> Vec<Landmark> {
     let along = |i: usize| {
         let i = i.clamp(1, path.len() - 2);
@@ -394,18 +530,57 @@ fn place_landmarks(
             .map(|w| distance_to_segment(q, w[0], w[1]))
             .fold(f32::INFINITY, f32::min)
     };
+    // The workshop sits beside the start of the path, door facing the spawn.
+    let workshop = if with_workshop {
+        [
+            (-13.0, -6.0),
+            (13.0, -6.0),
+            (-16.0, -11.0),
+            (16.0, -11.0),
+            (-12.0, -16.0),
+            (12.0, -16.0),
+        ]
+        .into_iter()
+        .map(|(dx, dz)| spawn + Vec2::new(dx, dz))
+        .find(|&q| {
+            path_distance(q) > 8.0
+                && q.x > min.x + 7.0
+                && q.x < max.x - 7.0
+                && q.y > min.y + 7.0
+                && q.y < max.y - 6.0
+                && q.distance(bench.position) > 9.0
+        })
+        .map(|q| {
+            let facing = (spawn - q).normalize();
+            Landmark {
+                kind: LandmarkKind::Workshop,
+                position: q,
+                base: 0.0,
+                yaw: facing.x.atan2(facing.y),
+                footprint: 5.0,
+            }
+        })
+    } else {
+        None
+    };
     let mut well = None;
     for _ in 0..200 {
         let q = Vec2::new(
             rng.range_f32(min.x + 8.0, max.x - 8.0),
             rng.range_f32(min.y + 8.0, max.y - 8.0),
         );
-        if path_distance(q) > 6.0 && q.distance(spawn) > 14.0 && q.distance(bench.position) > 10.0 {
+        let clear_of_workshop = workshop.is_none_or(|w| q.distance(w.position) > 10.0);
+        if path_distance(q) > 6.0
+            && q.distance(spawn) > 14.0
+            && q.distance(bench.position) > 10.0
+            && clear_of_workshop
+        {
             well = Some(q);
             break;
         }
     }
     let mut out = vec![bench, sign];
+    out.extend(workshop);
     if let Some(q) = well {
         out.push(Landmark {
             kind: LandmarkKind::Well,

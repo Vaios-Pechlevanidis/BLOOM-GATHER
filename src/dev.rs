@@ -29,6 +29,8 @@ use crate::interaction::LookTarget;
 use crate::player::Player;
 use crate::tools::SelectedMode;
 use bloom_core::data::HarvestMode;
+use bloom_core::world::layout::to_world;
+use bloom_core::world::{InteractableKind, LandmarkKind};
 
 /// Point the save folder at `<smoke dir>/save` before anything reads it.
 pub fn isolate_save_dir() {
@@ -102,8 +104,10 @@ struct Smoke {
     group: usize,
 }
 
-/// Tools the smoke test buys (all harvesting modes plus scissors).
-const TOOLS: [&str; 4] = [
+/// Tools the smoke test buys (all harvesting modes, scissors and the
+/// ribbon for binding bouquets).
+const TOOLS: [&str; 5] = [
+    "binding_ribbon",
     "garden_scissors",
     "harvesting_basket",
     "pro_gardening_tools",
@@ -633,6 +637,85 @@ fn drive(
                 let gained = harvested(session_mut.as_deref()) - smoke.mark_count;
                 smoke.check("releasing E gathers the area", gained > 0, gained);
                 smoke.tap(KeyCode::Digit1);
+                smoke.step = 49; // → the workshop steps (50…)
+                0.4
+            }
+            // --- workshop: walk up to the workbench, bind bouquets, sell tab ---
+            50 => {
+                stand_in_workshop(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    &content,
+                    Vec2::new(0.0, -0.7),
+                    InteractableKind::Workbench,
+                );
+                0.5
+            }
+            51 => {
+                smoke.check(
+                    "looking at the workbench",
+                    target.station == Some(InteractableKind::Workbench),
+                    format!("{:?}", target.station),
+                );
+                smoke.shot(&mut commands, "11_workshop_inside");
+                smoke.tap(KeyCode::KeyE);
+                0.5
+            }
+            52 => {
+                smoke.expect("E opens the workbench", play_state, PlayState::Workshop);
+                smoke.tap(KeyCode::ArrowRight);
+                0.2
+            }
+            53 => {
+                smoke.tap(KeyCode::ArrowRight);
+                0.4
+            }
+            54 => {
+                smoke.shot(&mut commands, "12_workbench");
+                smoke.tap(KeyCode::Enter);
+                0.3
+            }
+            55 => {
+                let job = session_mut.as_deref().and_then(|s| s.craft_job().cloned());
+                smoke.check(
+                    "Enter binds three Simple Bouquets",
+                    job.as_ref()
+                        .is_some_and(|j| j.recipe == "simple_bouquet" && j.count == 3),
+                    format!("{job:?}"),
+                );
+                2.0
+            }
+            56 => {
+                let n = session_mut.as_deref().map_or(0, |s| s.bouquet_count(0));
+                smoke.check("the batch finished while the screen was open", n == 3, n);
+                smoke.tap(KeyCode::Digit2);
+                0.5
+            }
+            57 => {
+                smoke.shot(&mut commands, "13_bouquets_tab");
+                smoke.tap(KeyCode::Escape);
+                0.4
+            }
+            58 => {
+                smoke.expect("Esc closes the workbench", play_state, PlayState::Playing);
+                stand_in_workshop(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    &content,
+                    Vec2::new(1.1, 0.2),
+                    InteractableKind::BouquetDisplay,
+                );
+                0.8
+            }
+            59 => {
+                smoke.check(
+                    "looking at the bouquet display",
+                    target.station == Some(InteractableKind::BouquetDisplay),
+                    format!("{:?}", target.station),
+                );
+                smoke.shot(&mut commands, "14_bouquet_display");
                 smoke.tap(KeyCode::Escape);
                 smoke.step = 12; // → 13: pause and save
                 0.6
@@ -662,7 +745,7 @@ fn drive(
                 smoke.expect("back to the title", app_state, AppState::MainMenu);
                 smoke.check("title now offers Continue", saves.has_save, saves.has_save);
                 // Everything picked (by hand and with tools) and the tools owned.
-                let (picks, tools): (Vec<String>, Vec<String>) =
+                let (picks, tools, bouquets, held): (Vec<String>, Vec<String>, Vec<String>, u32) =
                     match (session_mut.as_deref(), scene) {
                         (Some(se), Some(sc)) => (
                             (0..sc.field.len() as u32)
@@ -670,12 +753,23 @@ fn drive(
                                 .map(|i| i.to_string())
                                 .collect(),
                             se.state().tools.iter().cloned().collect(),
+                            se.state()
+                                .bouquets
+                                .iter()
+                                .map(|(id, n)| format!("{id}={n}"))
+                                .collect(),
+                            se.state().inventory.values().sum(),
                         ),
-                        _ => (Vec::new(), Vec::new()),
+                        _ => (Vec::new(), Vec::new(), Vec::new(), 0),
                     };
                 let written = std::fs::write(
                     smoke.expected_path(),
-                    format!("{}\n{}", picks.join(","), tools.join(",")),
+                    format!(
+                        "{}\n{}\n{}\n{held}",
+                        picks.join(","),
+                        tools.join(","),
+                        bouquets.join(",")
+                    ),
                 )
                 .is_ok();
                 smoke.check(
@@ -716,6 +810,11 @@ fn verify_resumed(
         .filter(|s| !s.is_empty())
         .map(String::from)
         .collect();
+    let bouquets = lines.next().unwrap_or("").to_string();
+    let held_before: u32 = lines
+        .next()
+        .and_then(|l| l.parse().ok())
+        .unwrap_or(u32::MAX);
     smoke.check(
         "run 1 recorded its picks",
         expected.len() > PICKS,
@@ -748,7 +847,22 @@ fn verify_resumed(
     let held: u32 = (0..session.data().species.len())
         .map(|s| session.inventory_count(s))
         .sum();
-    smoke.check("basket restored", held as usize == expected.len(), held);
+    smoke.check(
+        "basket restored",
+        held == held_before,
+        format!("{held} vs {held_before}"),
+    );
+    let owned_bouquets: Vec<String> = session
+        .state()
+        .bouquets
+        .iter()
+        .map(|(id, n)| format!("{id}={n}"))
+        .collect();
+    smoke.check(
+        "bouquets restored",
+        owned_bouquets.join(",") == bouquets && !bouquets.is_empty(),
+        &bouquets,
+    );
     if let Some(&first) = expected.first() {
         let mut probe = session.game.clone();
         probe.tick(5.0);
@@ -769,6 +883,43 @@ fn verify_resumed(
             format!("{d:.2} m"),
         );
     }
+}
+
+/// Stand inside the workshop at `local` (workshop coordinates) and look at
+/// one of its stations.
+fn stand_in_workshop(
+    smoke: &mut Smoke,
+    player: Option<&mut Player>,
+    scene: Option<&RegionScene>,
+    content: &Content,
+    local: Vec2,
+    station: InteractableKind,
+) {
+    let (Some(player), Some(scene)) = (player, scene) else {
+        smoke.check("can enter the workshop", false, "missing player/scene");
+        return;
+    };
+    let layout = &scene.layout;
+    let (Some(workshop), Some(item)) = (
+        layout
+            .landmarks
+            .iter()
+            .find(|l| l.kind == LandmarkKind::Workshop),
+        layout.interactables.iter().find(|i| i.kind == station),
+    ) else {
+        smoke.check("the meadow has a workshop", false, "none");
+        return;
+    };
+    let env = Environment {
+        terrain: &layout.terrain,
+        colliders: &layout.colliders,
+    };
+    let body = CharacterBody::standing_at(to_world(workshop.position, workshop.yaw, local), &env);
+    player.body = body;
+    player.previous = body.position;
+    let d = item.position - body.eye(&content.player);
+    player.yaw = (-d.x).atan2(-d.z);
+    player.pitch = (d.y / d.length()).asin();
 }
 
 fn finish(smoke: &mut Smoke, exit: &mut EventWriter<AppExit>) -> f32 {

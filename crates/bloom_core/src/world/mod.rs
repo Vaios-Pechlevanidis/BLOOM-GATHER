@@ -8,5 +8,7 @@ pub mod terrain;
 
 pub use collision::{BodySlab, BoxCollider, CircleCollider, ColliderSet};
 pub use flowers::{FlowerField, PlacementError};
-pub use layout::{Landmark, LandmarkKind, RegionLayout, RockProp, TreeProp};
+pub use layout::{
+    Interactable, InteractableKind, Landmark, LandmarkKind, RegionLayout, RockProp, TreeProp,
+};
 pub use terrain::{FlattenArea, Terrain};
