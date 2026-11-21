@@ -7,7 +7,7 @@
 use std::f32::consts::TAU;
 use std::sync::Arc;
 
-use bevy::audio::Volume;
+use bevy::audio::{AudioSinkPlayback, Volume};
 use bevy::prelude::*;
 
 use crate::game::Settings;
@@ -17,8 +17,8 @@ pub struct AudioPlugin;
 impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<PlaySfx>()
-            .add_systems(Startup, create_sounds)
-            .add_systems(PostUpdate, play_sounds);
+            .add_systems(Startup, (create_sounds, start_ambience).chain())
+            .add_systems(PostUpdate, (play_sounds, ambience_volume));
     }
 }
 
@@ -58,7 +58,15 @@ struct Sounds {
     coins: Handle<AudioSource>,
     deny: Handle<AudioSource>,
     click: Handle<AudioSource>,
+    meadow: Handle<AudioSource>,
 }
+
+/// The looping background ambience.
+#[derive(Component)]
+struct Ambience;
+
+/// Background ambience sits well below the effects.
+const AMBIENCE_GAIN: f32 = 0.35;
 
 const RATE: u32 = 44_100;
 
@@ -75,6 +83,7 @@ fn create_sounds(mut commands: Commands, mut sources: ResMut<Assets<AudioSource>
         coins: add(coins()),
         deny: add(deny()),
         click: add(click()),
+        meadow: add(meadow_ambience()),
     });
 }
 
@@ -103,6 +112,24 @@ fn play_sounds(
                 .with_volume(Volume::Linear(settings.sound_volume * gain))
                 .with_speed(req.pitch.clamp(0.5, 2.0)),
         ));
+    }
+}
+
+fn start_ambience(mut commands: Commands, sounds: Res<Sounds>, settings: Res<Settings>) {
+    commands.spawn((
+        Ambience,
+        AudioPlayer(sounds.meadow.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(settings.sound_volume * AMBIENCE_GAIN)),
+    ));
+}
+
+/// Follow the volume setting live.
+fn ambience_volume(settings: Res<Settings>, mut sinks: Query<&mut AudioSink, With<Ambience>>) {
+    if !settings.is_changed() {
+        return;
+    }
+    for mut sink in &mut sinks {
+        sink.set_volume(Volume::Linear(settings.sound_volume * AMBIENCE_GAIN));
     }
 }
 
@@ -190,6 +217,61 @@ fn click() -> Vec<f32> {
     })
 }
 
+/// 24 s seamless loop: a breeze that swells and settles, with a few
+/// birds singing short phrases at different pitches.
+fn meadow_ambience() -> Vec<f32> {
+    const LOOP_SECS: f32 = 24.0;
+    const FADE_SECS: f32 = 1.0;
+    let mut noise = Noise(0x2545_F491);
+    let (mut low, mut lower) = (0.0f32, 0.0f32);
+    let mut out = samples(LOOP_SECS + FADE_SECS, |t| {
+        // Brown-ish noise, double low-passed: a soft rush of air.
+        low += (noise.next() - low) * 0.02;
+        lower += (low - lower) * 0.05;
+        let swell = 0.55 + 0.45 * ((t * 0.21).sin() * 0.6 + (t * 0.083 + 1.0).sin() * 0.4);
+        lower * 2.4 * swell
+    });
+
+    // Bird phrases: (start, base pitch, notes, note length).
+    let mut rng = Noise(0x0BAD_5EED);
+    let mut start = 1.2;
+    while start < LOOP_SECS - 2.0 {
+        let base = 2600.0 + (rng.next() * 0.5 + 0.5) * 1800.0;
+        let notes = 3 + ((rng.next() * 0.5 + 0.5) * 4.0) as usize;
+        let len = 0.07 + (rng.next() * 0.5 + 0.5) * 0.06;
+        let gain = 0.05 + (rng.next() * 0.5 + 0.5) * 0.05;
+        for n in 0..notes {
+            let t0 = start + n as f32 * (len * 1.35);
+            let up = if n % 2 == 0 { 1.0 } else { -1.0 };
+            let f0 = base * (1.0 + 0.08 * (n as f32 * 1.7).sin());
+            let i0 = (t0 * RATE as f32) as usize;
+            let count = (len * RATE as f32) as usize;
+            let mut phase = 0.0f32;
+            for i in 0..count {
+                let local = i as f32 / RATE as f32;
+                let k = local / len;
+                let f = f0 * (1.0 + up * 0.25 * k) + (local * 90.0).sin() * 60.0;
+                phase += TAU * f / RATE as f32;
+                let env = (k * std::f32::consts::PI).sin().powf(1.5);
+                if let Some(s) = out.get_mut(i0 + i) {
+                    *s += phase.sin() * env * gain;
+                }
+            }
+        }
+        start += 2.0 + (rng.next() * 0.5 + 0.5) * 3.5;
+    }
+
+    // Crossfade the extra tail into the head so the loop has no seam.
+    let loop_len = (LOOP_SECS * RATE as f32) as usize;
+    let fade = (FADE_SECS * RATE as f32) as usize;
+    for i in 0..fade {
+        let k = i as f32 / fade as f32;
+        out[i] = out[i] * k + out[loop_len + i] * (1.0 - k);
+    }
+    out.truncate(loop_len);
+    out
+}
+
 /// 16-bit mono PCM WAV.
 fn wav(samples: &[f32]) -> Vec<u8> {
     let data_len = (samples.len() * 2) as u32;
@@ -237,5 +319,20 @@ mod tests {
             assert!(s.len() < RATE as usize * 2);
             assert!(s.iter().all(|v| v.abs() <= 1.0));
         }
+    }
+
+    #[test]
+    fn ambience_loops_seamlessly_and_stays_quiet() {
+        let a = meadow_ambience();
+        assert_eq!(a.len(), (24.0 * RATE as f32) as usize);
+        let peak = a.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak < 0.9, "peak {peak}");
+        // The jump across the loop point is no bigger than a normal step.
+        let seam = (a[0] - a[a.len() - 1]).abs();
+        let typical = a
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(seam <= typical, "seam {seam} vs max step {typical}");
     }
 }

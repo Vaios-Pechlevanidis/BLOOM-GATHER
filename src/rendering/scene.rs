@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use super::camera::MainCamera;
 use super::color;
 use super::meshes::{self, TREE_MODEL_HEIGHT};
+use super::wind::{sway_by_height, wind_material, Wind, WindMaterial};
 use crate::game::{ActiveRegion, AppState, Content, RegionScene, Session, SessionSet};
 
 pub struct ScenePlugin;
@@ -40,7 +41,10 @@ fn ensure_scene(
     old: Query<Entity, With<SceneEntity>>,
     cameras: Query<Entity, With<MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    (mut materials, mut wind_materials): (
+        ResMut<Assets<StandardMaterial>>,
+        ResMut<Assets<WindMaterial>>,
+    ),
     (mut clear_color, mut ambient): (ResMut<ClearColor>, ResMut<AmbientLight>),
 ) {
     if existing.is_some_and(|scene| scene.region == active.0) {
@@ -116,12 +120,26 @@ fn ensure_scene(
     }
 
     // --- Props --------------------------------------------------------------
-    let tree_meshes = meshes::tree_variants(&palette).map(|m| meshes.add(m));
+    // Canopies sway (trunks stay put): sway weight rises from the top of
+    // the trunk to the crown.
+    let tree_meshes = meshes::tree_variants(&palette).map(|mut m| {
+        sway_by_height(&mut m, 2.3, TREE_MODEL_HEIGHT, 1.0);
+        meshes.add(m)
+    });
+    let tree_material = wind_materials.add(wind_material(
+        StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.93,
+            reflectance: 0.12,
+            ..default()
+        },
+        Wind::new(0.09, 1.1, 0.15),
+    ));
     for tree in layout.trees.iter().chain(&layout.backdrop_trees) {
         commands.spawn((
             SceneEntity,
             Mesh3d(tree_meshes[tree.variant as usize % 3].clone()),
-            MeshMaterial3d(painted.clone()),
+            MeshMaterial3d(tree_material.clone()),
             Transform::from_xyz(tree.position.x, tree.base - 0.15, tree.position.y)
                 .with_rotation(Quat::from_rotation_y(tree.yaw))
                 .with_scale(Vec3::splat(tree.height / TREE_MODEL_HEIGHT)),

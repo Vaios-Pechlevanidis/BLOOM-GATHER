@@ -225,7 +225,11 @@ fn drive(
     play_state: Option<Res<State<PlayState>>>,
     mut player: Option<ResMut<Player>>,
     (session, scene, content, saves): SmokeWorld<'_>,
-    (spawned, target): (Res<SpawnedFlowers>, Res<LookTarget>),
+    (spawned, target, diagnostics): (
+        Res<SpawnedFlowers>,
+        Res<LookTarget>,
+        Res<bevy::diagnostic::DiagnosticsStore>,
+    ),
     windows: Query<&Window, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
     mut exit: EventWriter<AppExit>,
@@ -395,6 +399,12 @@ fn drive(
                 }
                 let left = spawned.map.len();
                 smoke.check("95 flowers left in the world", left == 100 - PICKS, left);
+                let fps = diagnostics
+                    .get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
+                    .and_then(|d| d.smoothed())
+                    .unwrap_or(0.0);
+                // Debug build on a laptop GPU; release is faster.
+                smoke.check("frame rate holds up", fps >= 30.0, format!("{fps:.1} FPS"));
                 smoke.shot(&mut commands, "04_after_picking");
                 smoke.tap(KeyCode::Tab);
                 0.6
@@ -506,21 +516,14 @@ fn verify_resumed(
 }
 
 fn finish(smoke: &mut Smoke, exit: &mut EventWriter<AppExit>) -> f32 {
-    let code = if smoke.failures.is_empty() {
+    if smoke.failures.is_empty() {
         info!("SMOKE PASSED");
         exit.write(AppExit::Success);
-        0
     } else {
         error!("SMOKE FAILED: {:#?}", smoke.failures);
         exit.write(AppExit::error());
-        1
-    };
-    // Shutdown has been seen to hang once (see TODO.md). Never let that turn
-    // a finished test into a hung process.
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(10));
-        eprintln!("SMOKE WARNING: shutdown took over 10 s; forcing exit");
-        std::process::exit(code);
-    });
+    }
+    // If shutdown stalls, the game's own quit watchdog ends the process with
+    // this exit code after 5 s (see `game::session`).
     f32::INFINITY
 }

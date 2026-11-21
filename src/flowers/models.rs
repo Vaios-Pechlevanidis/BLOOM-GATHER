@@ -97,6 +97,8 @@ impl<'a> Plant<'a> {
 
     /// A gently curved stem from the origin to `top` (3 segments).
     fn stem(&mut self, frame: Transform, top: Vec3, radius: f32) {
+        // Botanical stems vanish at game scale; draw them a little sturdier.
+        let radius = radius * 1.4;
         let mid = Vec3::new(top.x * 0.25, top.y * 0.5, top.z * 0.25);
         let low = Vec3::new(top.x * 0.06, top.y * 0.22, top.z * 0.06);
         let c = self.stem;

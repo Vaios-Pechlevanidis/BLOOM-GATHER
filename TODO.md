@@ -53,18 +53,34 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Tests: 93 core + 4 app tests; two-run smoke test (`scripts/smoke.sh`) verifying picking and
   persistence across a real restart
 
-## Phase C: Sunny Meadow complete ⬜ (next)
+## Phase C: Sunny Meadow complete ✅
 
-- ⬜ Instanced, animated grass (decorative, never harvestable) so the meadow feels lush
-- ⬜ Wind on trees; butterflies and bees; drifting pollen
-- ⬜ Sky gradient and clouds; soft time-of-day lighting
-- ⬜ Ambient meadow audio loop (birdsong, breeze)
-- ⬜ A landmark or two (well, bench, signpost to the next region)
-- ⬜ Flower model pass after seeing them among grass (thicker stems, leaf shapes)
+- ✅ Wind shader (`src/rendering/wind.wgsl`): extended StandardMaterial whose vertex shader sways
+  vertices by their vertex-colour alpha; world-space phase so gusts roll across the field
+- ✅ Decorative grass: ~135k tapered blades in 16 m chunks, swaying, distance-faded
+  (visibility ranges), no shadows; keeps clear of path, props, landmarks and every flower
+- ✅ Tree canopies sway (trunks stay rooted)
+- ✅ Sky dome with a soft gradient (horizon = fog colour) and 16 drifting clouds
+- ✅ Butterflies (4 colourways) and bees visiting still-blooming flowers; freeze on pause
+- ✅ Landmarks with collision and flattened ground: bench by the path, stone well, signpost at the
+  path's end; trees, rocks, flowers and grass keep clear (core layout + tests)
+- ✅ Ambient meadow loop (breeze + birdsong, synthesised, seamless), follows volume setting
+- ✅ Flower stems drawn sturdier; highlight toned down
+- ✅ Quit watchdog: after the final save, a stalled shutdown is forced to finish (keeps exit code)
+- ✅ Smoke test measures FPS (debug build: 56-62 FPS on an Apple M2 with everything on)
+
+## Phase D: Tools & harvesting modes ⬜ (next)
+
+- ⬜ Tool shop access (temporary: from the basket screen until the workshop exists in Phase E)
+- ⬜ First-person hand and tool models (hand, scissors, basket, gardening tools, cart)
+- ⬜ Hand-reach pick animation; scissors snip; basket scoop
+- ⬜ Tool selection (number keys / mouse wheel) and HUD tool slot
+- ⬜ Radius, Sweep and Area harvesting in 3D (ground decal preview, batched harvesting)
+- ⬜ Cooldown feedback on the crosshair
 
 ## Later phases ⬜
 
-D Tools & harvesting modes · E Workshop, crafting & economy ·
+E Workshop, crafting & economy ·
 U Upgrades & skill tree · P Progression & achievements · F Remaining regions ·
 Z Completion & ending · G Polish & release
 
@@ -72,16 +88,22 @@ Z Completion & ending · G Polish & release
 
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
-- Sound effects: synthesised in `src/audio.rs`
+- Sound effects and ambience: synthesised in `src/audio.rs`
+- Landmarks, butterflies, bees, clouds: procedural meshes
 - Terrain: vertex colours only (no textures, no grass yet)
 - Sky: flat clear colour + fog (no sky gradient or clouds yet)
 - UI font: Bevy's built-in monospace (lacks glyphs such as `·` and `°`; keep UI strings ASCII)
 
 ## Known issues / decisions to revisit
 
-- Shutdown hung once (1 of 6 smoke runs, first run after a rebuild; possibly
-  waiting on shader compilation). Not reproduced since. The smoke test force-exits
-  after 10 s to stay reliable; investigate with the Quit button during Phase B.
+- Shutdown occasionally stalls, so far only on the first launch after a rebuild (likely
+  pipeline compilation still running). Mitigated: after the final save the game forces the
+  exit after 5 s, keeping the exit code. Root cause still to find (Bevy upgrade may fix it).
+- Adding landmarks in Phase C moved where flowers are placed, so saves made with the Phase B
+  build no longer match the world; the game detects this, keeps the old file as
+  `save.unreadable-*` and starts fresh. Before 1.0, layout changes can do this again; after
+  1.0, seeds and placement are frozen (content version + migration).
+- Grass and tree shadows: shadows use the un-swayed shape (prepass shader not overridden).
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
 - Key rebinding UI arrives with the full settings screen (Phase G); bindings are
   already data in `Bindings`.

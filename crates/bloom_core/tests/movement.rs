@@ -3,7 +3,9 @@
 
 use bloom_core::data::PlayerConfig;
 use bloom_core::player::{CharacterBody, Environment, MoveInput};
-use bloom_core::world::{BoxCollider, CircleCollider, ColliderSet, RegionLayout, Terrain};
+use bloom_core::world::{
+    BoxCollider, CircleCollider, ColliderSet, LandmarkKind, RegionLayout, Terrain,
+};
 use bloom_core::GameData;
 use glam::{Vec2, Vec3};
 
@@ -514,4 +516,71 @@ fn eye_is_above_feet() {
     };
     let body = CharacterBody::standing_at(Vec2::ZERO, &env);
     assert_eq!(body.eye(&cfg), Vec3::new(0.0, cfg.eye_height, 0.0));
+}
+
+#[test]
+fn every_region_has_landmarks_off_the_path_and_solid() {
+    let d = data();
+    let cfg = d.player.clone();
+    for region in &d.regions {
+        let layout = RegionLayout::generate(region, &d.world);
+        let kinds: Vec<_> = layout.landmarks.iter().map(|l| l.kind).collect();
+        for kind in [
+            LandmarkKind::Bench,
+            LandmarkKind::Well,
+            LandmarkKind::Signpost,
+        ] {
+            assert!(kinds.contains(&kind), "{} lacks {kind:?}", region.id);
+        }
+        let env = Environment {
+            terrain: &layout.terrain,
+            colliders: &layout.colliders,
+        };
+        for l in &layout.landmarks {
+            assert!(
+                layout.in_bounds(l.position, 0.5),
+                "{} {:?} outside",
+                region.id,
+                l.kind
+            );
+            assert!(
+                layout.distance_to_path(l.position) > 1.3,
+                "{} {:?} on path",
+                region.id,
+                l.kind
+            );
+            assert!((layout.terrain.height_at(l.position) - l.base).abs() < 1e-3);
+            for t in &layout.trees {
+                assert!(
+                    t.position.distance(l.position) > l.footprint + 2.9,
+                    "{} tree in {:?}",
+                    region.id,
+                    l.kind
+                );
+            }
+            // Walk straight at it from 4 m: it must block.
+            let start = l.position + Vec2::new(0.0, 4.0);
+            if !layout.in_bounds(start, 0.5) {
+                continue;
+            }
+            let mut body = CharacterBody::standing_at(start, &env);
+            for _ in 0..(3.0 / DT) as usize {
+                body.step(
+                    &MoveInput {
+                        wish: Vec2::new(0.0, -1.0),
+                        ..Default::default()
+                    },
+                    DT,
+                    &cfg,
+                    &env,
+                );
+            }
+            assert!(
+                body.ground_position().distance(l.position) > 0.3,
+                "{} walked into the {:?}",
+                region.id,
+                l.kind
+            );
+        }
+    }
 }

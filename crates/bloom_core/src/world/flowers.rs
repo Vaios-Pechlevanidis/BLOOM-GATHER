@@ -54,6 +54,7 @@ impl std::fmt::Display for PlacementError {
 const PATH_CLEARANCE: f32 = 0.35;
 const TREE_CLEARANCE: f32 = 0.9;
 const ROCK_CLEARANCE: f32 = 0.4;
+const LANDMARK_CLEARANCE: f32 = 0.6;
 const SPAWN_CLEARANCE: f32 = 2.5;
 const BOUNDS_INSET: f32 = 1.0;
 /// Flowers don't grow on slopes steeper than ~32°.
@@ -152,6 +153,7 @@ impl FlowerField {
                 .rocks
                 .iter()
                 .all(|r| r.position.distance(p) >= r.radius + ROCK_CLEARANCE)
+            && !layout.near_landmark(p, LANDMARK_CLEARANCE)
             && !self.grid.any_within(p, spacing, &self.positions)
     }
 

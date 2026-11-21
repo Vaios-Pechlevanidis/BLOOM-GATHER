@@ -33,6 +33,10 @@ map, skill tree, collection) open as in-game overlays and pause the world.
   110×80 m, Moonlight Garden 230×160 m, fenced, with scenery beyond the fence.
 * Solid props (trees, rocks, fences, buildings) block movement; low stones
   can be stepped over; decorative vegetation never counts as a flower.
+* Every region has landmarks to navigate by: a bench beside the path, a
+  stone well in an open spot, and a signpost where the path leads on to the
+  next region. Grass, butterflies, bees, drifting clouds, a breeze and
+  birdsong make the meadow feel alive without affecting gameplay.
 
 ## 2b. Core loop
 

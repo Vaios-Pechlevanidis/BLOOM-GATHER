@@ -68,6 +68,10 @@ fn flowers_respect_spacing_path_props_and_bounds() {
                     "{id} flower {a} in tree"
                 );
             }
+            assert!(
+                !layout.near_landmark(p, 0.5),
+                "{id} flower {a} in a landmark"
+            );
             for r in &layout.rocks {
                 assert!(r.position.distance(p) > r.radius, "{id} flower {a} in rock");
             }

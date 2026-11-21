@@ -11,8 +11,8 @@ mkdir -p "$OUT"
 cargo build
 echo "== run 1: play and save"
 BLOOM_SMOKE_TEST="$OUT" ./target/debug/bloom-and-gather > "$OUT/run1.log" 2>&1 || { tail -40 "$OUT/run1.log"; exit 1; }
-grep -E "SMOKE (ok|FAIL|PASSED|WARN)" "$OUT/run1.log" | sed -E 's/.*SMOKE/SMOKE/'
+grep -E "SMOKE (ok|FAIL|PASSED)|Shutdown stalled" "$OUT/run1.log" | sed -E 's/.*SMOKE/SMOKE/'
 echo "== run 2: restart and verify persistence"
 BLOOM_SMOKE_TEST="$OUT" BLOOM_SMOKE_RESUME=1 ./target/debug/bloom-and-gather > "$OUT/run2.log" 2>&1 || { tail -40 "$OUT/run2.log"; exit 1; }
-grep -E "SMOKE (ok|FAIL|PASSED|WARN)" "$OUT/run2.log" | sed -E 's/.*SMOKE/SMOKE/'
+grep -E "SMOKE (ok|FAIL|PASSED)|Shutdown stalled" "$OUT/run2.log" | sed -E 's/.*SMOKE/SMOKE/'
 echo "Screenshots in $OUT"

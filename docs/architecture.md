@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase B (first 3D flower field) complete. This document describes the
+Status: Phase C (Sunny Meadow complete) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -42,7 +42,8 @@ bloom-and-gather/
 │   ├── interaction.rs         look-at raycast, E to pick, event feedback
 │   ├── flowers/               3D flower models, spawning, wind, highlight, pick FX
 │   ├── audio.rs               synthesised sound effects
-│   ├── rendering/             3D camera, region scene, procedural meshes
+│   ├── rendering/             camera, region scene, wind shader, grass, sky,
+│   │                          landmarks, butterflies & bees, procedural meshes
 │   ├── ui/                    theme tokens, widgets, menus, HUD, debug overlay
 │   └── dev.rs                 debug-only automated smoke test (scripts/smoke.sh)
 └── docs/
@@ -154,6 +155,21 @@ profiling ever shows a need.
   hundreds of props batch into a handful of draw calls.
 * **Lighting:** warm directional sun with 3 shadow cascades (110 m), soft
   ambient, linear distance fog in the sky colour.
+* **Wind:** `WindMaterial = ExtendedMaterial<StandardMaterial, Wind>` with a
+  custom vertex shader (`rendering/wind.wgsl`, embedded in the binary). The
+  sway weight of each vertex is stored in its vertex-colour alpha (unused by
+  opaque materials): 0 at roots/trunks, 1 at blade tips and canopy tops. The
+  phase comes from world position, so gusts travel across the field. Used by
+  grass and tree canopies; flowers sway per entity on the CPU (≤ 750).
+* **Grass:** decorative only. Tapered blades merged into 16 m chunk meshes
+  (~135k blades in the Sunny Meadow, built in ~19 ms), no shadows, faded out
+  beyond ~45 m with visibility ranges, leaving room around every flower.
+* **Sky:** an unlit gradient dome following the camera, horizon colour equal
+  to the fog colour, plus drifting unlit cloud clusters.
+* **Landmarks:** bench, well and signpost placed by the core layout (with
+  colliders and flattened ground), drawn by `rendering/landmarks.rs`.
+* **Ambience:** butterflies and bees steer between still-blooming flowers;
+  a synthesised looping breeze + birdsong bed plays under the effects.
 * **Art status:** procedural low-poly meshes are *temporary art* (documented
   in TODO.md); painted glTF models replace them later without code changes to
   gameplay, because placement and collision come from `bloom_core`.

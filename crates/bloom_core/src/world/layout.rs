@@ -40,6 +40,29 @@ pub struct RockProp {
     pub variant: u8,
 }
 
+/// A recognisable, walk-around point of interest (solid, never harvestable).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LandmarkKind {
+    /// A wooden bench beside the footpath, facing it.
+    Bench,
+    /// A stone well with a little roof, in an open spot.
+    Well,
+    /// A signpost where the path leaves the region.
+    Signpost,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Landmark {
+    pub kind: LandmarkKind,
+    pub position: Vec2,
+    /// Ground height (the ground is flattened under landmarks).
+    pub base: f32,
+    /// Rotation about +Y; the model's front (+Z) faces this way.
+    pub yaw: f32,
+    /// Radius kept clear of flowers, grass and props.
+    pub footprint: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct RegionLayout {
     pub terrain: Terrain,
@@ -54,6 +77,7 @@ pub struct RegionLayout {
     /// Footpath centre line from the spawn across the region.
     pub path: Vec<Vec2>,
     pub path_half_width: f32,
+    pub landmarks: Vec<Landmark>,
     pub trees: Vec<TreeProp>,
     pub rocks: Vec<RockProp>,
     /// Scenery trees outside the fence. Unreachable, so no colliders.
@@ -86,11 +110,17 @@ impl RegionLayout {
         let spawn = Vec2::new(0.0, bounds_max.y - 6.0);
         let path = footpath(&mut rng, spawn, bounds_min, bounds_max);
 
-        let flatten = [FlattenArea {
+        let mut landmarks = place_landmarks(&mut rng, &path, spawn, bounds_min, bounds_max);
+        let mut flatten = vec![FlattenArea {
             center: spawn,
             inner_radius: 5.0,
             outer_radius: 11.0,
         }];
+        flatten.extend(landmarks.iter().map(|l| FlattenArea {
+            center: l.position,
+            inner_radius: l.footprint,
+            outer_radius: l.footprint + 2.5,
+        }));
         let terrain = Terrain::generate(
             half_size,
             OUTSKIRTS,
@@ -99,6 +129,9 @@ impl RegionLayout {
             region.seed,
             &flatten,
         );
+        for l in &mut landmarks {
+            l.base = terrain.height_at(l.position);
+        }
 
         let mut layout = Self {
             terrain,
@@ -109,6 +142,7 @@ impl RegionLayout {
             spawn_yaw: 0.0,
             path,
             path_half_width: 1.1,
+            landmarks,
             trees: Vec::new(),
             rocks: Vec::new(),
             backdrop_trees: Vec::new(),
@@ -140,12 +174,20 @@ impl RegionLayout {
         Vec2::new(rng.range_f32(min.x, max.x), rng.range_f32(min.y, max.y))
     }
 
+    /// Within `margin` of a landmark's footprint.
+    pub fn near_landmark(&self, p: Vec2, margin: f32) -> bool {
+        self.landmarks
+            .iter()
+            .any(|l| l.position.distance(p) < l.footprint + margin)
+    }
+
     fn place_trees(&mut self, rng: &mut SplitMix64, count: u32) {
         let mut attempts = count * 60;
         while self.trees.len() < count as usize && attempts > 0 {
             attempts -= 1;
             let p = self.random_point(rng, 3.0);
             if p.distance(self.spawn) < SPAWN_CLEARANCE
+                || self.near_landmark(p, 3.0)
                 || self.distance_to_path(p) < TREE_PATH_CLEARANCE
                 || self
                     .trees
@@ -211,6 +253,7 @@ impl RegionLayout {
             attempts -= 1;
             let p = self.random_point(rng, 1.5);
             if p.distance(self.spawn) < 6.0
+                || self.near_landmark(p, 1.2)
                 || self.distance_to_path(p) < ROCK_PATH_CLEARANCE
                 || self.trees.iter().any(|t| t.position.distance(p) < 3.0)
                 || self
@@ -254,6 +297,30 @@ impl RegionLayout {
                 top: r.base + r.height * 0.8,
             });
         }
+        for l in &self.landmarks {
+            match l.kind {
+                LandmarkKind::Bench => set.boxes.push(BoxCollider {
+                    center: l.position,
+                    half_extents: Vec2::new(0.85, 0.32),
+                    // Model X axis (bench length) maps to (cos yaw, -sin yaw).
+                    angle: -l.yaw,
+                    bottom: l.base - 1.0,
+                    top: l.base + 0.95,
+                }),
+                LandmarkKind::Well => set.circles.push(CircleCollider {
+                    center: l.position,
+                    radius: 1.0,
+                    bottom: l.base - 1.0,
+                    top: l.base + 2.6,
+                }),
+                LandmarkKind::Signpost => set.circles.push(CircleCollider {
+                    center: l.position,
+                    radius: 0.14,
+                    bottom: l.base - 1.0,
+                    top: l.base + 2.3,
+                }),
+            }
+        }
         // Invisible walls just outside the walkable rectangle. The visible
         // fence follows the same line.
         let center = (self.bounds_min + self.bounds_max) / 2.0;
@@ -286,6 +353,69 @@ impl RegionLayout {
         ]);
         self.colliders = set;
     }
+}
+
+/// Bench beside the path a third of the way along, signpost where the path
+/// leaves the region, well in an open spot away from both.
+fn place_landmarks(
+    rng: &mut SplitMix64,
+    path: &[Vec2],
+    spawn: Vec2,
+    min: Vec2,
+    max: Vec2,
+) -> Vec<Landmark> {
+    let along = |i: usize| {
+        let i = i.clamp(1, path.len() - 2);
+        let tangent = (path[i + 1] - path[i - 1]).normalize_or(Vec2::NEG_Y);
+        (path[i], Vec2::new(-tangent.y, tangent.x))
+    };
+    let side = if rng.next_f32() < 0.5 { 1.0 } else { -1.0 };
+    let (p, normal) = along(path.len() / 3);
+    let bench_pos = p + normal * side * 2.4;
+    let facing = (p - bench_pos).normalize();
+    let bench = Landmark {
+        kind: LandmarkKind::Bench,
+        position: bench_pos,
+        base: 0.0,
+        yaw: facing.x.atan2(facing.y),
+        footprint: 1.2,
+    };
+    let (end, normal) = along(path.len() - 2);
+    let sign = Landmark {
+        kind: LandmarkKind::Signpost,
+        position: end + normal * -side * 1.6,
+        base: 0.0,
+        yaw: 0.0, // faces south, towards a player walking up the path
+        footprint: 0.5,
+    };
+
+    let path_distance = |q: Vec2| {
+        path.windows(2)
+            .map(|w| distance_to_segment(q, w[0], w[1]))
+            .fold(f32::INFINITY, f32::min)
+    };
+    let mut well = None;
+    for _ in 0..200 {
+        let q = Vec2::new(
+            rng.range_f32(min.x + 8.0, max.x - 8.0),
+            rng.range_f32(min.y + 8.0, max.y - 8.0),
+        );
+        if path_distance(q) > 6.0 && q.distance(spawn) > 14.0 && q.distance(bench.position) > 10.0 {
+            well = Some(q);
+            break;
+        }
+    }
+    let mut out = vec![bench, sign];
+    if let Some(q) = well {
+        out.push(Landmark {
+            kind: LandmarkKind::Well,
+            position: q,
+            base: 0.0,
+            yaw: rng.range_f32(0.0, TAU),
+            footprint: 1.6,
+        });
+    }
+    out
 }
 
 /// A meandering path from the spawn northwards to the far edge.

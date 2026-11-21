@@ -235,7 +235,19 @@ fn save_on_exit(
     saves: ResMut<Saves>,
     player: Option<Res<Player>>,
 ) {
-    if exits.read().next().is_some() {
+    if let Some(exit) = exits.read().next() {
+        let code = match exit {
+            AppExit::Success => 0,
+            AppExit::Error(code) => code.get() as i32,
+        };
         save_now(session, saves, player);
+        // Shutdown has occasionally hung (first launch after a build; see
+        // TODO.md). The save is already safely on disk, so never let quitting
+        // leave a frozen window behind: force the exit if it stalls.
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            eprintln!("Shutdown stalled for 5 s after saving; exiting.");
+            std::process::exit(code);
+        });
     }
 }

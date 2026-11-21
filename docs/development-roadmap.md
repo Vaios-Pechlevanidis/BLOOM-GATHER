@@ -31,7 +31,7 @@ collision, first-person controller (walk, sprint, jump, gravity, slopes,
 steps), mouse look with cursor lock, comfort settings (sensitivity, FOV, head
 movement, invert), camera blend from menu, smoke test with real input.
 
-## Phase B — First 3D flower field ✅ (current)
+## Phase B — First 3D flower field ✅
 `FlowerField` (SoA + bitset) and deterministic clustered placement; 3D models
 per species (distinct silhouettes; species roster revisited to include
 bluebell, daffodil, hydrangea and wildflower varieties); look-at raycast,
@@ -41,7 +41,7 @@ XP/levels core; save system (atomic, versioned, backup, autosave; settings
 persist). Tests: placement counts/determinism, ray picking, duplicate-harvest
 prevention, save round-trip (harvested flowers never return).
 
-## Phase C — Sunny Meadow complete
+## Phase C — Sunny Meadow complete ✅ (current)
 Instanced animated grass, wind on flowers and trees, butterflies/bees,
 clouds and sky gradient, ambient audio, harvest sounds, region landmarks.
 
