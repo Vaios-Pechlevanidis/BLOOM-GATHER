@@ -80,6 +80,9 @@ impl GameData {
         r.check(self.world.terrain_cell > 0.0, || {
             "world.terrain_cell must be > 0".into()
         });
+        r.check((0.5..=5.0).contains(&self.world.flower_scale), || {
+            "world.flower_scale must be within 0.5..=5".into()
+        });
         r.check(self.world.boundary_margin >= 0.0, || {
             "world.boundary_margin must be >= 0".into()
         });
@@ -134,6 +137,15 @@ impl GameData {
         for s in &self.species {
             r.check(!s.name.trim().is_empty(), || {
                 format!("species '{}' has no name", s.id)
+            });
+            r.check(s.height > 0.05 && s.height < 3.0, || {
+                format!(
+                    "species '{}' has an implausible height {} m",
+                    s.id, s.height
+                )
+            });
+            r.check((0.0..=1.0).contains(&s.glow), || {
+                format!("species '{}' glow must be within 0..=1", s.id)
             });
             // A species nobody can ever find would make the collection
             // impossible to complete.

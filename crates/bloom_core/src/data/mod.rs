@@ -61,12 +61,60 @@ pub struct FlowerSpecies {
     pub name: String,
     pub description: String,
     pub rarity: Rarity,
+    /// 3D silhouette family.
+    pub shape: FlowerShape,
+    /// Height of the bloom above the ground in metres (model size and
+    /// look-at picking).
+    pub height: f32,
     pub petal_color: Rgb,
     pub center_color: Rgb,
-    /// Optional painted sprite (atlas key). Until art exists, flowers are drawn
-    /// procedurally from the two colours above.
+    /// Emissive strength 0–1 for flowers that glow at night.
     #[serde(default)]
-    pub sprite: Option<String>,
+    pub glow: f32,
+    /// Optional painted glTF model replacing the procedural one.
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+/// The 3D silhouette families flowers are built from. Several species may
+/// share a family (with different colours and sizes); each family looks
+/// distinctly different.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FlowerShape {
+    /// Flat ray of narrow petals around a domed centre.
+    Daisy,
+    /// Six petals behind a forward-facing trumpet.
+    Trumpet,
+    /// Four broad cupped petals around a dark centre.
+    Cup,
+    /// Arching stem hung with small bells.
+    Bells,
+    /// Low round pompom of tiny florets over trefoil leaves.
+    Pompom,
+    /// Several upright spikes of stacked buds.
+    Spike,
+    /// Closed upright cup of six petals.
+    Tulip,
+    /// Tall stem with a large sideways-facing disc.
+    Sunflower,
+    /// Tight layered spiral of petals.
+    Rose,
+    /// Big ruffled ball of petals.
+    Ruffle,
+    /// Round cluster of many four-petal florets.
+    Mophead,
+    /// Tall spike with tubular bells down one side.
+    Foxglove,
+    /// Arching stem with asymmetric blooms.
+    Orchid,
+    /// Six recurved petals forming a star-shaped trumpet.
+    Lily,
+    /// Small shrub dotted with starry flowers.
+    StarCluster,
+    /// Wide upward-facing pale trumpet.
+    Moonbloom,
+    /// Five-pointed star bloom.
+    Star,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -280,6 +328,9 @@ pub struct WorldConfig {
     pub min_flower_spacing: f32,
     /// Terrain grid resolution in metres between height samples.
     pub terrain_cell: f32,
+    /// Display scale applied to every flower (botanical sizes are tiny from
+    /// eye height). Used by both rendering and look-at picking.
+    pub flower_scale: f32,
     /// Walkable margin kept between the region edge and the invisible wall.
     pub boundary_margin: f32,
 }

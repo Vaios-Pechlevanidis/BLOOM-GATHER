@@ -5,10 +5,14 @@
 
 mod debug_overlay;
 mod hud;
+mod inventory;
 mod main_menu;
 mod pause_menu;
 pub mod theme;
+mod toasts;
 mod widgets;
+
+pub use toasts::Toast;
 
 use bevy::prelude::*;
 
@@ -22,6 +26,8 @@ impl Plugin for UiPlugin {
             hud::HudPlugin,
             pause_menu::PauseMenuPlugin,
             debug_overlay::DebugOverlayPlugin,
+            inventory::InventoryPlugin,
+            toasts::ToastsPlugin,
         ));
     }
 }

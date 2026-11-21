@@ -26,7 +26,10 @@ default-run = "bloom-and-gather"
 
 [dependencies]
 bloom_core.workspace = true
-bevy = "0.16"
+# `wav`: sound effects are synthesised as WAV data at startup.
+bevy = { version = "0.16", features = ["wav"] }
+serde.workspace = true
+ron.workspace = true
 
 [features]
 # Faster incremental rebuilds during development: `cargo run --features dev`.

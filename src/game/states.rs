@@ -20,4 +20,6 @@ pub enum PlayState {
     #[default]
     Playing,
     Paused,
+    /// The inventory (basket) screen is open.
+    Inventory,
 }

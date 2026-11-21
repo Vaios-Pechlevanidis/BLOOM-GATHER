@@ -37,6 +37,7 @@ enum PauseAction {
 enum SettingKind {
     Sensitivity,
     Fov,
+    Volume,
     HeadBob,
     InvertY,
 }
@@ -46,6 +47,7 @@ impl SettingKind {
         match self {
             SettingKind::Sensitivity => "Mouse sensitivity",
             SettingKind::Fov => "Field of view",
+            SettingKind::Volume => "Sound volume",
             SettingKind::HeadBob => "Head movement",
             SettingKind::InvertY => "Invert look",
         }
@@ -62,6 +64,7 @@ impl SettingKind {
         match self {
             SettingKind::Sensitivity => format!("{:.1}", s.mouse_sensitivity),
             SettingKind::Fov => format!("{:.0}", s.fov_degrees),
+            SettingKind::Volume => format!("{:.0}%", s.sound_volume * 100.0),
             SettingKind::HeadBob => on_off(s.head_bob),
             SettingKind::InvertY => on_off(s.invert_y),
         }
@@ -71,6 +74,7 @@ impl SettingKind {
         match self {
             SettingKind::Sensitivity => s.adjust_sensitivity(steps),
             SettingKind::Fov => s.adjust_fov(steps),
+            SettingKind::Volume => s.adjust_volume(steps),
             SettingKind::HeadBob => s.head_bob = !s.head_bob,
             SettingKind::InvertY => s.invert_y = !s.invert_y,
         }
@@ -132,6 +136,7 @@ fn spawn_overlay(mut commands: Commands, settings: Res<Settings>) {
                     for kind in [
                         SettingKind::Sensitivity,
                         SettingKind::Fov,
+                        SettingKind::Volume,
                         SettingKind::HeadBob,
                         SettingKind::InvertY,
                     ] {
@@ -220,7 +225,8 @@ fn toggle_with_key(
     if Bindings::just_pressed(&keys, &bindings.pause) {
         next_state.set(match state.get() {
             PlayState::Playing => PlayState::Paused,
-            PlayState::Paused => PlayState::Playing,
+            // Esc closes the basket rather than pausing on top of it.
+            PlayState::Paused | PlayState::Inventory => PlayState::Playing,
         });
     }
 }

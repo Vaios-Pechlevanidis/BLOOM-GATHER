@@ -6,9 +6,10 @@ pick every flower, buy better tools, craft increasingly valuable bouquets, and f
 the game with a real ending. It runs fully offline as a native app, with no
 browser and no account.
 
-**Status:** Phase 1 (foundation) and Phase A (first-person 3D foundation) are
-complete: you can walk, sprint, jump and look around the Sunny Meadow. Flowers
-arrive in Phase B. See [TODO.md](TODO.md) and
+**Status:** Phases 1, A and B are complete: walk the Sunny Meadow in first
+person, pick its 100 flowers by looking at them and pressing E, discover
+species, level up, sell from your basket, and quit and continue later; picked
+flowers never come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
 
 ## Running
@@ -30,12 +31,18 @@ Controls:
 | Move | W A S D (or arrow keys) |
 | Sprint | Shift |
 | Jump | Space |
+| Pick the flower you're looking at | E |
+| Basket (inventory, selling) | Tab |
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
-| Pause / settings | Esc (sensitivity, field of view, head movement, invert look) |
+| Pause / settings | Esc (sensitivity, field of view, sound volume, head movement, invert look) |
 | Performance overlay | F3 |
 
-E (interact), Tab (inventory) and M (map) are added with the features they open.
+M (map) arrives with the world map.
+
+Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
+`%APPDATA%\Bloom and Gather` (Windows) or `~/.local/share/bloom-and-gather`
+(Linux). The game saves automatically, and when pausing or quitting.
 
 ## Testing
 
@@ -43,7 +50,7 @@ E (interact), Tab (inventory) and M (map) are added with the features they open.
 cargo test                      # all unit + integration tests
 cargo test -p bloom_core        # gameplay/content tests only (no Bevy, fast)
 cargo clippy --all-targets
-BLOOM_SMOKE_TEST=/tmp/bloom-smoke cargo run   # drive the real game, save screenshots
+scripts/smoke.sh               # play the real game twice (pick, save, restart, verify); screenshots
 ```
 
 ## Project layout

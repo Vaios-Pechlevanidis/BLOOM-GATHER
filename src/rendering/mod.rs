@@ -4,7 +4,7 @@
 //! `bloom_core`, so what you see and what you bump into always agree.
 
 mod camera;
-mod meshes;
+pub mod meshes;
 mod scene;
 
 pub use camera::MainCamera;

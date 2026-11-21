@@ -31,27 +31,48 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Title screen over the 3D meadow with a slow orbit
 - ✅ Tests: 62 core tests (17 movement/layout) + 1 app test + real-game smoke test (18 checks)
 
-## Phase B: First 3D flower field ⬜ (next)
+## Phase B: First 3D flower field ✅
 
-- ⬜ Revisit species roster to include bluebell, daffodil, hydrangea, wildflowers (keep counts/balance tests green)
-- ⬜ `FlowerField` SoA + harvested bitset; deterministic clustered placement avoiding path/props/spawn
-- ⬜ Spatial grid; ray picking within interact range (tests vs brute force)
-- ⬜ 3D flower models per species (distinct silhouettes, stems, leaves), size/rotation variation
-- ⬜ Look-at highlight, name + "Press E to harvest" prompt; add E binding
-- ⬜ Harvest animation, particles, sound; duplicate-harvest prevention
-- ⬜ Inventory (Tab), species discovery, coins & selling, XP/levels core
-- ⬜ Save system (atomic, versioned, backup, autosave) incl. settings; Continue/New Game
-- ⬜ Extend smoke test: harvest a flower, restart, verify it stays harvested
+- ✅ Species roster: daffodil, bluebell, hydrangea and meadow clover (wildflower) added in place of
+  buttercup, cornflower and camellia; counts and balance invariants unchanged; 17 species
+- ✅ Data-driven flower visuals: `shape` (17 silhouette families), botanical `height`, `glow`;
+  `world.flower_scale` (2.2×) shared by rendering and picking
+- ✅ `BitSet` (set-only) and `FlowerField` (SoA, deterministic clustered placement avoiding path,
+  props, spawn and steep ground; spatial grid; radius queries; ray picking)
+- ✅ `Game`: harvest (reach, cooldown, once only), inventory, discovery, XP/levels, region
+  completion reward, selling at the single flower price, keepsake reserve for required bouquets,
+  tamper-checked restore from a saved state
+- ✅ Save system: versioned + checksummed file, atomic writes, good-backup rotation, fallback to
+  backup, quarantine of unreadable saves, migration hook; autosave + save on pause/title/quit
+- ✅ Settings persist (`settings.ron`); new Sound volume setting
+- ✅ Title screen: Continue / New Game (confirmation) / Quit; save notices
+- ✅ 17 procedural 3D flower models; wind sway; look-at highlight; pick animation + petal burst
+- ✅ E to pick with name/rarity prompt; Tab basket (filter, sort, sell 1 / sell all / sell
+  everything, "kept" flowers shown); HUD: remaining flowers, collection, coins, level, XP bar
+- ✅ Toasts (discoveries, level-ups, region complete, refusals); synthesised sound effects
+- ✅ Tests: 93 core + 4 app tests; two-run smoke test (`scripts/smoke.sh`) verifying picking and
+  persistence across a real restart
+
+## Phase C: Sunny Meadow complete ⬜ (next)
+
+- ⬜ Instanced, animated grass (decorative, never harvestable) so the meadow feels lush
+- ⬜ Wind on trees; butterflies and bees; drifting pollen
+- ⬜ Sky gradient and clouds; soft time-of-day lighting
+- ⬜ Ambient meadow audio loop (birdsong, breeze)
+- ⬜ A landmark or two (well, bench, signpost to the next region)
+- ⬜ Flower model pass after seeing them among grass (thicker stems, leaf shapes)
 
 ## Later phases ⬜
 
-C Sunny Meadow complete · D Tools & harvesting modes · E Workshop, crafting & economy ·
+D Tools & harvesting modes · E Workshop, crafting & economy ·
 U Upgrades & skill tree · P Progression & achievements · F Remaining regions ·
 Z Completion & ending · G Polish & release
 
 ## Temporary assets (replace before release)
 
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
+- Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
+- Sound effects: synthesised in `src/audio.rs`
 - Terrain: vertex colours only (no textures, no grass yet)
 - Sky: flat clear colour + fog (no sky gradient or clouds yet)
 - UI font: Bevy's built-in monospace (lacks glyphs such as `·` and `°`; keep UI strings ASCII)
@@ -62,8 +83,8 @@ Z Completion & ending · G Polish & release
   waiting on shader compilation). Not reproduced since. The smoke test force-exits
   after 10 s to stay reliable; investigate with the Quit button during Phase B.
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
-- Settings don't persist yet (arrive with the save system in Phase B).
 - Key rebinding UI arrives with the full settings screen (Phase G); bindings are
   already data in `Bindings`.
-- The smoke test locks the mouse cursor while it runs (~20 s), like normal play.
+- The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
+- Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
 - macOS: transitive dependency `block v0.1.6` emits a future-incompatibility warning.

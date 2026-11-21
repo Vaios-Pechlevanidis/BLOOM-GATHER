@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow, WindowFocused};
 use bloom_core::player::{wish_direction, CharacterBody, Environment, MoveInput};
 
-use crate::game::{AppState, Content, PlayState, RegionScene, Settings};
+use crate::game::{AppState, Content, PlayState, RegionScene, Session, Settings};
 use crate::input::Bindings;
 use crate::rendering::{MainCamera, SceneSet};
 
@@ -38,12 +38,18 @@ impl Plugin for PlayerPlugin {
                 (
                     (gather_input, mouse_look).run_if(in_state(PlayState::Playing)),
                     pause_on_focus_loss.run_if(in_state(PlayState::Playing)),
-                    update_camera.run_if(in_state(AppState::InGame)),
+                    update_camera
+                        .in_set(CameraUpdated)
+                        .run_if(in_state(AppState::InGame)),
                 )
                     .chain(),
             );
     }
 }
+
+/// The camera has been placed for this frame (look-at raycasts run after).
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CameraUpdated;
 
 /// The one player character. Survives returning to the title screen, so
 /// "Begin" continues where you were.
@@ -59,6 +65,13 @@ pub struct Player {
     bob_phase: f32,
     bob_weight: f32,
     landing_dip: f32,
+}
+
+impl Player {
+    /// A small downward nudge of the view (landing, picking a flower).
+    pub fn nudge(&mut self, amount: f32) {
+        self.landing_dip = self.landing_dip.max(amount);
+    }
 }
 
 /// Input gathered each frame, consumed by the next fixed step.
@@ -82,7 +95,13 @@ const BLEND_SECS: f32 = 1.0;
 const BOB_AMPLITUDE: f32 = 0.032;
 const BOB_STRIDE: f32 = 2.6; // radians of bob phase per metre walked
 
-fn ensure_player(mut commands: Commands, existing: Option<Res<Player>>, scene: Res<RegionScene>) {
+fn ensure_player(
+    mut commands: Commands,
+    existing: Option<Res<Player>>,
+    scene: Res<RegionScene>,
+    content: Res<Content>,
+    session: Res<Session>,
+) {
     if existing.is_some() {
         return;
     }
@@ -91,12 +110,27 @@ fn ensure_player(mut commands: Commands, existing: Option<Res<Player>>, scene: R
         terrain: &layout.terrain,
         colliders: &layout.colliders,
     };
-    let body = CharacterBody::standing_at(layout.spawn, &env);
+    // Resume where the player stood when the game was saved, if that spot is
+    // still valid; otherwise start at the region's spawn point.
+    let region_id = &content.regions[scene.region].id;
+    let saved = session.state().player.as_ref().filter(|pose| {
+        let p = Vec2::new(pose.position[0], pose.position[2]);
+        &pose.region == region_id && layout.in_bounds(p, content.player.radius)
+    });
+    let (at, yaw, pitch) = match saved {
+        Some(pose) => (
+            Vec2::new(pose.position[0], pose.position[2]),
+            pose.yaw,
+            pose.pitch,
+        ),
+        None => (layout.spawn, layout.spawn_yaw, -0.08),
+    };
+    let body = CharacterBody::standing_at(at, &env);
     commands.insert_resource(Player {
         previous: body.position,
         body,
-        yaw: layout.spawn_yaw,
-        pitch: -0.08,
+        yaw,
+        pitch,
         bob_phase: 0.0,
         bob_weight: 0.0,
         landing_dip: 0.0,

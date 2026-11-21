@@ -15,11 +15,15 @@
 //! and static collision ([`world`]) — and the first-person character
 //! controller ([`player`]).
 
+pub mod bitset;
 pub mod data;
 pub mod economy;
+pub mod game;
+pub mod persistence;
 pub mod player;
 pub mod progression;
 pub mod rng;
 pub mod world;
 
 pub use data::{DataError, GameData};
+pub use game::{Game, GameError, GameEvent, GameState};

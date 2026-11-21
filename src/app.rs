@@ -4,12 +4,15 @@ use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}
 use bevy::prelude::*;
 use bevy::window::{PresentMode, WindowResizeConstraints, WindowResolution};
 
-use crate::{game, input, player, rendering, ui};
+use crate::{audio, flowers, game, input, interaction, player, rendering, ui};
 
 pub const GAME_TITLE: &str = "Bloom & Gather";
 pub const GAME_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn build() -> App {
+    // The smoke test must never touch the player's real save or settings.
+    #[cfg(debug_assertions)]
+    crate::dev::isolate_save_dir();
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
@@ -32,6 +35,9 @@ pub fn build() -> App {
     .add_plugins((
         game::GamePlugin,
         input::InputPlugin,
+        interaction::InteractionPlugin,
+        flowers::FlowersPlugin,
+        audio::AudioPlugin,
         player::PlayerPlugin,
         rendering::RenderingPlugin,
         ui::UiPlugin,

@@ -1,7 +1,7 @@
 # Bloom & Gather — Architecture
 
-Status: Phase A (first-person 3D foundation) complete. This document describes
-the target architecture and marks what exists today.
+Status: Phase B (first 3D flower field) complete. This document describes the
+target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
 
@@ -25,20 +25,26 @@ bloom-and-gather/
 │   └── bloom_core/            engine-independent simulation (lib)
 │       ├── src/
 │       │   ├── data/          content definitions, loading, validation
-│       │   ├── world/         terrain, region layout, static collision
+│       │   ├── world/         terrain, region layout, static collision, flower field
+│       │   ├── game.rs        authoritative game state + commands (harvest, sell…)
+│       │   ├── persistence.rs versioned, checksummed, atomic save files
+│       │   ├── bitset.rs      harvested-flower bitsets (set-only)
 │       │   ├── player.rs      first-person character controller
 │       │   ├── economy.rs     economy configuration and money math
 │       │   ├── progression.rs XP and level curve
 │       │   └── rng.rs         deterministic SplitMix64
-│       └── tests/             content integrity, movement & layout tests
+│       └── tests/             content, movement, flowers, game rules, saves
 ├── src/                       Bevy application (presentation layer)
 │   ├── app.rs                 plugin wiring, window
-│   ├── game/                  app states, settings, content & region-scene resources
+│   ├── game/                  states, settings, session (load/autosave/new game), content
 │   ├── input/                 action bindings
 │   ├── player/                input → controller (fixed step), mouse look, camera
+│   ├── interaction.rs         look-at raycast, E to pick, event feedback
+│   ├── flowers/               3D flower models, spawning, wind, highlight, pick FX
+│   ├── audio.rs               synthesised sound effects
 │   ├── rendering/             3D camera, region scene, procedural meshes
 │   ├── ui/                    theme tokens, widgets, menus, HUD, debug overlay
-│   └── dev.rs                 debug-only automated smoke test (BLOOM_SMOKE_TEST)
+│   └── dev.rs                 debug-only automated smoke test (scripts/smoke.sh)
 └── docs/
 ```
 
@@ -79,9 +85,11 @@ Rust's built-in `core` crate and breaks macro expansions.
              └──────────────────────────────────────────────────────────────────┘
 ```
 
-* **bloom_core** is plain Rust. Later phases add a `Game` struct with command
-  methods (`harvest`, `craft`, `buy`) returning typed results plus a queue of
-  `GameEvent`s. It never panics on player input.
+* **bloom_core** is plain Rust. `Game` owns the saved `GameState` and exposes
+  commands (`harvest`, `sell`, later `craft`, `buy`) that validate first and
+  either apply everything or return a `GameError` without changing anything.
+  Commands queue `GameEvent`s; the app re-sends them as Bevy events
+  (`GameEventMsg`) for sounds, toasts and animations.
 * **One layout, two consumers.** `RegionLayout::generate(region, world)` is
   deterministic from the region seed. Rendering builds meshes from it and the
   controller collides with it, so visuals and collision always agree.
@@ -150,42 +158,65 @@ profiling ever shows a need.
   in TODO.md); painted glTF models replace them later without code changes to
   gameplay, because placement and collision come from `bloom_core`.
 
-## 7. Flower world (Phase B design)
+## 7. Flower world (implemented in Phase B)
 
-* **Storage (SoA):** `FlowerField { pos: Vec<Vec2>, species: Vec<u16>,
-  variant: Vec<u8>, harvested: BitSet }`. A flower's id is its index, stable
-  forever because generation is deterministic from `(region seed, layout)`.
+* **Storage (SoA):** `FlowerField { positions, bases, species, yaws, scales,
+  bloom_heights, grid }`. A flower's id is its index, stable forever because
+  generation is deterministic from `(region seed, layout)`. The harvested
+  state is *not* in the field: it is a set-only `BitSet` per region inside the
+  saved `GameState`.
 * **Placement:** exact per-species counts from data, natural clusters, off the
   path and props, minimum spacing; decorative grass/vegetation is separate and
   never counts as a flower.
-* **Interaction:** ray from the camera, tested against flower bounds via the
-  spatial grid within `player.interact_range`; E harvests.
-* **Rendering:** a real 3D model per species; one entity per flower in
-  visible chunks, sharing meshes/materials (automatic instancing); wind sway
-  in a vertex shader or per-entity transform.
-* **Double-harvest prevention:** `harvest(id)` is `if !bitset.test_and_set(id)`.
+* **Interaction:** each frame a ray from the camera is tested against flower
+  pick spheres via the spatial grid within `player.interact_range`; E calls
+  `Game::harvest`, which re-validates reach, cooldown and harvested state.
+* **Rendering:** a procedural 3D model per species (17 silhouette families,
+  stems, leaves, petals, glowing blooms on a separate emissive mesh). One
+  entity per unharvested flower sharing meshes/materials (automatic
+  instancing); wind sway per entity. Flowers are drawn and picked at
+  `world.flower_scale` (2.2×). At ≤ 750 flowers per region all are spawned;
+  chunk streaming is reserved for when benchmarks ask for it.
+* **Double-harvest prevention:** the only write path is
+  `BitSet::test_and_set`; there is no API to clear a bit. On load, harvested
+  indices are skipped when spawning, so picked flowers never reappear.
 
-## 8. Persistence (design)
+## 8. Persistence (implemented in Phase B)
 
-* One save slot file per profile in the OS data dir.
-* Format: RON in a versioned envelope `{ version, checksum, payload }`;
-  harvested flowers as a compact bitset per region.
-* Safe writes: `save.tmp` → fsync → rename; previous file rotated to
-  `save.bak`; load falls back to the backup.
-* Dirty tracking with debounced autosave plus immediate saves after
-  purchases, crafting, unlocks, level-ups and on quit.
-* Settings (sensitivity, FOV, …) persist with the save system.
+* One save slot in the OS data folder (`~/Library/Application Support/Bloom
+  and Gather`, `%APPDATA%\Bloom and Gather`, `~/.local/share/bloom-and-gather`;
+  override with `BLOOM_SAVE_DIR`).
+* Format: a header line `BLOOM-AND-GATHER-SAVE v1 <fnv1a64>` + `GameState` as
+  RON. Content ids (not indices) as keys; harvested flowers as bitsets.
+* Safe writes: `save.tmp` → fsync → rename. The previous save becomes
+  `save.bak` only if it still decodes, so a damaged file never pushes out the
+  last good one. Load falls back to the backup; an unreadable save is moved
+  aside (`save.unreadable-<time>`) instead of being overwritten.
+* `Game::from_state` validates a loaded state against content (known ids,
+  bitset sizes, per-species counts match the actual harvested flowers).
+* Migrations: `persistence::migrate(version, payload)`; newer-format saves
+  are refused, never overwritten.
+* Dirty tracking: autosave 2 s after the last change; immediate save on
+  pause, on returning to the title and on quit. Saves are ~2 KB, < 1 ms.
+* Settings persist separately in `settings.ron` whenever they change.
 
 ## 9. Testing strategy
 
 * `cargo test` — unit tests in `bloom_core` modules plus integration tests:
   content integrity, movement (gravity, exact jump height, buffered jumps,
   speeds, stopping, trees, wall sliding, steps, boulders, slopes, bounds) and
-  layouts (determinism, clear spawn, props off the path).
-* **Smoke test of the real game** (debug builds):
-  `BLOOM_SMOKE_TEST=<dir> cargo run` boots the real window and renderer, plays
-  with injected keyboard and mouse input, asserts movement, look, jump, pause
-  and cursor locking, saves screenshots and exits non-zero on failure.
+  layouts (determinism, clear spawn, props off the path), flowers (exact
+  counts, determinism, spacing, clusters, grid vs brute force, picking), game
+  rules (harvest once, reach, cooldown, XP/levels, region completion, selling,
+  keepsake reserve, tamper detection) and saves (round trip, damage
+  detection, backup fallback, quarantine).
+* **Smoke test of the real game** (debug builds): `scripts/smoke.sh` boots
+  the real window twice with a private save folder. Run 1 walks, sprints,
+  looks, jumps, picks five flowers by aiming and pressing E, opens the
+  basket, pauses (saves). Run 2 restarts, continues, and verifies the picked
+  flowers are still picked, absent from the world and in the basket, and the
+  player resumes where they stood. Injected input is authoritative (real
+  device input is discarded) so the test is deterministic.
 
 ## 10. Performance monitoring
 

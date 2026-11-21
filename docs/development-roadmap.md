@@ -25,13 +25,13 @@ P1 Foundation ─► A 3D foundation ─► B Flower field + inventory + saves �
 ## Phase 1 — Technical foundation ✅
 Rust workspace, Bevy app, states, content model + validation, docs.
 
-## Phase A — 3D foundation ✅ (current)
+## Phase A — 3D foundation ✅
 3D rendering, lighting, fog, chunked terrain, trees/rocks/fence with
 collision, first-person controller (walk, sprint, jump, gravity, slopes,
 steps), mouse look with cursor lock, comfort settings (sensitivity, FOV, head
 movement, invert), camera blend from menu, smoke test with real input.
 
-## Phase B — First 3D flower field
+## Phase B — First 3D flower field ✅ (current)
 `FlowerField` (SoA + bitset) and deterministic clustered placement; 3D models
 per species (distinct silhouettes; species roster revisited to include
 bluebell, daffodil, hydrangea and wildflower varieties); look-at raycast,

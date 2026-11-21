@@ -4,22 +4,20 @@
 //! The scene is built once per region and survives Main Menu ↔ In Game
 //! transitions (the title screen shows the same world behind the menu).
 
-use std::sync::Arc;
-
 use bevy::pbr::{CascadeShadowConfigBuilder, DistanceFog, FogFalloff};
 use bevy::prelude::*;
-use bloom_core::world::RegionLayout;
 
 use super::camera::MainCamera;
 use super::color;
 use super::meshes::{self, TREE_MODEL_HEIGHT};
-use crate::game::{ActiveRegion, AppState, Content, RegionScene};
+use crate::game::{ActiveRegion, AppState, Content, RegionScene, Session, SessionSet};
 
 pub struct ScenePlugin;
 
 impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::MainMenu), ensure_scene.in_set(SceneSet))
+        app.configure_sets(OnEnter(AppState::MainMenu), SceneSet.after(SessionSet))
+            .add_systems(OnEnter(AppState::MainMenu), ensure_scene.in_set(SceneSet))
             .add_systems(OnEnter(AppState::InGame), ensure_scene.in_set(SceneSet));
     }
 }
@@ -38,12 +36,12 @@ fn ensure_scene(
     content: Res<Content>,
     active: Res<ActiveRegion>,
     existing: Option<Res<RegionScene>>,
+    mut session: ResMut<Session>,
     old: Query<Entity, With<SceneEntity>>,
     cameras: Query<Entity, With<MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut clear_color: ResMut<ClearColor>,
-    mut ambient: ResMut<AmbientLight>,
+    (mut clear_color, mut ambient): (ResMut<ClearColor>, ResMut<AmbientLight>),
 ) {
     if existing.is_some_and(|scene| scene.region == active.0) {
         return;
@@ -54,7 +52,8 @@ fn ensure_scene(
 
     let region = active.def(&content);
     let started = std::time::Instant::now();
-    let layout = Arc::new(RegionLayout::generate(region, &content.world));
+    let runtime = session.region(active.0).clone();
+    let layout = runtime.layout.clone();
     let palette = region.palette;
     let sky = color(palette.sky);
 
@@ -160,5 +159,6 @@ fn ensure_scene(
     commands.insert_resource(RegionScene {
         region: active.0,
         layout,
+        field: runtime.field,
     });
 }

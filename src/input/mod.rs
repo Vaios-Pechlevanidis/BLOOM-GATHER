@@ -2,9 +2,9 @@
 //!
 //! Gameplay systems never hard-code keys; they read [`Bindings`], which the
 //! settings screen will make rebindable. Defaults follow the first-person
-//! spec: WASD, Shift sprint, Space jump, Esc pause. E (interact), Tab
-//! (inventory) and M (map) are added together with the features they open,
-//! so no key is ever bound to nothing.
+//! spec: WASD, Shift sprint, Space jump, E pick/interact, Tab basket, Esc
+//! pause. M (map) is added together with the map, so no key is ever bound to
+//! nothing.
 
 use bevy::prelude::*;
 
@@ -25,6 +25,8 @@ pub struct Bindings {
     pub right: Vec<KeyCode>,
     pub sprint: Vec<KeyCode>,
     pub jump: Vec<KeyCode>,
+    pub interact: Vec<KeyCode>,
+    pub inventory: Vec<KeyCode>,
     pub pause: Vec<KeyCode>,
     pub confirm: Vec<KeyCode>,
     pub toggle_debug: Vec<KeyCode>,
@@ -40,6 +42,8 @@ impl Default for Bindings {
             right: vec![KeyD, ArrowRight],
             sprint: vec![ShiftLeft, ShiftRight],
             jump: vec![Space],
+            interact: vec![KeyE],
+            inventory: vec![Tab],
             pause: vec![Escape],
             confirm: vec![Enter, NumpadEnter],
             toggle_debug: vec![F3],

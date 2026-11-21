@@ -47,31 +47,37 @@ crafting").
 
 ## 3. Flowers
 
-16 species in four rarity tiers by world abundance. A flower's selling value is the
+17 species in four rarity tiers by world abundance. A flower's selling value is the
 single global `economy.flower_base_value` (10 coins) — species definitions
 have no price field, so a rare flower *cannot* be configured to sell for more.
 
-| Species | Rarity | First region | World total |
-|---|---|---|---|
-| Daisy | Common | Sunny Meadow | 55 |
-| Buttercup | Common | Sunny Meadow | 80 |
-| Poppy | Uncommon | Sunny Meadow | 35 |
-| Cornflower | Uncommon | Sunny Meadow | 55 |
-| Lavender | Common | Lavender Fields | 160 |
-| Tulip | Common | Lavender Fields | 105 |
-| Sunflower | Uncommon | Lavender Fields | 70 |
-| Rose | Uncommon | Blossom Valley | 250 |
-| Peony | Uncommon | Blossom Valley | 155 |
-| Camellia | Rare | Blossom Valley | 70 |
-| Foxglove | Common | Enchanted Forest | 230 |
-| Wild Orchid | Rare | Enchanted Forest | 140 |
-| Fairy Lily | Very Rare | Enchanted Forest | 55 |
-| Night Jasmine | Common | Moonlight Garden | 220 |
-| Moonflower | Rare | Moonlight Garden | 180 |
-| Starpetal | Very Rare | Moonlight Garden | 40 |
+| Species | Rarity | Shape | First region | World total |
+|---|---|---|---|---|
+| Daisy | Common | ray of petals, domed centre | Sunny Meadow | 45 |
+| Daffodil | Common | nodding trumpet | Sunny Meadow | 80 |
+| Poppy | Uncommon | four cupped petals | Sunny Meadow | 35 |
+| Bluebell | Uncommon | arching stem of bells | Sunny Meadow | 55 |
+| Meadow Clover (wildflower) | Uncommon | low pompom, trefoil leaves | Sunny Meadow | 10 |
+| Lavender | Common | upright spikes | Lavender Fields | 160 |
+| Tulip | Common | closed cup | Lavender Fields | 105 |
+| Sunflower | Uncommon | tall, sideways disc | Lavender Fields | 70 |
+| Rose | Uncommon | layered spiral | Blossom Valley | 250 |
+| Peony | Uncommon | ruffled ball | Blossom Valley | 155 |
+| Hydrangea | Rare | mophead of florets | Blossom Valley | 70 |
+| Foxglove | Common | tall spike of bells | Enchanted Forest | 230 |
+| Wild Orchid | Rare | arching asymmetric blooms | Enchanted Forest | 140 |
+| Fairy Lily | Very Rare | recurved star trumpet, glows | Enchanted Forest | 55 |
+| Night Jasmine | Common | starry shrub, faint glow | Moonlight Garden | 220 |
+| Moonflower | Rare | wide pale trumpet, glows | Moonlight Garden | 180 |
+| Starpetal | Very Rare | five-pointed star, glows | Moonlight Garden | 40 |
+
+Each species is a distinct 3D model built from its `shape` family, colours
+and botanical `height`. All flowers are displayed (and picked) at
+`world.flower_scale` = 2.2× life size so they read well from eye height.
+Decorative vegetation never counts as a flower.
 
 The first time a species is harvested it is **discovered** (XP + collection
-entry). The collection is complete when all 16 are discovered.
+entry). The collection is complete when all 17 are discovered.
 
 ## 4. Harvesting
 
@@ -119,7 +125,7 @@ consumed atomically; nothing is consumed on failure.
 | Woodland Arrangement | 9, ≥2 Foxglove, ≥1 Wild Orchid | Knife, Workbench | 230 | ×2.56 |
 | Premium Bouquet | 10, ≥5 species | Pro Florist Set | 270 | ×2.70 |
 | Moonlit Bouquet | 12, ≥3 Moonflower, ≥2 Night Jasmine | Wrapping Paper, Pro Florist Set | 340 | ×2.83 |
-| Royal Bouquet | 15, ≥1 Camellia, ≥1 Fairy Lily, ≥1 Starpetal | Pro Florist Set | 450 | ×3.00 |
+| Royal Bouquet | 15, ≥1 Hydrangea, ≥1 Fairy Lily, ≥1 Starpetal | Pro Florist Set | 450 | ×3.00 |
 
 All eight are required for completion. A recipe is **discovered** when the
 player owns all its tools and has discovered every species it names.
@@ -230,5 +236,5 @@ full collection). Then free-roam mode with no new requirements.
 * The Garden Scissors are both a harvesting and crafting tool (both specs list
   them in both roles).
 * "Every required tool" = all nine tools; "complete flower collection" = all
-  16 species discovered.
+  17 species discovered.
 * Region unlocks never cost coins (anti-deadlock); they cost progress.

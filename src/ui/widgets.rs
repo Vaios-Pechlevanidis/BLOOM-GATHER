@@ -20,6 +20,8 @@ pub enum ButtonVariant {
     Secondary,
     /// Compact HUD button.
     Compact,
+    /// Small inline button (lists, tiles).
+    Small,
 }
 
 /// Colours a button eases between depending on its [`Interaction`].
@@ -42,7 +44,7 @@ impl ButtonVariant {
                 palette::SAGE_DARK,
                 palette::CREAM,
             ),
-            ButtonVariant::Secondary | ButtonVariant::Compact => (
+            ButtonVariant::Secondary | ButtonVariant::Compact | ButtonVariant::Small => (
                 ButtonPalette {
                     normal: palette::PARCHMENT,
                     hovered: palette::CREAM,
@@ -58,11 +60,17 @@ impl ButtonVariant {
         let (width, height) = match self {
             ButtonVariant::Primary | ButtonVariant::Secondary => (Val::Px(240.0), Val::Px(52.0)),
             ButtonVariant::Compact => (Val::Auto, Val::Px(40.0)),
+            ButtonVariant::Small => (Val::Auto, Val::Px(26.0)),
+        };
+        let pad = if self == ButtonVariant::Small {
+            space::MD
+        } else {
+            space::LG
         };
         Node {
             width,
             height,
-            padding: UiRect::horizontal(Val::Px(space::LG)),
+            padding: UiRect::horizontal(Val::Px(pad)),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             border: UiRect::all(Val::Px(2.0)),
@@ -80,10 +88,10 @@ pub fn spawn_button(
     action: impl Component,
 ) {
     let (colors, border, text_color) = variant.palette();
-    let font_size = if variant == ButtonVariant::Compact {
-        font::BODY
-    } else {
-        font::BUTTON
+    let font_size = match variant {
+        ButtonVariant::Primary | ButtonVariant::Secondary => font::BUTTON,
+        ButtonVariant::Compact => font::BODY,
+        ButtonVariant::Small => font::CAPTION,
     };
     parent
         .spawn((
@@ -105,6 +113,7 @@ pub fn spawn_button(
         .with_children(|button| {
             button.spawn((
                 Text::new(label),
+                TextLayout::new_with_no_wrap(),
                 TextFont {
                     font_size,
                     ..default()

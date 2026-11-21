@@ -66,11 +66,11 @@ impl MeshBuilder {
     }
 }
 
-fn lin(c: Color) -> LinearRgba {
+pub fn lin(c: Color) -> LinearRgba {
     c.to_linear()
 }
 
-fn mix(a: LinearRgba, b: LinearRgba, t: f32) -> LinearRgba {
+pub fn mix(a: LinearRgba, b: LinearRgba, t: f32) -> LinearRgba {
     let t = t.clamp(0.0, 1.0);
     LinearRgba::new(
         a.red + (b.red - a.red) * t,
@@ -91,7 +91,7 @@ fn swirl(x: f32, z: f32) -> f32 {
 }
 
 /// Deterministic per-vertex jitter in [-1, 1].
-fn hash3(p: Vec3) -> f32 {
+pub fn hash3(p: Vec3) -> f32 {
     let h = (p.x * 127.1 + p.y * 311.7 + p.z * 74.7).sin() * 43_758.547;
     h.fract() * 2.0 - 1.0
 }

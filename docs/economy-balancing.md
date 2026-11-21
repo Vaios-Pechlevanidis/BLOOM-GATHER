@@ -81,7 +81,7 @@ incentive.
 | Royal | 15 | 150 | 450 | ×3.00 | +20.0 |
 
 Species constraints stop "always craft the best recipe": Royal needs one each
-of Camellia, Fairy Lily and Starpetal (only 40 Starpetals exist), Moonlit
+of Hydrangea, Fairy Lily and Starpetal (only 40 Starpetals exist), Moonlit
 needs Moonflowers, and so on. Choosing which recipe uses which flowers is the
 central economic decision of the late game.
 
@@ -154,7 +154,7 @@ multiply the recipe base price; they never apply to raw flowers.
 ## 7. XP & skill points
 
 * Harvest-only XP: 1,900 × 3 = 5,700 → level 23.
-* With discoveries (16 × 25 = 400), region completions (5 × 150 = 750),
+* With discoveries (17 × 25 = 425), region completions (5 × 150 = 750),
   first crafts (8 × 50 = 400) and ≈ 600 bouquets (≈ 6,000 XP) a full
   playthrough reaches about level 30 (the cap).
 * SP: 1 per level from 2 (up to 29), +5 region completions, +2 collection

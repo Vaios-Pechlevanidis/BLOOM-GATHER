@@ -42,7 +42,7 @@ fn spawn_overlay(mut commands: Commands) {
             Node {
                 position_type: PositionType::Absolute,
                 right: Val::Px(space::MD),
-                top: Val::Px(space::MD),
+                top: Val::Px(150.0),
                 padding: UiRect::axes(Val::Px(space::MD), Val::Px(space::SM)),
                 ..default()
             },

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use bloom_core::data::RegionDef;
-use bloom_core::world::RegionLayout;
+use bloom_core::world::{FlowerField, RegionLayout};
 use bloom_core::GameData;
 
 use super::AppState;
@@ -22,13 +22,15 @@ impl ActiveRegion {
     }
 }
 
-/// The generated layout (terrain, props, colliders) of the region currently
-/// built in the 3D scene. Shared by rendering and the player controller so
-/// both always agree on where the ground and obstacles are.
+/// The generated layout (terrain, props, colliders) and flower field of the
+/// region currently built in the 3D scene — the same data the session uses,
+/// shared by rendering and the player controller so everyone agrees on where
+/// the ground, obstacles and flowers are.
 #[derive(Resource, Clone)]
 pub struct RegionScene {
     pub region: usize,
     pub layout: Arc<RegionLayout>,
+    pub field: Arc<FlowerField>,
 }
 
 /// Content is compiled into the binary, so the only way this fails is a

@@ -8,10 +8,13 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod audio;
 #[cfg(debug_assertions)]
 mod dev;
+mod flowers;
 mod game;
 mod input;
+mod interaction;
 mod player;
 mod rendering;
 mod ui;
