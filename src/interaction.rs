@@ -6,6 +6,7 @@
 //! turns input into commands and outcomes into feedback.
 
 use bevy::prelude::*;
+use bloom_core::data::HarvestMode;
 use bloom_core::game::{GameError, GameEvent};
 
 use crate::audio::{PlaySfx, Sfx};
@@ -13,6 +14,7 @@ use crate::game::{EventsForwarded, GameEventMsg, PlayState, RegionScene, Session
 use crate::input::Bindings;
 use crate::player::{CameraUpdated, Player};
 use crate::rendering::MainCamera;
+use crate::tools::SelectedMode;
 use crate::ui::Toast;
 
 pub struct InteractionPlugin;
@@ -35,39 +37,47 @@ impl Plugin for InteractionPlugin {
     }
 }
 
-/// What the crosshair is on.
-#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+/// What the crosshair is on: a single flower (hands/scissors), or the group
+/// of flowers a basket, rake or cart would gather.
+#[derive(Resource, Debug, Default, Clone, PartialEq)]
 pub struct LookTarget {
     pub flower: Option<u32>,
     pub species: Option<usize>,
+    pub group: Vec<u32>,
 }
 
 fn clear_target(mut target: ResMut<LookTarget>) {
     *target = LookTarget::default();
 }
 
-fn eye_ray(cameras: &Query<&GlobalTransform, With<MainCamera>>) -> Option<(Vec3, Vec3)> {
+fn eye_ray(cameras: &Query<&Transform, With<MainCamera>>) -> Option<(Vec3, Vec3)> {
     let camera = cameras.single().ok()?;
-    Some((camera.translation(), camera.forward().as_vec3()))
+    Some((camera.translation, camera.forward().as_vec3()))
 }
 
 fn look(
-    cameras: Query<&GlobalTransform, With<MainCamera>>,
+    cameras: Query<&Transform, With<MainCamera>>,
     scene: Option<Res<RegionScene>>,
     session: Option<ResMut<Session>>,
+    selected: Res<SelectedMode>,
     mut target: ResMut<LookTarget>,
 ) {
+    if selected.0 != HarvestMode::Single {
+        if target.flower.is_some() {
+            target.flower = None;
+            target.species = None;
+        }
+        return;
+    }
     let (Some(scene), Some(mut session), Some((eye, dir))) = (scene, session, eye_ray(&cameras))
     else {
         return;
     };
     let flower = session.look_at(scene.region, eye, dir);
-    let next = LookTarget {
-        flower,
-        species: flower.map(|i| scene.field.species(i)),
-    };
-    if *target != next {
-        *target = next;
+    let species = flower.map(|i| scene.field.species(i));
+    if target.flower != flower {
+        target.flower = flower;
+        target.species = species;
     }
 }
 
@@ -75,13 +85,14 @@ fn interact(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
     target: Res<LookTarget>,
-    cameras: Query<&GlobalTransform, With<MainCamera>>,
+    selected: Res<SelectedMode>,
+    cameras: Query<&Transform, With<MainCamera>>,
     scene: Option<Res<RegionScene>>,
     session: Option<ResMut<Session>>,
     mut sfx: EventWriter<PlaySfx>,
     mut toasts: EventWriter<Toast>,
 ) {
-    if !Bindings::just_pressed(&keys, &bindings.interact) {
+    if selected.0 != HarvestMode::Single || !Bindings::just_pressed(&keys, &bindings.interact) {
         return;
     }
     let (Some(scene), Some(mut session), Some((eye, _))) = (scene, session, eye_ray(&cameras))
@@ -151,6 +162,13 @@ fn react_to_events(
                 toasts.write(Toast::highlight(
                     format!("{} complete!", data.regions[region].name),
                     format!("Every flower gathered. +{coins} coins"),
+                ));
+            }
+            GameEvent::ToolBought { tool } => {
+                sfx.write(PlaySfx::new(Sfx::Coins));
+                toasts.write(Toast::highlight(
+                    format!("New tool: {}", data.tools[tool].name),
+                    data.tools[tool].description.clone(),
                 ));
             }
             GameEvent::FlowersSold { .. } => {

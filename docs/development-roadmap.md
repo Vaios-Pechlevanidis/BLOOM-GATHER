@@ -41,11 +41,11 @@ XP/levels core; save system (atomic, versioned, backup, autosave; settings
 persist). Tests: placement counts/determinism, ray picking, duplicate-harvest
 prevention, save round-trip (harvested flowers never return).
 
-## Phase C — Sunny Meadow complete ✅ (current)
+## Phase C — Sunny Meadow complete ✅
 Instanced animated grass, wind on flowers and trees, butterflies/bees,
 clouds and sky gradient, ambient audio, harvest sounds, region landmarks.
 
-## Phase D — Tools & harvesting modes
+## Phase D — Tools & harvesting modes ✅ (current)
 First-person hand/scissors/basket/tool models and animations; tool selection;
 Radius, Sweep and Area harvesting in 3D with batched harvesting.
 

@@ -62,7 +62,7 @@ pub struct SpawnedFlowers {
     /// (session generation, region) the entities were built for.
     key: Option<(u64, usize)>,
     pub map: HashMap<u32, Entity>,
-    highlighted: Option<Entity>,
+    highlighted: Vec<Entity>,
 }
 
 #[derive(Component)]
@@ -164,7 +164,7 @@ fn sync_flowers(
     for (_, entity) in spawned.map.drain() {
         commands.entity(entity).despawn();
     }
-    spawned.highlighted = None;
+    spawned.highlighted.clear();
     let field = &scene.field;
     let mut count = 0;
     for i in 0..field.len() as u32 {
@@ -229,7 +229,12 @@ fn highlight(
     mut bodies: Query<&mut MeshMaterial3d<StandardMaterial>, With<FlowerBody>>,
 ) {
     let Some(assets) = assets else { return };
-    let wanted = target.flower.and_then(|i| spawned.map.get(&i).copied());
+    let wanted: Vec<Entity> = target
+        .flower
+        .iter()
+        .chain(&target.group)
+        .filter_map(|i| spawned.map.get(i).copied())
+        .collect();
     if wanted == spawned.highlighted {
         return;
     }
@@ -242,10 +247,10 @@ fn highlight(
             }
         }
     };
-    if let Some(old) = spawned.highlighted {
+    for &old in spawned.highlighted.iter().filter(|e| !wanted.contains(e)) {
         set(old, &assets.material);
     }
-    if let Some(new) = wanted {
+    for &new in &wanted {
         set(new, &assets.highlight);
     }
     spawned.highlighted = wanted;
@@ -277,9 +282,7 @@ fn start_harvest_animation(
         let Some(entity) = spawned.map.remove(&flower) else {
             continue;
         };
-        if spawned.highlighted == Some(entity) {
-            spawned.highlighted = None;
-        }
+        spawned.highlighted.retain(|e| *e != entity);
         let Ok(transform) = flowers.get(entity) else {
             continue;
         };

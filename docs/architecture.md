@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase C (Sunny Meadow complete) done. This document describes the
+Status: Phase D (tools & harvesting modes) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -40,6 +40,8 @@ bloom-and-gather/
 │   ├── input/                 action bindings
 │   ├── player/                input → controller (fixed step), mouse look, camera
 │   ├── interaction.rs         look-at raycast, E to pick, event feedback
+│   ├── tools.rs               tool selection, ground aiming, basket/rake/cart actions
+│   ├── viewmodel.rs           first-person hands & tools (second camera, layer 1)
 │   ├── flowers/               3D flower models, spawning, wind, highlight, pick FX
 │   ├── audio.rs               synthesised sound effects
 │   ├── rendering/             camera, region scene, wind shader, grass, sky,
@@ -196,6 +198,23 @@ profiling ever shows a need.
 * **Double-harvest prevention:** the only write path is
   `BitSet::test_and_set`; there is no API to clear a bit. On load, harvested
   indices are skipped when spawning, so picked flowers never reappear.
+
+## 7b. Tools and first-person view (Phase D)
+
+* **Core:** `Game::buy_tool` validates level, prerequisite tools and coins and
+  applies atomically. Batch modes (`harvest_radius`, `harvest_sweep`,
+  `harvest_area`) validate the tool, cooldown and ground reach, gather the
+  flowers `preview_*` would show (nearest first, capped), and run them
+  through the same `apply_one`/`finish_batch` path as single picks, so
+  events, XP, discovery and region completion behave identically.
+* **Aiming:** batch tools raycast the terrain (`Terrain::raycast`) within
+  ground reach. Aim and pick systems read the camera's `Transform` (already
+  updated this frame) rather than `GlobalTransform`, which would lag a frame.
+* **Viewmodel:** a second `Camera3d` (order 1, no clear, own depth) parented
+  to the main camera renders render layer 1 only, so hands and tools never
+  clip into the world. The sun is on both layers. Models and poses are
+  procedural; animations are driven by real game events (a pick happened),
+  not by key presses.
 
 ## 8. Persistence (implemented in Phase B)
 

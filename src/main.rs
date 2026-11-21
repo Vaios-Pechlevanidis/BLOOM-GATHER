@@ -17,7 +17,9 @@ mod input;
 mod interaction;
 mod player;
 mod rendering;
+mod tools;
 mod ui;
+mod viewmodel;
 
 fn main() -> bevy::app::AppExit {
     app::build().run()

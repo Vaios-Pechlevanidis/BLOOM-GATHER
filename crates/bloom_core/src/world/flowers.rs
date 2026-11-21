@@ -218,6 +218,19 @@ impl FlowerField {
         out
     }
 
+    /// Unharvested flowers inside the axis-aligned rectangle, in index order.
+    pub fn query_rect(&self, min: Vec2, max: Vec2, harvested: &BitSet) -> Vec<u32> {
+        let mut out = Vec::new();
+        self.grid.for_each_in_rect(min, max, |i| {
+            let p = self.positions[i as usize];
+            if !harvested.get(i) && p.cmpge(min).all() && p.cmple(max).all() {
+                out.push(i);
+            }
+        });
+        out.sort_unstable();
+        out
+    }
+
     /// The nearest unharvested flower whose pick sphere the ray hits within
     /// `max_distance`. Returns `(index, distance along the ray)`.
     pub fn pick(

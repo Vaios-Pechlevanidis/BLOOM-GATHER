@@ -68,9 +68,15 @@ impl GameData {
             "level_curve.base must be > 0".into()
         });
 
-        r.check(self.harvesting.hand_cooldown_secs > 0.0, || {
-            "harvesting.hand_cooldown_secs must be > 0".into()
-        });
+        let h = &self.harvesting;
+        r.check(
+            h.hand_cooldown_secs > 0.0
+                && h.radius_cooldown_secs > 0.0
+                && h.sweep_interval_secs > 0.0
+                && h.area_cooldown_secs > 0.0
+                && h.ground_reach_bonus >= 0.0,
+            || "harvesting cooldowns must be > 0 and ground_reach_bonus >= 0".into(),
+        );
         r.check(self.world.chunk_size > 0.0, || {
             "world.chunk_size must be > 0".into()
         });
@@ -283,16 +289,20 @@ impl GameData {
                     ToolEffect::RadiusMode {
                         radius,
                         max_flowers,
-                    } => radius > 0.0 && max_flowers > 0,
+                    } => (0.3..=5.0).contains(&radius) && max_flowers > 0,
                     ToolEffect::SweepMode {
                         radius,
                         max_flowers_per_tick,
-                    } => radius > 0.0 && max_flowers_per_tick > 0,
+                    } => (0.3..=5.0).contains(&radius) && max_flowers_per_tick > 0,
                     ToolEffect::AreaMode {
                         max_width,
                         max_height,
                         max_flowers,
-                    } => max_width > 0.0 && max_height > 0.0 && max_flowers > 0,
+                    } => {
+                        (1.0..=20.0).contains(&max_width)
+                            && (1.0..=20.0).contains(&max_height)
+                            && max_flowers > 0
+                    }
                     ToolEffect::CraftBatchCapacity(c) => c > 0,
                 };
                 r.check(ok, || {

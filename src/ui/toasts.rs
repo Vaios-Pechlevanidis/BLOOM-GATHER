@@ -75,15 +75,18 @@ fn spawn_toasts(
     existing: Query<(Entity, &ToastCard)>,
 ) {
     let Ok(root) = root.single() else { return };
-    let mut count = existing.iter().count();
-    for toast in events.read() {
-        if count >= MAX_TOASTS {
-            // Make room: retire the oldest straight away.
-            if let Some((oldest, _)) = existing.iter().max_by(|a, b| a.1.age.total_cmp(&b.1.age)) {
-                commands.entity(oldest).despawn();
-                count -= 1;
-            }
-        }
+    // Only the newest few of a burst are shown, and the oldest visible ones
+    // make room for them, so there are never more than MAX_TOASTS.
+    let incoming: Vec<Toast> = events.read().cloned().collect();
+    let skip = incoming.len().saturating_sub(MAX_TOASTS);
+    let incoming = &incoming[skip..];
+    let mut current: Vec<(Entity, f32)> = existing.iter().map(|(e, c)| (e, c.age)).collect();
+    current.sort_by(|a, b| b.1.total_cmp(&a.1)); // oldest first
+    let overflow = (current.len() + incoming.len()).saturating_sub(MAX_TOASTS);
+    for (entity, _) in current.iter().take(overflow) {
+        commands.entity(*entity).despawn();
+    }
+    for toast in incoming {
         let accent = if toast.highlight {
             palette::MUTED_YELLOW
         } else {
@@ -112,7 +115,6 @@ fn spawn_toasts(
                 }
             });
         });
-        count += 1;
     }
 }
 

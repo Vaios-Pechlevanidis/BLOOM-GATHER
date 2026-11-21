@@ -85,17 +85,19 @@ entry). The collection is complete when all 17 are discovered.
 
 ## 4. Harvesting
 
-| Stage | Unlocked by | Mode | Effect |
+| Slot | Tool | Mode | How it works (first person) |
 |---|---|---|---|
-| 1 Hand picking | start | Single | 1 flower per click, 0.35 s cooldown |
-| 2 Garden Scissors | tool | Single | cooldown ×0.6 |
-| 3 Harvesting Basket | tool | Radius | click picks every flower within 45 units (max 6) |
-| 4 Professional Gardening Tools | tool | Multi (sweep) | hold & drag to keep picking in a 70-unit radius (max 15 per tick) |
-| 5 Advanced Harvesting Equipment | tool | Area | drag a rectangle up to 320×320 units (max 80 per action) |
+| 1 | Hands | Single | look at a flower, E picks it; 0.35 s between picks |
+| 1 | Garden Scissors | Single | same, 40 % faster (0.21 s); a snip animation |
+| 2 | Harvesting Basket | Radius | aim at the ground; a ring shows a 1.6 m circle; E gathers up to 6 flowers, nearest first; 0.7 s pause |
+| 3 | Professional Gardening Tools (garden rake) | Sweep | hold E and look across the flowers: every 0.25 s gathers up to 4 within 2.2 m |
+| 4 | Advanced Harvesting Equipment (flower cart) | Area | hold E to set a corner, turn to drag a rectangle (up to 8 × 8 m), release to gather up to 40; 1.5 s pause |
 
-The player can switch between any unlocked mode (HUD mode bar, keys 1–4).
-Upgrades and skills scale cooldown, radius, cap and area size; they never
-unlock a mode on their own.
+Ground targets can be up to 4.5 m away (flower reach 3 m + 1.5 m). Every
+flower a batch tool would take is highlighted before you commit. Keys 1–4 or
+the mouse wheel switch tools; only owned tools appear on the tool bar.
+Upgrades and skills will scale cooldowns, radius, caps and area size; they
+never unlock a mode on their own. All numbers live in `game_data.ron`.
 
 ## 5. Tools
 

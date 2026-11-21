@@ -9,11 +9,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use glam::Vec3;
+use glam::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
 use crate::bitset::BitSet;
-use crate::data::{GameData, ToolEffect};
+use crate::data::{GameData, HarvestMode, ToolEffect};
 use crate::economy::Coins;
 use crate::progression::Xp;
 use crate::world::{FlowerField, RegionLayout};
@@ -77,6 +77,9 @@ pub enum GameEvent {
         region: usize,
         coins: Coins,
     },
+    ToolBought {
+        tool: usize,
+    },
     FlowersSold {
         species: usize,
         count: u32,
@@ -101,6 +104,22 @@ pub enum GameError {
     NotEnoughFlowers {
         have: u32,
     },
+    UnknownTool,
+    AlreadyOwned,
+    LevelTooLow {
+        needed: u32,
+    },
+    NeedsTool {
+        tool: String,
+    },
+    NotEnoughCoins {
+        price: Coins,
+        have: Coins,
+    },
+    /// No owned tool provides that harvesting mode.
+    ModeLocked,
+    /// The basket/sweep/area would gather nothing.
+    NothingInReach,
     /// Some of these flowers are set aside for required bouquets.
     Reserved {
         sellable: u32,
@@ -118,6 +137,17 @@ impl std::fmt::Display for GameError {
             GameError::OutOfReach { distance } => write!(f, "too far away ({distance:.1} m)"),
             GameError::CoolingDown { remaining } => write!(f, "hands busy for {remaining:.2} s"),
             GameError::NothingToSell => write!(f, "nothing to sell"),
+            GameError::UnknownTool => write!(f, "unknown tool"),
+            GameError::AlreadyOwned => write!(f, "you already own that tool"),
+            GameError::LevelTooLow { needed } => write!(f, "reach level {needed} first"),
+            GameError::NeedsTool { tool } => {
+                write!(f, "you need the {} first", tool.replace('_', " "))
+            }
+            GameError::NotEnoughCoins { price, have } => {
+                write!(f, "costs {price} coins; you have {have}")
+            }
+            GameError::ModeLocked => write!(f, "you don't have a tool for that yet"),
+            GameError::NothingInReach => write!(f, "no flowers there to gather"),
             GameError::NotEnoughFlowers { have } => write!(f, "only {have} in the basket"),
             GameError::Reserved { sellable } => {
                 write!(
@@ -130,6 +160,38 @@ impl std::fmt::Display for GameError {
 }
 
 impl std::error::Error for GameError {}
+
+/// Reach and limits of a batch harvesting mode.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ModeParams {
+    /// Circle radius (basket, sweep).
+    pub radius: f32,
+    /// Largest rectangle (area tool).
+    pub size: Vec2,
+    pub max_flowers: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BatchOutcome {
+    pub flowers: Vec<u32>,
+    pub discovered: Vec<usize>,
+    pub xp_gained: Xp,
+    pub region_completed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolStatus {
+    Owned,
+    Buyable,
+    Locked(ToolLock),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolLock {
+    Level(u32),
+    NeedsTool(String),
+    Coins(Coins),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HarvestOutcome {
@@ -393,6 +455,249 @@ impl Game {
         flower: u32,
         eye: Vec3,
     ) -> Result<HarvestOutcome, GameError> {
+        let field = self.begin_harvest(region)?;
+        if flower as usize >= field.len() {
+            return Err(GameError::UnknownFlower);
+        }
+        if self.is_harvested(region, flower) {
+            return Err(GameError::AlreadyHarvested);
+        }
+        let range = self.data.player.interact_range;
+        let (center, radius) = field.pick_sphere(flower);
+        let distance = eye.distance(center) - radius;
+        if distance > range + REACH_SLACK {
+            return Err(GameError::OutOfReach { distance });
+        }
+
+        // --- validated: apply ---
+        let level_before = self.level();
+        let (species, newly_discovered, mut xp) = self.apply_one(region, &field, flower);
+        let region_completed = self.finish_batch(region, level_before, &mut xp);
+        self.harvest_cooldown = self.harvest_cooldown_secs();
+        Ok(HarvestOutcome {
+            species,
+            newly_discovered,
+            xp_gained: xp,
+            region_completed,
+        })
+    }
+
+    // ---------------------------------------------------------------------
+    // Harvesting modes (basket, sweep, area)
+    // ---------------------------------------------------------------------
+
+    /// Modes the player can use with the tools they own, in tool order.
+    pub fn available_modes(&self) -> Vec<HarvestMode> {
+        let mut modes = vec![HarvestMode::Single];
+        for mode in [HarvestMode::Radius, HarvestMode::Sweep, HarvestMode::Area] {
+            if self.mode_params(mode).is_some() {
+                modes.push(mode);
+            }
+        }
+        modes
+    }
+
+    /// Reach and limits of a batch mode from the best owned tool, or `None`
+    /// if no owned tool provides it. (`Single` is not a batch mode.)
+    pub fn mode_params(&self, mode: HarvestMode) -> Option<ModeParams> {
+        let mut best: Option<ModeParams> = None;
+        for tool in self.state.tools.iter().filter_map(|t| self.data.tool(t)) {
+            for effect in &tool.effects {
+                let p = match (effect, mode) {
+                    (
+                        &ToolEffect::RadiusMode {
+                            radius,
+                            max_flowers,
+                        },
+                        HarvestMode::Radius,
+                    ) => ModeParams {
+                        radius,
+                        size: Vec2::ZERO,
+                        max_flowers,
+                    },
+                    (
+                        &ToolEffect::SweepMode {
+                            radius,
+                            max_flowers_per_tick,
+                        },
+                        HarvestMode::Sweep,
+                    ) => ModeParams {
+                        radius,
+                        size: Vec2::ZERO,
+                        max_flowers: max_flowers_per_tick,
+                    },
+                    (
+                        &ToolEffect::AreaMode {
+                            max_width,
+                            max_height,
+                            max_flowers,
+                        },
+                        HarvestMode::Area,
+                    ) => ModeParams {
+                        radius: 0.0,
+                        size: Vec2::new(max_width, max_height),
+                        max_flowers,
+                    },
+                    _ => continue,
+                };
+                if best.is_none_or(|b| p.max_flowers > b.max_flowers || p.radius > b.radius) {
+                    best = Some(p);
+                }
+            }
+        }
+        best
+    }
+
+    /// How far away the ground can be targeted (basket, sweep, area).
+    pub fn ground_reach(&self) -> f32 {
+        self.data.player.interact_range + self.data.harvesting.ground_reach_bonus
+    }
+
+    /// Unpicked flowers a basket or sweep centred on `center` would gather,
+    /// nearest first, capped by the tool.
+    pub fn preview_circle(&mut self, region: usize, mode: HarvestMode, center: Vec2) -> Vec<u32> {
+        let Some(params) = self.mode_params(mode).filter(|_| mode != HarvestMode::Area) else {
+            return Vec::new();
+        };
+        let bits = self.harvested(region);
+        let field = self.region(region).field.clone();
+        let mut hits = field.query_radius(center, params.radius, &bits);
+        hits.sort_by(|&a, &b| {
+            field
+                .position(a)
+                .distance(center)
+                .total_cmp(&field.position(b).distance(center))
+        });
+        hits.truncate(params.max_flowers as usize);
+        hits
+    }
+
+    /// The area an area tool marks from `start` towards `end` (clamped to the
+    /// tool's size) and the unpicked flowers inside it.
+    pub fn preview_area(
+        &mut self,
+        region: usize,
+        start: Vec2,
+        end: Vec2,
+    ) -> Option<(Vec2, Vec2, Vec<u32>)> {
+        let params = self.mode_params(HarvestMode::Area)?;
+        let half = params.size;
+        let end = start + (end - start).clamp(-half, half);
+        let (min, max) = (start.min(end), start.max(end));
+        let bits = self.harvested(region);
+        let field = self.region(region).field.clone();
+        let mut hits = field.query_rect(min, max, &bits);
+        hits.truncate(params.max_flowers as usize);
+        Some((min, max, hits))
+    }
+
+    /// Basket: gather every flower in a small circle on the ground in reach.
+    pub fn harvest_radius(
+        &mut self,
+        region: usize,
+        center: Vec3,
+        eye: Vec3,
+    ) -> Result<BatchOutcome, GameError> {
+        self.harvest_circle(region, HarvestMode::Radius, center, eye)
+    }
+
+    /// Sweep: called repeatedly while the button is held.
+    pub fn harvest_sweep(
+        &mut self,
+        region: usize,
+        center: Vec3,
+        eye: Vec3,
+    ) -> Result<BatchOutcome, GameError> {
+        self.harvest_circle(region, HarvestMode::Sweep, center, eye)
+    }
+
+    fn harvest_circle(
+        &mut self,
+        region: usize,
+        mode: HarvestMode,
+        center: Vec3,
+        eye: Vec3,
+    ) -> Result<BatchOutcome, GameError> {
+        if self.mode_params(mode).is_none() {
+            return Err(GameError::ModeLocked);
+        }
+        let field = self.begin_harvest(region)?;
+        let distance = eye.distance(center);
+        if distance > self.ground_reach() + REACH_SLACK {
+            return Err(GameError::OutOfReach { distance });
+        }
+        let targets = self.preview_circle(region, mode, Vec2::new(center.x, center.z));
+        if targets.is_empty() {
+            return Err(GameError::NothingInReach);
+        }
+        let cooldown = match mode {
+            HarvestMode::Sweep => self.data.harvesting.sweep_interval_secs,
+            _ => self.data.harvesting.radius_cooldown_secs,
+        };
+        Ok(self.apply_batch(region, &field, &targets, cooldown))
+    }
+
+    /// Area tool: gather everything in the marked rectangle. The player must
+    /// stand within ground reach of it.
+    pub fn harvest_area(
+        &mut self,
+        region: usize,
+        start: Vec2,
+        end: Vec2,
+        eye: Vec3,
+    ) -> Result<BatchOutcome, GameError> {
+        if self.mode_params(HarvestMode::Area).is_none() {
+            return Err(GameError::ModeLocked);
+        }
+        let field = self.begin_harvest(region)?;
+        let (min, max, targets) = self
+            .preview_area(region, start, end)
+            .ok_or(GameError::ModeLocked)?;
+        let here = Vec2::new(eye.x, eye.z);
+        let distance = here.clamp(min, max).distance(here);
+        if distance > self.ground_reach() + REACH_SLACK {
+            return Err(GameError::OutOfReach { distance });
+        }
+        if targets.is_empty() {
+            return Err(GameError::NothingInReach);
+        }
+        let cooldown = self.data.harvesting.area_cooldown_secs;
+        Ok(self.apply_batch(region, &field, &targets, cooldown))
+    }
+
+    fn apply_batch(
+        &mut self,
+        region: usize,
+        field: &FlowerField,
+        targets: &[u32],
+        cooldown: f32,
+    ) -> BatchOutcome {
+        let level_before = self.level();
+        let mut xp = 0;
+        let mut discovered = Vec::new();
+        for &flower in targets {
+            let (species, newly, gained) = self.apply_one(region, field, flower);
+            xp += gained;
+            if newly {
+                discovered.push(species);
+            }
+        }
+        let region_completed = self.finish_batch(region, level_before, &mut xp);
+        self.harvest_cooldown = cooldown;
+        BatchOutcome {
+            flowers: targets.to_vec(),
+            discovered,
+            xp_gained: xp,
+            region_completed,
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Harvest internals shared by every mode
+    // ---------------------------------------------------------------------
+
+    /// Checks common to every harvest; returns the region's flower field.
+    fn begin_harvest(&mut self, region: usize) -> Result<Arc<FlowerField>, GameError> {
         if region >= self.data.regions.len() {
             return Err(GameError::UnknownRegion);
         }
@@ -404,21 +709,12 @@ impl Game {
                 remaining: self.harvest_cooldown,
             });
         }
-        let range = self.data.player.interact_range;
-        let field = self.region(region).field.clone();
-        if flower as usize >= field.len() {
-            return Err(GameError::UnknownFlower);
-        }
-        if self.is_harvested(region, flower) {
-            return Err(GameError::AlreadyHarvested);
-        }
-        let (center, radius) = field.pick_sphere(flower);
-        let distance = eye.distance(center) - radius;
-        if distance > range + REACH_SLACK {
-            return Err(GameError::OutOfReach { distance });
-        }
+        Ok(self.region(region).field.clone())
+    }
 
-        // --- validated: apply ---
+    /// Mark one (validated, unpicked) flower harvested and put it in the
+    /// basket. Returns `(species, newly discovered, xp gained)`.
+    fn apply_one(&mut self, region: usize, field: &FlowerField, flower: u32) -> (usize, bool, Xp) {
         let data = self.data.clone();
         let region_def = &data.regions[region];
         let bits = self
@@ -427,11 +723,10 @@ impl Game {
             .entry(region_def.id.clone())
             .or_insert_with(|| BitSet::new(region_def.flower_total));
         let changed = bits.test_and_set(flower);
-        debug_assert!(changed, "checked above");
+        debug_assert!(changed, "callers only pass unpicked flowers");
 
         let species = field.species(flower);
         let species_id = data.species[species].id.clone();
-        let level_before = self.level();
         *self.state.inventory.entry(species_id.clone()).or_default() += 1;
         *self
             .state
@@ -440,8 +735,8 @@ impl Game {
             .or_default() += 1;
         self.state.stats.flowers_harvested += 1;
         let mut xp = data.progression.xp_per_harvest;
-        let newly_discovered = self.state.discovered.insert(species_id);
-        if newly_discovered {
+        let newly = self.state.discovered.insert(species_id);
+        if newly {
             xp += data.progression.xp_per_discovery;
         }
         self.events.push(GameEvent::FlowerHarvested {
@@ -449,34 +744,87 @@ impl Game {
             flower,
             species,
         });
-        if newly_discovered {
+        if newly {
             self.events.push(GameEvent::SpeciesDiscovered { species });
         }
+        (species, newly, xp)
+    }
 
-        let mut region_completed = false;
+    /// Region completion, XP and level-up events after one or more picks.
+    fn finish_batch(&mut self, region: usize, level_before: u32, xp: &mut Xp) -> bool {
+        let data = self.data.clone();
+        let region_def = &data.regions[region];
+        let mut completed = false;
         if self.remaining_in_region(region) == 0
             && self.state.completed_regions.insert(region_def.id.clone())
         {
-            region_completed = true;
+            completed = true;
             let coins = region_def.completion_reward.coins;
-            xp += data.progression.xp_region_complete;
+            *xp += data.progression.xp_region_complete;
             self.earn(coins);
             self.events
                 .push(GameEvent::RegionCompleted { region, coins });
         }
-
-        self.state.xp += xp;
+        self.state.xp += *xp;
         for level in (level_before + 1)..=self.level() {
             self.events.push(GameEvent::LevelUp { level });
         }
-        self.harvest_cooldown = self.harvest_cooldown_secs();
         self.dirty = true;
-        Ok(HarvestOutcome {
-            species,
-            newly_discovered,
-            xp_gained: xp,
-            region_completed,
-        })
+        completed
+    }
+
+    // ---------------------------------------------------------------------
+    // Tools
+    // ---------------------------------------------------------------------
+
+    pub fn owns_tool(&self, tool: usize) -> bool {
+        self.state.tools.contains(&self.data.tools[tool].id)
+    }
+
+    /// Whether a tool is owned, can be bought now, or why not.
+    pub fn tool_status(&self, tool: usize) -> ToolStatus {
+        let def = &self.data.tools[tool];
+        if self.owns_tool(tool) {
+            return ToolStatus::Owned;
+        }
+        if self.level() < def.unlock_level {
+            return ToolStatus::Locked(ToolLock::Level(def.unlock_level));
+        }
+        if let Some(missing) = def
+            .requires_tools
+            .iter()
+            .find(|t| !self.state.tools.contains(*t))
+        {
+            return ToolStatus::Locked(ToolLock::NeedsTool(missing.clone()));
+        }
+        if self.state.coins < def.price {
+            return ToolStatus::Locked(ToolLock::Coins(def.price));
+        }
+        ToolStatus::Buyable
+    }
+
+    /// Buy a tool. Tools are permanent and required for completion, so the
+    /// optional-purchase guard never applies to them.
+    pub fn buy_tool(&mut self, tool: usize) -> Result<Coins, GameError> {
+        let Some(def) = self.data.tools.get(tool).cloned() else {
+            return Err(GameError::UnknownTool);
+        };
+        match self.tool_status(tool) {
+            ToolStatus::Owned => Err(GameError::AlreadyOwned),
+            ToolStatus::Locked(ToolLock::Level(needed)) => Err(GameError::LevelTooLow { needed }),
+            ToolStatus::Locked(ToolLock::NeedsTool(tool)) => Err(GameError::NeedsTool { tool }),
+            ToolStatus::Locked(ToolLock::Coins(price)) => Err(GameError::NotEnoughCoins {
+                price,
+                have: self.state.coins,
+            }),
+            ToolStatus::Buyable => {
+                self.state.coins -= def.price;
+                self.state.tools.insert(def.id.clone());
+                self.events.push(GameEvent::ToolBought { tool });
+                self.dirty = true;
+                Ok(def.price)
+            }
+        }
     }
 
     fn earn(&mut self, coins: Coins) {

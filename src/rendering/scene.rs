@@ -99,6 +99,8 @@ fn ensure_scene(
             ..default()
         },
         Transform::from_xyz(-30.0, 46.0, 28.0).looking_at(Vec3::ZERO, Vec3::Y),
+        // Lights the world and the first-person hands/tools layer.
+        bevy::render::view::RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
         CascadeShadowConfigBuilder {
             num_cascades: 3,
             first_cascade_far_bound: 12.0,

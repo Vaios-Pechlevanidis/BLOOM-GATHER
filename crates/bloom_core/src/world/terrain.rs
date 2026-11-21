@@ -144,6 +144,39 @@ impl Terrain {
         a + (b - a) * fz
     }
 
+    /// Where a ray first meets the ground, within `max_distance`.
+    pub fn raycast(&self, origin: Vec3, dir: Vec3, max_distance: f32) -> Option<Vec3> {
+        let dir = dir.normalize_or_zero();
+        if dir == Vec3::ZERO {
+            return None;
+        }
+        let below = |p: Vec3| p.y <= self.height_at(Vec2::new(p.x, p.z));
+        if below(origin) {
+            return Some(origin);
+        }
+        let step = self.cell * 0.5;
+        let mut t0 = 0.0;
+        let mut t = 0.0;
+        while t < max_distance {
+            t = (t + step).min(max_distance);
+            if below(origin + dir * t) {
+                // Refine between the last point above and the first below.
+                let (mut lo, mut hi) = (t0, t);
+                for _ in 0..12 {
+                    let mid = (lo + hi) / 2.0;
+                    if below(origin + dir * mid) {
+                        hi = mid;
+                    } else {
+                        lo = mid;
+                    }
+                }
+                return Some(origin + dir * hi);
+            }
+            t0 = t;
+        }
+        None
+    }
+
     /// Upward unit normal from central differences.
     pub fn normal_at(&self, p: Vec2) -> Vec3 {
         let e = self.cell;
@@ -289,6 +322,20 @@ mod tests {
         let t = Terrain::generate(Vec2::new(50.0, 40.0), 20.0, 0.5, &PARAMS, 5, &[]);
         assert_eq!(t.samples(), (281, 241));
         assert_eq!(t.sample_pos(0, 0), Vec2::new(-70.0, -60.0));
+    }
+
+    #[test]
+    fn raycast_finds_the_ground() {
+        let t = Terrain::flat(20.0, 20.0, 0.5, 1.0);
+        let hit = t
+            .raycast(Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, -1.0, -1.0), 10.0)
+            .unwrap();
+        assert!((hit - Vec3::new(0.0, 1.0, -2.0)).length() < 1e-3, "{hit}");
+        assert_eq!(
+            t.raycast(Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, -1.0, -1.0), 2.0),
+            None
+        );
+        assert_eq!(t.raycast(Vec3::new(0.0, 3.0, 0.0), Vec3::Y, 10.0), None);
     }
 
     #[test]

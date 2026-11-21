@@ -27,6 +27,8 @@ use crate::flowers::SpawnedFlowers;
 use crate::game::{AppState, Content, PlayState, RegionScene, Saves, Session, Settings};
 use crate::interaction::LookTarget;
 use crate::player::Player;
+use crate::tools::SelectedMode;
+use bloom_core::data::HarvestMode;
 
 /// Point the save folder at `<smoke dir>/save` before anything reads it.
 pub fn isolate_save_dir() {
@@ -64,6 +66,8 @@ impl Plugin for SmokeTestPlugin {
             yaw_mark: 0.0,
             picked: Vec::new(),
             aiming: None,
+            mark_count: 0,
+            group: 0,
         })
         // The test drives the window itself; don't pause if the OS moves
         // focus elsewhere while it runs. Volume off: no surprise sounds.
@@ -93,6 +97,64 @@ struct Smoke {
     picked: Vec<u32>,
     /// The flower currently being aimed at.
     aiming: Option<u32>,
+    /// Harvest count before a tool action, and the group it targeted.
+    mark_count: u64,
+    group: usize,
+}
+
+/// Tools the smoke test buys (all harvesting modes plus scissors).
+const TOOLS: [&str; 4] = [
+    "garden_scissors",
+    "harvesting_basket",
+    "pro_gardening_tools",
+    "advanced_harvesting_equipment",
+];
+
+fn harvested(session: Option<&Session>) -> u64 {
+    session.map_or(0, |s| s.state().stats.flowers_harvested)
+}
+
+/// Stand 2.6 m from the densest remaining patch and look at the ground there.
+fn aim_at_cluster(
+    smoke: &mut Smoke,
+    player: Option<&mut Player>,
+    scene: Option<&RegionScene>,
+    session: Option<&Session>,
+    content: &Content,
+) {
+    let (Some(player), Some(scene), Some(session)) = (player, scene, session) else {
+        smoke.check("can aim at a patch", false, "missing player/scene/session");
+        return;
+    };
+    let field = &scene.field;
+    let open: Vec<u32> = (0..field.len() as u32)
+        .filter(|&i| !session.is_harvested(scene.region, i))
+        .collect();
+    let Some(&best) = open.iter().max_by_key(|&&i| {
+        open.iter()
+            .filter(|&&j| field.position(i).distance(field.position(j)) < 1.6)
+            .count()
+    }) else {
+        smoke.check("can aim at a patch", false, "no flowers left");
+        return;
+    };
+    let target = field.position(best);
+    let layout = &scene.layout;
+    let mut stand = target + Vec2::new(0.0, 2.6);
+    if !layout.in_bounds(stand, 0.5) {
+        stand = target - Vec2::new(0.0, 2.6);
+    }
+    let env = Environment {
+        terrain: &layout.terrain,
+        colliders: &layout.colliders,
+    };
+    let body = CharacterBody::standing_at(stand, &env);
+    player.body = body;
+    player.previous = body.position;
+    let ground = Vec3::new(target.x, layout.terrain.height_at(target), target.y);
+    let d = ground - body.eye(&content.player);
+    player.yaw = (-d.x).atan2(-d.z);
+    player.pitch = (d.y / d.length()).asin();
 }
 
 const PICKS: usize = 5;
@@ -146,7 +208,22 @@ fn inject_input(
     let dt = time.delta_secs();
     // Only injected input counts: whatever the person at the computer does
     // with the real keyboard and mouse while the test runs is discarded.
-    keys.reset_all();
+    // Injected held keys stay held (no fresh "just pressed" every frame).
+    let ours: Vec<KeyCode> = smoke
+        .holds
+        .iter()
+        .map(|h| h.0)
+        .chain(smoke.taps.iter().map(|t| t.0))
+        .collect();
+    let real: Vec<KeyCode> = keys
+        .get_pressed()
+        .filter(|k| !ours.contains(k))
+        .copied()
+        .collect();
+    for key in real {
+        keys.release(key);
+    }
+    keys.clear();
     motion.delta = Vec2::ZERO;
     let mut taps = std::mem::take(&mut smoke.taps);
     taps.retain_mut(|(key, pressed)| {
@@ -209,8 +286,14 @@ fn aim_at_nearest(
     Some(target)
 }
 
+type SmokeView<'a> = (
+    Res<'a, SpawnedFlowers>,
+    Res<'a, LookTarget>,
+    Res<'a, bevy::diagnostic::DiagnosticsStore>,
+    Res<'a, SelectedMode>,
+);
 type SmokeWorld<'a> = (
-    Option<Res<'a, Session>>,
+    Option<ResMut<'a, Session>>,
     Option<Res<'a, RegionScene>>,
     Res<'a, Content>,
     Res<'a, Saves>,
@@ -224,12 +307,8 @@ fn drive(
     app_state: Option<Res<State<AppState>>>,
     play_state: Option<Res<State<PlayState>>>,
     mut player: Option<ResMut<Player>>,
-    (session, scene, content, saves): SmokeWorld<'_>,
-    (spawned, target, diagnostics): (
-        Res<SpawnedFlowers>,
-        Res<LookTarget>,
-        Res<bevy::diagnostic::DiagnosticsStore>,
-    ),
+    (mut session_mut, scene, content, saves): SmokeWorld<'_>,
+    (spawned, target, diagnostics, selected): SmokeView<'_>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
     mut exit: EventWriter<AppExit>,
@@ -240,7 +319,7 @@ fn drive(
     }
     let app_state = app_state.as_deref();
     let play_state = play_state.as_deref();
-    let session = session.as_deref();
+    let session = session_mut.as_deref();
     let scene = scene.as_deref();
     let body = player.as_ref().map(|p| p.body);
     let locked = windows
@@ -418,7 +497,144 @@ fn drive(
             }
             12 => {
                 smoke.expect("Tab closes it", play_state, PlayState::Playing);
+                smoke.step = 29; // → the tool steps (30…), which return to 13
+                0.1
+            }
+            // --- tools: buy them, open the shop, use every harvesting mode ---
+            30 => {
+                if let Some(session) = session_mut.as_deref_mut() {
+                    // Coins and levels for the test, via a restored state (the
+                    // game itself has no cheat API).
+                    let mut state = session.state().clone();
+                    state.coins = 20_000;
+                    state.xp = content.progression.level_curve.total_xp_for_level(20);
+                    match bloom_core::Game::from_state(session.data().clone(), state) {
+                        Ok(game) => session.game = game,
+                        Err(e) => smoke.check("restored test state", false, e),
+                    }
+                    for id in TOOLS {
+                        let i = content
+                            .tools
+                            .iter()
+                            .position(|t| t.id == id)
+                            .unwrap_or(usize::MAX);
+                        let bought = session.buy_tool(i);
+                        smoke.check("bought a tool", bought.is_ok(), format!("{id}: {bought:?}"));
+                    }
+                }
+                smoke.tap(KeyCode::Tab);
+                0.5
+            }
+            31 => {
+                smoke.expect("basket screen open", play_state, PlayState::Inventory);
+                smoke.tap(KeyCode::Digit2);
+                0.5
+            }
+            32 => {
+                smoke.shot(&mut commands, "07_tool_shop");
+                smoke.tap(KeyCode::Tab);
+                0.4
+            }
+            33 => {
+                smoke.tap(KeyCode::Digit2);
+                0.2
+            }
+            34 => {
+                smoke.check(
+                    "key 2 selects the basket",
+                    selected.0 == HarvestMode::Radius,
+                    format!("{:?}", selected.0),
+                );
+                aim_at_cluster(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    session_mut.as_deref(),
+                    &content,
+                );
+                0.4
+            }
+            35 => {
+                let n = target.group.len();
+                smoke.check("basket highlights a group", n > 0, n);
+                smoke.mark_count = harvested(session_mut.as_deref());
+                smoke.group = n;
+                smoke.shot(&mut commands, "08_basket_aim");
+                smoke.tap(KeyCode::KeyE);
+                0.6
+            }
+            36 => {
+                let gained = harvested(session_mut.as_deref()) - smoke.mark_count;
+                let group = smoke.group as u64;
+                smoke.check(
+                    "basket gathered the group",
+                    gained == group,
+                    format!("{gained} vs {group}"),
+                );
+                smoke.tap(KeyCode::Digit3);
+                0.2
+            }
+            37 => {
+                smoke.check(
+                    "key 3 selects the rake",
+                    selected.0 == HarvestMode::Sweep,
+                    format!("{:?}", selected.0),
+                );
+                aim_at_cluster(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    session_mut.as_deref(),
+                    &content,
+                );
+                smoke.mark_count = harvested(session_mut.as_deref());
+                smoke.hold(KeyCode::KeyE, 1.2);
+                0.6
+            }
+            38 => {
+                smoke.shot(&mut commands, "09_rake_sweeping");
+                0.9
+            }
+            39 => {
+                let gained = harvested(session_mut.as_deref()) - smoke.mark_count;
+                smoke.check("holding E sweeps flowers up", gained > 0, gained);
+                smoke.tap(KeyCode::Digit4);
+                0.2
+            }
+            40 => {
+                smoke.check(
+                    "key 4 selects the cart",
+                    selected.0 == HarvestMode::Area,
+                    format!("{:?}", selected.0),
+                );
+                aim_at_cluster(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    session_mut.as_deref(),
+                    &content,
+                );
+                smoke.mark_count = harvested(session_mut.as_deref());
+                smoke.hold(KeyCode::KeyE, 1.3);
+                0.3
+            }
+            41 => {
+                // Turn while holding to drag out the rectangle.
+                smoke.mouse = Vec2::new(280.0, 60.0);
+                0.5
+            }
+            42 => {
+                let n = target.group.len();
+                smoke.check("cart marks an area", n > 0, n);
+                smoke.shot(&mut commands, "10_cart_marking");
+                0.9
+            }
+            43 => {
+                let gained = harvested(session_mut.as_deref()) - smoke.mark_count;
+                smoke.check("releasing E gathers the area", gained > 0, gained);
+                smoke.tap(KeyCode::Digit1);
                 smoke.tap(KeyCode::Escape);
+                smoke.step = 12; // → 13: pause and save
                 0.6
             }
             13 => {
@@ -427,10 +643,11 @@ fn drive(
                     std::fs::read_to_string(saves.store.dir().join("save.ron")).unwrap_or_default();
                 let saved = decode(&raw);
                 let n = saved.as_ref().map_or(0, |s| s.stats.flowers_harvested);
+                let live = harvested(session_mut.as_deref());
                 smoke.check(
                     "pausing saved the game",
-                    n == PICKS as u64,
-                    format!("{n} picked in save"),
+                    n == live && n > PICKS as u64,
+                    format!("{n} picked in save, {live} live"),
                 );
                 smoke.shot(&mut commands, "06_paused");
                 smoke.tap(KeyCode::Escape);
@@ -444,9 +661,28 @@ fn drive(
             15 => {
                 smoke.expect("back to the title", app_state, AppState::MainMenu);
                 smoke.check("title now offers Continue", saves.has_save, saves.has_save);
-                let list: Vec<String> = smoke.picked.iter().map(u32::to_string).collect();
-                let written = std::fs::write(smoke.expected_path(), list.join(",")).is_ok();
-                smoke.check("recorded picked flowers for run 2", written, list.join(","));
+                // Everything picked (by hand and with tools) and the tools owned.
+                let (picks, tools): (Vec<String>, Vec<String>) =
+                    match (session_mut.as_deref(), scene) {
+                        (Some(se), Some(sc)) => (
+                            (0..sc.field.len() as u32)
+                                .filter(|&i| se.is_harvested(sc.region, i))
+                                .map(|i| i.to_string())
+                                .collect(),
+                            se.state().tools.iter().cloned().collect(),
+                        ),
+                        _ => (Vec::new(), Vec::new()),
+                    };
+                let written = std::fs::write(
+                    smoke.expected_path(),
+                    format!("{}\n{}", picks.join(","), tools.join(",")),
+                )
+                .is_ok();
+                smoke.check(
+                    "recorded picks and tools for run 2",
+                    written,
+                    format!("{} picks", picks.len()),
+                );
                 1.0
             }
             _ => finish(&mut smoke, &mut exit),
@@ -465,14 +701,24 @@ fn verify_resumed(
     player: Option<&Player>,
 ) {
     smoke.expect("Enter continues", app_state, AppState::InGame);
-    let expected: Vec<u32> = std::fs::read_to_string(smoke.expected_path())
-        .unwrap_or_default()
+    let recorded = std::fs::read_to_string(smoke.expected_path()).unwrap_or_default();
+    let mut lines = recorded.lines();
+    let expected: Vec<u32> = lines
+        .next()
+        .unwrap_or("")
         .split(',')
         .filter_map(|s| s.parse().ok())
         .collect();
+    let tools: Vec<String> = lines
+        .next()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
     smoke.check(
         "run 1 recorded its picks",
-        expected.len() == PICKS,
+        expected.len() > PICKS,
         expected.len(),
     );
     let (Some(session), Some(scene)) = (session, scene) else {
@@ -488,11 +734,21 @@ fn verify_resumed(
         smoke.check("and does not respawn", !spawned.map.contains_key(&i), i);
     }
     let n = spawned.map.len();
-    smoke.check("95 flowers in the world", n == 100 - PICKS, n);
+    smoke.check(
+        "the rest still bloom",
+        n == 100 - expected.len(),
+        format!("{n} in the world"),
+    );
+    let owned: Vec<String> = session.state().tools.iter().cloned().collect();
+    smoke.check(
+        "tools are still owned",
+        owned == tools && tools.len() == TOOLS.len(),
+        owned.join(","),
+    );
     let held: u32 = (0..session.data().species.len())
         .map(|s| session.inventory_count(s))
         .sum();
-    smoke.check("basket restored", held == PICKS as u32, held);
+    smoke.check("basket restored", held as usize == expected.len(), held);
     if let Some(&first) = expected.first() {
         let mut probe = session.game.clone();
         probe.tick(5.0);

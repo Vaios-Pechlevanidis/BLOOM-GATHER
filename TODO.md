@@ -69,18 +69,38 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Quit watchdog: after the final save, a stalled shutdown is forced to finish (keeps exit code)
 - ✅ Smoke test measures FPS (debug build: 56-62 FPS on an Apple M2 with everything on)
 
-## Phase D: Tools & harvesting modes ⬜ (next)
+## Phase D: Tools & harvesting modes ✅
 
-- ⬜ Tool shop access (temporary: from the basket screen until the workshop exists in Phase E)
-- ⬜ First-person hand and tool models (hand, scissors, basket, gardening tools, cart)
-- ⬜ Hand-reach pick animation; scissors snip; basket scoop
-- ⬜ Tool selection (number keys / mouse wheel) and HUD tool slot
-- ⬜ Radius, Sweep and Area harvesting in 3D (ground decal preview, batched harvesting)
-- ⬜ Cooldown feedback on the crosshair
+- ✅ Tool effects converted to metres (basket 1.6 m / 6, rake 2.2 m / 4 per 0.25 s, cart 8 x 8 m / 40)
+  plus per-mode cooldowns and ground reach in data
+- ✅ Core: `buy_tool` (level, prerequisites, coins; atomic), `tool_status`, `available_modes`,
+  `mode_params`, `preview_circle` / `preview_area`, `harvest_radius` / `harvest_sweep` /
+  `harvest_area` sharing one apply path with single picks; `Terrain::raycast`,
+  `FlowerField::query_rect`; 9 new tests
+- ✅ Tool selection: keys 1-4 and mouse wheel; HUD tool bar of owned tools
+- ✅ Ground aiming with terrain-following marker ring / rectangle; every flower a tool would take
+  is highlighted; per-tool prompts ("3 flowers in reach", "Hold to sweep", "Release to gather")
+- ✅ First-person viewmodel on its own render layer (never clips into the world): hand, scissors
+  (snip), basket (scoop), hand rake (sweeps while held), cart's long rake (pull); walk bob and
+  mouse sway
+- ✅ Tool Shop tab in the basket screen (Buy / Owned / what's missing)
+- ✅ Fixed one-frame aiming lag (aim/pick read the camera's current Transform)
+- ✅ Toasts capped at three even when many arrive at once
+- ✅ Smoke test buys tools, opens the shop, uses every mode through real input and verifies tools
+  and picks persist across a restart; injected held keys now behave like real held keys
+
+## Phase E: Workshop, crafting & economy ⬜ (next)
+
+- ⬜ A cottage workshop building near the spawn (walk-in, collision, landmark placement in core)
+- ⬜ Interactables: workbench → crafting, storage → basket, tool display → tool shop (moves the
+  shop out of the basket screen), bouquet display
+- ⬜ Core crafting: recipe discovery, ingredient selection (auto-fill + manual), validation, atomic
+  batch crafting, craft timer, keepsake reserve applies to other recipes, bouquet inventory
+- ⬜ Selling bouquets; bouquet 3D models on the display
+- ⬜ Tests: tool requirements, ingredient consumption, nothing consumed on failure, reserve
 
 ## Later phases ⬜
 
-E Workshop, crafting & economy ·
 U Upgrades & skill tree · P Progression & achievements · F Remaining regions ·
 Z Completion & ending · G Polish & release
 
@@ -90,6 +110,7 @@ Z Completion & ending · G Polish & release
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
 - Sound effects and ambience: synthesised in `src/audio.rs`
 - Landmarks, butterflies, bees, clouds: procedural meshes
+- First-person hand and tools: procedural meshes in `src/viewmodel.rs`
 - Terrain: vertex colours only (no textures, no grass yet)
 - Sky: flat clear colour + fog (no sky gradient or clouds yet)
 - UI font: Bevy's built-in monospace (lacks glyphs such as `·` and `°`; keep UI strings ASCII)

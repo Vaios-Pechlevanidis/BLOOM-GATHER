@@ -9,6 +9,8 @@ use bevy::prelude::*;
 use super::theme::{self, font, palette, radius, space};
 use crate::game::{ActiveRegion, AppState, Content, PlayState, Session};
 use crate::interaction::LookTarget;
+use crate::tools::{mode_name, GroundAim, SelectedMode, MODE_ORDER};
+use bloom_core::data::HarvestMode;
 
 pub struct HudPlugin;
 
@@ -19,7 +21,7 @@ impl Plugin for HudPlugin {
             .add_systems(OnExit(PlayState::Playing), show_crosshair::<false>)
             .add_systems(
                 Update,
-                (update_stats, update_prompt).run_if(in_state(AppState::InGame)),
+                (update_stats, update_prompt, update_toolbar).run_if(in_state(AppState::InGame)),
             );
     }
 }
@@ -47,6 +49,13 @@ struct PromptName;
 
 #[derive(Component)]
 struct PromptRarity;
+
+#[derive(Component)]
+struct PromptAction;
+
+/// The row of tool slots above the controls hint.
+#[derive(Component)]
+struct ToolBar;
 
 fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRegion>) {
     let region = active.def(&content);
@@ -191,10 +200,27 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                         .with_children(|key| {
                             key.spawn(theme::text("E", font::CAPTION, palette::INK));
                         });
-                        row.spawn(theme::text("Pick", font::CAPTION, palette::INK));
+                        row.spawn((
+                            PromptAction,
+                            theme::text("Pick", font::CAPTION, palette::INK),
+                        ));
                     });
             });
         });
+
+    // Tool bar, just above the controls hint.
+    commands.spawn((
+        StateScoped(AppState::InGame),
+        ToolBar,
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(56.0),
+            width: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(space::SM),
+            ..default()
+        },
+    ));
 
     // Controls hint, bottom centre.
     commands
@@ -219,7 +245,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ))
             .with_children(|hint| {
                 hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  pick   Tab  basket   Esc  pause   F3  performance",
+                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   Esc  pause",
                     font::CAPTION,
                     palette::INK_SOFT,
                 ));
@@ -276,39 +302,175 @@ fn update_stats(
     }
 }
 
+type PromptTexts<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Text,
+        Has<PromptName>,
+        Has<PromptRarity>,
+        Has<PromptAction>,
+    ),
+>;
+
+#[allow(clippy::too_many_arguments)]
 fn update_prompt(
     target: Res<LookTarget>,
     state: Res<State<PlayState>>,
+    selected: Res<SelectedMode>,
+    aim: Res<GroundAim>,
     session: Option<Res<Session>>,
     mut prompt: Query<&mut Visibility, With<Prompt>>,
-    mut name: Query<&mut Text, (With<PromptName>, Without<PromptRarity>)>,
-    mut rarity: Query<&mut Text, (With<PromptRarity>, Without<PromptName>)>,
+    mut texts: PromptTexts,
 ) {
-    if !target.is_changed() && !state.is_changed() {
-        return;
-    }
     let Some(session) = session else { return };
-    let show = *state.get() == PlayState::Playing && target.species.is_some();
+    let playing = *state.get() == PlayState::Playing;
+    let n = target.group.len();
+    let lines: Option<(String, String, &str)> = match selected.0 {
+        HarvestMode::Single => target.species.map(|species| {
+            let s = &session.data().species[species];
+            let detail = if session.is_discovered(species) {
+                s.rarity.label().to_string()
+            } else {
+                format!("{}, not yet in your collection", s.rarity.label())
+            };
+            (s.name.clone(), detail, "Pick")
+        }),
+        HarvestMode::Radius => Some((
+            "Basket".into(),
+            if n > 0 {
+                format!("{n} flower{} in reach", plural(n))
+            } else {
+                "Aim at a patch of flowers".into()
+            },
+            "Gather",
+        )),
+        HarvestMode::Sweep => Some((
+            "Garden rake".into(),
+            if n > 0 {
+                format!("{n} flower{} under the rake", plural(n))
+            } else {
+                "Sweep across the flowers".into()
+            },
+            "Hold to sweep",
+        )),
+        HarvestMode::Area => Some(match aim.area_start {
+            Some(_) => (
+                "Flower cart".into(),
+                format!("{n} flower{} marked", plural(n)),
+                "Release to gather",
+            ),
+            None => {
+                let size = session
+                    .mode_params(HarvestMode::Area)
+                    .map_or(Vec2::ZERO, |p| p.size);
+                (
+                    "Flower cart".into(),
+                    format!("Mark a patch up to {:.0} x {:.0} m", size.x, size.y),
+                    "Hold to mark",
+                )
+            }
+        }),
+    };
+    let show = playing && lines.is_some();
     for mut v in &mut prompt {
-        *v = if show {
+        let want = if show {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
+        if *v != want {
+            *v = want;
+        }
     }
-    let Some(species) = target.species else {
+    let Some((name, detail, action)) = lines else {
         return;
     };
-    let s = &session.data().species[species];
-    let known = session.is_discovered(species);
-    for mut t in &mut name {
-        t.0 = s.name.clone();
-    }
-    for mut t in &mut rarity {
-        t.0 = if known {
-            s.rarity.label().to_string()
+    for (mut text, is_name, is_detail, is_action) in &mut texts {
+        let value = if is_name {
+            &name
+        } else if is_detail {
+            &detail
+        } else if is_action {
+            action
         } else {
-            format!("{}, not yet in your collection", s.rarity.label())
+            continue;
         };
+        if text.0 != value {
+            text.0 = value.to_string();
+        }
     }
+}
+
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+/// Rebuild the tool slots when the owned tools or the selection change.
+fn update_toolbar(
+    mut commands: Commands,
+    session: Option<Res<Session>>,
+    selected: Res<SelectedMode>,
+    bar: Query<(Entity, Option<&Children>), With<ToolBar>>,
+    mut shown: Local<Option<(Vec<HarvestMode>, HarvestMode, bool)>>,
+) {
+    let (Some(session), Ok((bar, children))) = (session, bar.single()) else {
+        return;
+    };
+    let available = session.available_modes();
+    let scissors = session.harvest_cooldown_secs() < session.data().harvesting.hand_cooldown_secs;
+    let now = (available.clone(), selected.0, scissors);
+    if shown.as_ref() == Some(&now) {
+        return;
+    }
+    *shown = Some(now);
+    if let Some(children) = children {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
+    }
+    commands.entity(bar).with_children(|bar| {
+        for (slot, mode) in MODE_ORDER.iter().enumerate() {
+            if !available.contains(mode) {
+                continue;
+            }
+            let active = *mode == selected.0;
+            bar.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(space::MD), Val::Px(5.0)),
+                    column_gap: Val::Px(space::SM),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(if active {
+                    palette::SAGE
+                } else {
+                    palette::CREAM.with_alpha(0.82)
+                }),
+                BorderColor(if active {
+                    palette::SAGE_DARK
+                } else {
+                    palette::BEIGE
+                }),
+                BorderRadius::all(Val::Px(radius::MD)),
+            ))
+            .with_children(|b| {
+                let ink = if active {
+                    palette::CREAM
+                } else {
+                    palette::INK_SOFT
+                };
+                b.spawn(theme::text(format!("{}", slot + 1), font::CAPTION, ink));
+                b.spawn(theme::text(
+                    mode_name(*mode, scissors),
+                    font::CAPTION,
+                    if active { palette::CREAM } else { palette::INK },
+                ));
+            });
+        }
+    });
 }

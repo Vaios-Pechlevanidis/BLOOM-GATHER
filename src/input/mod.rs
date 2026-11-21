@@ -27,6 +27,8 @@ pub struct Bindings {
     pub jump: Vec<KeyCode>,
     pub interact: Vec<KeyCode>,
     pub inventory: Vec<KeyCode>,
+    /// Tool bar slots 1–4 (hands/scissors, basket, rake, cart).
+    pub tool_slots: [KeyCode; 4],
     pub pause: Vec<KeyCode>,
     pub confirm: Vec<KeyCode>,
     pub toggle_debug: Vec<KeyCode>,
@@ -44,6 +46,7 @@ impl Default for Bindings {
             jump: vec![Space],
             interact: vec![KeyE],
             inventory: vec![Tab],
+            tool_slots: [Digit1, Digit2, Digit3, Digit4],
             pause: vec![Escape],
             confirm: vec![Enter, NumpadEnter],
             toggle_debug: vec![F3],

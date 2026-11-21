@@ -318,6 +318,14 @@ impl RegionDef {
 pub struct HarvestingConfig {
     /// Cooldown between single picks with bare hands.
     pub hand_cooldown_secs: f32,
+    /// Pause after a basket (radius) gather.
+    pub radius_cooldown_secs: f32,
+    /// Time between gathers while sweeping.
+    pub sweep_interval_secs: f32,
+    /// Pause after an area gather.
+    pub area_cooldown_secs: f32,
+    /// Ground targets may be this much further away than flower reach.
+    pub ground_reach_bonus: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,6 @@
 //! The basket (inventory) screen: every species with its count, rarity and
-//! collection status, sorting and filtering, and selling.
+//! collection status, sorting and filtering, and selling — plus a Tool Shop
+//! tab (until the workshop building arrives in Phase E). Keys 1/2 switch tabs.
 //!
 //! Selling goes through the session, which enforces the keepsake reserve:
 //! flowers still needed for a required bouquet are shown as "kept" and
@@ -14,6 +15,7 @@ use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, PlayState, Session};
 use crate::input::Bindings;
 use crate::rendering::color;
+use bloom_core::game::{ToolLock, ToolStatus};
 
 pub struct InventoryPlugin;
 
@@ -25,7 +27,7 @@ impl Plugin for InventoryPlugin {
                 Update,
                 (
                     toggle.run_if(in_state(AppState::InGame)),
-                    (handle_buttons, rebuild_grid)
+                    (tab_keys, handle_buttons, rebuild_grid)
                         .chain()
                         .run_if(in_state(PlayState::Inventory)),
                 ),
@@ -49,9 +51,17 @@ enum Filter {
     Rarity(Rarity),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum Tab {
+    #[default]
+    Basket,
+    Shop,
+}
+
 /// Remembered between openings.
 #[derive(Resource, Default)]
 struct View {
+    tab: Tab,
     sort: Sort,
     filter: Filter,
     /// The grid must be rebuilt (contents, sort or filter changed).
@@ -66,7 +76,16 @@ enum Action {
     SellAll(usize),
     SellEverything,
     Close,
+    Tab(Tab),
+    Buy(usize),
 }
+
+/// Parts of the screen only shown on the Basket tab.
+#[derive(Component)]
+struct BasketOnly;
+
+#[derive(Component)]
+struct Title;
 
 #[derive(Component)]
 struct Grid;
@@ -122,34 +141,66 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>) {
                     ..default()
                 })
                 .with_children(|header| {
-                    header.spawn(theme::text("Your Basket", font::HEADING, palette::INK));
+                    header.spawn((
+                        Title,
+                        theme::text("Your Basket", font::HEADING, palette::INK),
+                    ));
                     header.spawn((Summary, theme::text("", font::BODY, palette::INK_SOFT)));
                 });
 
-                chip_row(
-                    card,
-                    "Show",
-                    &[
-                        ("All", Action::Filter(Filter::All)),
-                        ("In basket", Action::Filter(Filter::InBasket)),
-                        ("Common", Action::Filter(Filter::Rarity(Rarity::Common))),
-                        ("Uncommon", Action::Filter(Filter::Rarity(Rarity::Uncommon))),
-                        ("Rare", Action::Filter(Filter::Rarity(Rarity::Rare))),
-                        (
-                            "Very rare",
-                            Action::Filter(Filter::Rarity(Rarity::VeryRare)),
-                        ),
-                    ],
-                );
-                chip_row(
-                    card,
-                    "Sort",
-                    &[
-                        ("Name", Action::Sort(Sort::Name)),
-                        ("Count", Action::Sort(Sort::Count)),
-                        ("Rarity", Action::Sort(Sort::Rarity)),
-                    ],
-                );
+                card.spawn(Node {
+                    column_gap: Val::Px(space::SM),
+                    ..default()
+                })
+                .with_children(|tabs| {
+                    spawn_button(
+                        tabs,
+                        "1  Basket",
+                        ButtonVariant::Compact,
+                        Action::Tab(Tab::Basket),
+                    );
+                    spawn_button(
+                        tabs,
+                        "2  Tool shop",
+                        ButtonVariant::Compact,
+                        Action::Tab(Tab::Shop),
+                    );
+                });
+
+                card.spawn((
+                    BasketOnly,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(space::MD),
+                        ..default()
+                    },
+                ))
+                .with_children(|card| {
+                    chip_row(
+                        card,
+                        "Show",
+                        &[
+                            ("All", Action::Filter(Filter::All)),
+                            ("In basket", Action::Filter(Filter::InBasket)),
+                            ("Common", Action::Filter(Filter::Rarity(Rarity::Common))),
+                            ("Uncommon", Action::Filter(Filter::Rarity(Rarity::Uncommon))),
+                            ("Rare", Action::Filter(Filter::Rarity(Rarity::Rare))),
+                            (
+                                "Very rare",
+                                Action::Filter(Filter::Rarity(Rarity::VeryRare)),
+                            ),
+                        ],
+                    );
+                    chip_row(
+                        card,
+                        "Sort",
+                        &[
+                            ("Name", Action::Sort(Sort::Name)),
+                            ("Count", Action::Sort(Sort::Count)),
+                            ("Rarity", Action::Sort(Sort::Rarity)),
+                        ],
+                    );
+                });
 
                 card.spawn((
                     Grid,
@@ -169,10 +220,13 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>) {
                     ..default()
                 })
                 .with_children(|footer| {
-                    footer.spawn(theme::text(
-                        "Every flower sells for the same price, whatever its rarity.",
-                        font::CAPTION,
-                        palette::INK_SOFT,
+                    footer.spawn((
+                        BasketOnly,
+                        theme::text(
+                            "Every flower sells for the same price, whatever its rarity.",
+                            font::CAPTION,
+                            palette::INK_SOFT,
+                        ),
                     ));
                     footer
                         .spawn(Node {
@@ -180,12 +234,16 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>) {
                             ..default()
                         })
                         .with_children(|buttons| {
-                            spawn_button(
-                                buttons,
-                                "Sell everything",
-                                ButtonVariant::Compact,
-                                Action::SellEverything,
-                            );
+                            buttons
+                                .spawn((BasketOnly, Node::default()))
+                                .with_children(|b| {
+                                    spawn_button(
+                                        b,
+                                        "Sell everything",
+                                        ButtonVariant::Compact,
+                                        Action::SellEverything,
+                                    );
+                                });
                             spawn_button(
                                 buttons,
                                 "Close (Tab)",
@@ -217,6 +275,21 @@ fn chip_row(parent: &mut ChildSpawnerCommands, label: &str, chips: &[(&str, Acti
                 spawn_button(row, text, ButtonVariant::Small, *action);
             }
         });
+}
+
+fn tab_keys(keys: Res<ButtonInput<KeyCode>>, bindings: Res<Bindings>, mut view: ResMut<View>) {
+    let [basket, shop, ..] = bindings.tool_slots;
+    let tab = if keys.just_pressed(basket) {
+        Tab::Basket
+    } else if keys.just_pressed(shop) {
+        Tab::Shop
+    } else {
+        return;
+    };
+    if view.tab != tab {
+        view.tab = tab;
+        view.stale = true;
+    }
 }
 
 fn handle_buttons(
@@ -260,6 +333,16 @@ fn handle_buttons(
                 next.set(PlayState::Playing);
                 continue;
             }
+            Action::Tab(tab) => {
+                view.tab = tab;
+                sfx.write(PlaySfx::new(Sfx::Click));
+            }
+            Action::Buy(tool) => {
+                // Success sound and toast come from the ToolBought event.
+                if session.buy_tool(tool).is_err() {
+                    sfx.write(PlaySfx::new(Sfx::Deny));
+                }
+            }
         }
         view.stale = true;
     }
@@ -270,7 +353,9 @@ fn rebuild_grid(
     mut view: ResMut<View>,
     session: Option<Res<Session>>,
     grid: Query<(Entity, Option<&Children>), With<Grid>>,
-    mut summary: Query<&mut Text, With<Summary>>,
+    mut summary: Query<&mut Text, (With<Summary>, Without<Title>)>,
+    mut title: Query<&mut Text, (With<Title>, Without<Summary>)>,
+    mut basket_only: Query<&mut Node, With<BasketOnly>>,
 ) {
     let (Some(session), Ok((grid, children))) = (session, grid.single()) else {
         return;
@@ -291,6 +376,23 @@ fn rebuild_grid(
         .sum();
     for mut t in &mut summary {
         t.0 = format!("{held} flowers   {} coins", session.state().coins);
+    }
+    for mut t in &mut title {
+        t.0 = match view.tab {
+            Tab::Basket => "Your Basket".into(),
+            Tab::Shop => "Tool Shop".into(),
+        };
+    }
+    for mut node in &mut basket_only {
+        node.display = if view.tab == Tab::Basket {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if view.tab == Tab::Shop {
+        shop_tiles(&mut commands, grid, &session);
+        return;
     }
 
     let mut order: Vec<usize> = (0..data.species.len())
@@ -401,6 +503,93 @@ fn rebuild_grid(
                         );
                     });
                 }
+            });
+        }
+    });
+}
+
+/// One tile per tool: what it does, its price and level, and Buy / Owned /
+/// what is still missing.
+fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
+    let data = session.data().clone();
+    commands.entity(grid).with_children(|grid| {
+        for (i, tool) in data.tools.iter().enumerate() {
+            let status = session.tool_status(i);
+            let owned = status == ToolStatus::Owned;
+            grid.spawn((
+                Node {
+                    width: Val::Px(258.0),
+                    min_height: Val::Px(128.0),
+                    padding: UiRect::all(Val::Px(space::SM)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.5)),
+                    ..default()
+                },
+                BackgroundColor(if owned {
+                    palette::PASTEL_GREEN
+                } else {
+                    palette::PARCHMENT
+                }),
+                BorderColor(palette::BEIGE),
+                BorderRadius::all(Val::Px(radius::MD)),
+            ))
+            .with_children(|tile| {
+                tile.spawn(Node {
+                    column_gap: Val::Px(space::SM),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn((
+                        Node {
+                            width: Val::Px(16.0),
+                            height: Val::Px(16.0),
+                            ..default()
+                        },
+                        BackgroundColor(color(tool.icon_color)),
+                        BorderRadius::all(Val::Px(4.0)),
+                    ));
+                    row.spawn(theme::text(tool.name.clone(), font::BODY, palette::INK));
+                });
+                tile.spawn(theme::text(
+                    tool.description.clone(),
+                    font::CAPTION,
+                    palette::INK_SOFT,
+                ));
+                tile.spawn(Node {
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(theme::text(
+                        format!("Level {}   {} coins", tool.unlock_level, tool.price),
+                        font::CAPTION,
+                        palette::INK,
+                    ));
+                    match &status {
+                        ToolStatus::Owned => {
+                            row.spawn(theme::text("Owned", font::CAPTION, palette::SAGE_DEEP));
+                        }
+                        ToolStatus::Buyable => {
+                            spawn_button(row, "Buy", ButtonVariant::Small, Action::Buy(i))
+                        }
+                        ToolStatus::Locked(lock) => {
+                            let why = match lock {
+                                ToolLock::Level(l) => format!("Needs level {l}"),
+                                ToolLock::NeedsTool(t) => {
+                                    format!(
+                                        "Needs {}",
+                                        data.tool(t).map_or(t.as_str(), |d| d.name.as_str())
+                                    )
+                                }
+                                ToolLock::Coins(_) => "Not enough coins".to_string(),
+                            };
+                            row.spawn(theme::text(why, font::CAPTION, palette::BROWN));
+                        }
+                    }
+                });
             });
         }
     });

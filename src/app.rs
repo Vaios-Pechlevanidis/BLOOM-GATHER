@@ -4,7 +4,7 @@ use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}
 use bevy::prelude::*;
 use bevy::window::{PresentMode, WindowResizeConstraints, WindowResolution};
 
-use crate::{audio, flowers, game, input, interaction, player, rendering, ui};
+use crate::{audio, flowers, game, input, interaction, player, rendering, tools, ui, viewmodel};
 
 pub const GAME_TITLE: &str = "Bloom & Gather";
 pub const GAME_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -36,6 +36,8 @@ pub fn build() -> App {
         game::GamePlugin,
         input::InputPlugin,
         interaction::InteractionPlugin,
+        tools::ToolsPlugin,
+        viewmodel::ViewmodelPlugin,
         flowers::FlowersPlugin,
         audio::AudioPlugin,
         player::PlayerPlugin,

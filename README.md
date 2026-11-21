@@ -6,8 +6,8 @@ pick every flower, buy better tools, craft increasingly valuable bouquets, and f
 the game with a real ending. It runs fully offline as a native app, with no
 browser and no account.
 
-**Status:** Phases 1, A, B and C are complete: walk a lush, breezy Sunny
-Meadow in first person, pick its 100 flowers by looking at them and pressing E, discover
+**Status:** Phases 1, A, B, C and D are complete: walk a lush, breezy Sunny
+Meadow in first person, buy tools (scissors, basket, garden rake, flower cart), pick its 100 flowers by looking at them and pressing E, discover
 species, level up, sell from your basket, and quit and continue later; picked
 flowers never come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
@@ -31,8 +31,9 @@ Controls:
 | Move | W A S D (or arrow keys) |
 | Sprint | Shift |
 | Jump | Space |
-| Pick the flower you're looking at | E |
-| Basket (inventory, selling) | Tab |
+| Pick the flower you're looking at / use the tool | E (hold for the rake; hold and drag for the cart) |
+| Switch tool | 1-4 or mouse wheel |
+| Basket (inventory, selling) and Tool Shop | Tab (then 1 / 2 to switch tabs) |
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
 | Pause / settings | Esc (sensitivity, field of view, sound volume, head movement, invert look) |

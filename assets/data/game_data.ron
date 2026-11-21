@@ -27,8 +27,15 @@
         level_curve: (base: 30, step: 20, max_level: 30),
     ),
 
+    // Distances in metres, times in seconds. Tool effects below set each
+    // mode's reach; these are the pauses between uses.
     harvesting: (
         hand_cooldown_secs: 0.35,
+        radius_cooldown_secs: 0.7,
+        sweep_interval_secs: 0.25,
+        area_cooldown_secs: 1.5,
+        // How far beyond the flower reach the ground can be targeted.
+        ground_reach_bonus: 1.5,
     ),
 
     // All world distances are in metres.
@@ -126,7 +133,7 @@
          effects: [HarvestCooldownMultiplier(0.6)], icon_color: (180, 190, 200)),
         (id: "harvesting_basket", name: "Harvesting Basket", category: Harvesting, price: 600, unlock_level: 5,
          description: "A wide wicker basket. Gather every flower in a small circle at once.",
-         effects: [RadiusMode(radius: 45.0, max_flowers: 6)], icon_color: (196, 160, 110)),
+         effects: [RadiusMode(radius: 1.6, max_flowers: 6)], icon_color: (196, 160, 110)),
         (id: "florist_knife", name: "Florist Knife", category: Crafting, price: 1000, unlock_level: 7,
          description: "A curved blade for clean angled cuts. Opens special arrangements.",
          effects: [], icon_color: (150, 130, 110)),
@@ -136,14 +143,14 @@
         (id: "pro_gardening_tools", name: "Professional Gardening Tools", category: Harvesting, price: 2000, unlock_level: 11,
          description: "A sturdy tool roll. Hold and sweep to gather flowers as you go.",
          requires_tools: ["harvesting_basket"],
-         effects: [SweepMode(radius: 70.0, max_flowers_per_tick: 15)], icon_color: (130, 150, 110)),
+         effects: [SweepMode(radius: 2.2, max_flowers_per_tick: 4)], icon_color: (130, 150, 110)),
         (id: "florist_workbench", name: "Florist Workbench", category: Crafting, price: 2600, unlock_level: 12,
          description: "A proper bench with buckets and twine. Bigger batches, finer arrangements.",
          effects: [CraftBatchCapacity(25)], icon_color: (170, 130, 90)),
         (id: "advanced_harvesting_equipment", name: "Advanced Harvesting Equipment", category: Harvesting, price: 3200, unlock_level: 14,
          description: "A flower cart with wide rakes. Mark out a whole area and gather it.",
          requires_tools: ["pro_gardening_tools"],
-         effects: [AreaMode(max_width: 320.0, max_height: 320.0, max_flowers: 80)], icon_color: (120, 140, 160)),
+         effects: [AreaMode(max_width: 8.0, max_height: 8.0, max_flowers: 40)], icon_color: (120, 140, 160)),
         (id: "pro_florist_set", name: "Professional Florist Set", category: Crafting, price: 4000, unlock_level: 16,
          description: "Everything a master florist needs, for the most exquisite arrangements.",
          requires_tools: ["florist_workbench"],
