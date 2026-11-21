@@ -1,0 +1,2 @@
+# Bevy systems routinely take many SystemParams.
+too-many-arguments-threshold = 10

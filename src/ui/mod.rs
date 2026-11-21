@@ -1,0 +1,27 @@
+//! Native Bevy UI: design tokens, widgets and screens.
+//!
+//! UI reads game state and sends intents; it never mutates gameplay state
+//! directly (from Phase 2 every change goes through `bloom_core` commands).
+
+mod debug_overlay;
+mod hud;
+mod main_menu;
+mod pause_menu;
+pub mod theme;
+mod widgets;
+
+use bevy::prelude::*;
+
+pub struct UiPlugin;
+
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((
+            widgets::WidgetsPlugin,
+            main_menu::MainMenuPlugin,
+            hud::HudPlugin,
+            pause_menu::PauseMenuPlugin,
+            debug_overlay::DebugOverlayPlugin,
+        ));
+    }
+}
