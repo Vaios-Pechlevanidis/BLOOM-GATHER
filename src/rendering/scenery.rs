@@ -11,7 +11,7 @@
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-use bevy::pbr::{NotShadowCaster, NotShadowReceiver};
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
 use bloom_core::bitset::BitSet;
 use bloom_core::data::{EntranceKind, RegionDef};
@@ -800,12 +800,12 @@ fn water_surface(w: &Water) -> Mesh {
     }
     let normals = vec![[0.0, 1.0, 0.0]; positions.len()];
     Mesh::new(
-        bevy::render::mesh::PrimitiveTopology::TriangleList,
+        bevy::mesh::PrimitiveTopology::TriangleList,
         bevy::asset::RenderAssetUsages::RENDER_WORLD,
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_indices(bevy::render::mesh::Indices::U32(indices))
+    .with_inserted_indices(bevy::mesh::Indices::U32(indices))
 }
 
 /// Petals drifting down the stream; lily pads on a pond.

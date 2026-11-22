@@ -4,7 +4,8 @@
 //! The scene is built once per region and survives Main Menu ↔ In Game
 //! transitions (the title screen shows the same world behind the menu).
 
-use bevy::pbr::{CascadeShadowConfigBuilder, DistanceFog, FogFalloff};
+use bevy::light::CascadeShadowConfigBuilder;
+use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 
 use super::camera::MainCamera;
@@ -37,7 +38,7 @@ impl Plugin for ScenePlugin {
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SceneSet;
 
-fn cascades(q: crate::game::Quality) -> bevy::pbr::CascadeShadowConfig {
+fn cascades(q: crate::game::Quality) -> bevy::light::CascadeShadowConfig {
     CascadeShadowConfigBuilder {
         num_cascades: q.shadow_cascades(),
         first_cascade_far_bound: 12.0,
@@ -50,7 +51,7 @@ fn cascades(q: crate::game::Quality) -> bevy::pbr::CascadeShadowConfig {
 /// Shadows follow the graphics quality.
 fn apply_shadows(
     settings: Res<Settings>,
-    mut lights: Query<(&mut DirectionalLight, &mut bevy::pbr::CascadeShadowConfig)>,
+    mut lights: Query<(&mut DirectionalLight, &mut bevy::light::CascadeShadowConfig)>,
 ) {
     if !settings.is_changed() {
         return;
@@ -99,7 +100,7 @@ fn ensure_scene(
     ),
     (mut clear_color, mut ambient, settings): (
         ResMut<ClearColor>,
-        ResMut<AmbientLight>,
+        ResMut<GlobalAmbientLight>,
         Res<Settings>,
     ),
 ) {
@@ -128,7 +129,7 @@ fn ensure_scene(
     // --- Atmosphere -------------------------------------------------------
     let air = region.scenery.atmosphere;
     clear_color.0 = sky;
-    *ambient = AmbientLight {
+    *ambient = GlobalAmbientLight {
         color: color(air.ambient_color),
         brightness: air.ambient_brightness,
         ..default()
@@ -164,7 +165,7 @@ fn ensure_scene(
         },
         Transform::from_translation(sun_at).looking_at(Vec3::ZERO, Vec3::Y),
         // Lights the world and the first-person hands/tools layer.
-        bevy::render::view::RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
+        bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
         cascades(settings.quality),
     ));
 

@@ -24,7 +24,7 @@ pub struct TravelPlugin;
 
 impl Plugin for TravelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<TravelTo>()
+        app.add_message::<TravelTo>()
             .init_resource::<GateNotice>()
             .add_systems(Startup, spawn_fade)
             .add_systems(OnEnter(AppState::InGame), spawn_banner)
@@ -55,7 +55,7 @@ pub enum Arrival {
 }
 
 /// Ask to travel. Locked regions are refused with a toast.
-#[derive(Event, Debug, Clone, Copy)]
+#[derive(Message, Debug, Clone, Copy)]
 pub struct TravelTo {
     pub region: usize,
     pub arrive: Arrival,
@@ -141,7 +141,7 @@ fn spawn_fade(mut commands: Commands) {
 fn spawn_banner(mut commands: Commands) {
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             // Above the tool bar, clear of the toasts at the top.
             Node {
@@ -163,17 +163,17 @@ fn spawn_banner(mut commands: Commands) {
                     padding: UiRect::axes(Val::Px(space::LG), Val::Px(space::SM)),
                     row_gap: Val::Px(2.0),
                     max_width: Val::Px(560.0),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(palette::CREAM.with_alpha(0.9)),
-                BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|b| {
                 b.spawn((BannerTitle, theme::text("", font::BODY, palette::INK)));
                 b.spawn((
                     BannerDetail,
                     theme::text("", font::CAPTION, palette::INK_SOFT),
-                    TextLayout::new_with_justify(JustifyText::Center),
+                    TextLayout::new_with_justify(Justify::Center),
                 ));
             });
         });
@@ -186,9 +186,9 @@ fn walk_through_gates(
     scene: Option<Res<RegionScene>>,
     player: Option<Res<Player>>,
     mut notice: ResMut<GateNotice>,
-    mut travel: EventWriter<TravelTo>,
-    mut toasts: EventWriter<Toast>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut travel: MessageWriter<TravelTo>,
+    mut toasts: MessageWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let (Some(session), Some(scene), Some(player)) = (session, scene, player) else {
         return;
@@ -279,11 +279,11 @@ fn update_banner(
 
 fn start_journey(
     mut commands: Commands,
-    mut requests: EventReader<TravelTo>,
+    mut requests: MessageReader<TravelTo>,
     journey: Option<Res<Journey>>,
     session: Option<Res<Session>>,
-    mut toasts: EventWriter<Toast>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let Some(request) = requests.read().last().copied() else {
         return;

@@ -7,10 +7,10 @@
 //! shadows, which keeps the cost low.
 
 use bevy::asset::RenderAssetUsages;
-use bevy::pbr::NotShadowCaster;
+use bevy::camera::visibility::VisibilityRange;
+use bevy::light::NotShadowCaster;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
-use bevy::render::view::VisibilityRange;
 use bloom_core::bitset::BitSet;
 use bloom_core::rng::SplitMix64;
 

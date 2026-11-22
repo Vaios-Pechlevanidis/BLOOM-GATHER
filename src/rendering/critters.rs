@@ -4,7 +4,7 @@
 //! are still blooming (so picked patches gradually go quiet), stay within
 //! the fence and above the ground, and freeze while the game is paused.
 
-use bevy::pbr::NotShadowCaster;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bloom_core::rng::SplitMix64;
 

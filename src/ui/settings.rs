@@ -270,7 +270,7 @@ fn keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut screen: ResMut<SettingsScreen>,
     mut settings: ResMut<Settings>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     if let Some(action) = screen.waiting {
         let Some(&key) = keys.get_just_pressed().next() else {
@@ -355,7 +355,7 @@ fn buttons(
     pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
     mut screen: ResMut<SettingsScreen>,
     mut settings: ResMut<Settings>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     for (interaction, act) in &pressed {
         if *interaction != Interaction::Pressed {
@@ -508,6 +508,7 @@ fn rebuild(
                         align_items: AlignItems::Center,
                         padding: UiRect::axes(Val::Px(space::MD), Val::Px(4.0)),
                         border: UiRect::all(Val::Px(1.5)),
+                        border_radius: BorderRadius::all(Val::Px(radius::SM)),
                         ..default()
                     },
                     BackgroundColor(if is_selected {
@@ -515,12 +516,11 @@ fn rebuild(
                     } else {
                         Color::NONE
                     }),
-                    BorderColor(if is_selected {
+                    BorderColor::all(if is_selected {
                         palette::SAGE
                     } else {
                         Color::NONE
                     }),
-                    BorderRadius::all(Val::Px(radius::SM)),
                 ))
                 .with_children(|r| {
                     r.spawn(Node {

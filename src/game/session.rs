@@ -18,7 +18,7 @@ pub struct SessionPlugin;
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Saves::new(SaveStore::new(SaveStore::default_dir())))
-            .add_event::<GameEventMsg>()
+            .add_message::<GameEventMsg>()
             .add_systems(
                 OnEnter(AppState::MainMenu),
                 ensure_session.in_set(SessionSet),
@@ -41,14 +41,14 @@ impl Plugin for SessionPlugin {
 
 /// A `bloom_core` game event re-sent as a Bevy event for presentation
 /// (sounds, toasts, animations).
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct GameEventMsg(pub GameEvent);
 
 /// Commands run before this set; event consumers run after it.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EventsForwarded;
 
-fn forward_events(session: Option<ResMut<Session>>, mut out: EventWriter<GameEventMsg>) {
+fn forward_events(session: Option<ResMut<Session>>, mut out: MessageWriter<GameEventMsg>) {
     if let Some(mut session) = session {
         for event in session.drain_events() {
             out.write(GameEventMsg(event));
@@ -257,7 +257,7 @@ fn save_now(
 }
 
 fn save_on_exit(
-    mut exits: EventReader<AppExit>,
+    mut exits: MessageReader<AppExit>,
     session: Option<ResMut<Session>>,
     saves: ResMut<Saves>,
     player: Option<Res<Player>>,

@@ -79,7 +79,7 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<JournalView>, bindings:
     view.stale = true;
     commands
         .spawn((
-            StateScoped(PlayState::Journal),
+            DespawnOnExit(PlayState::Journal),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -181,7 +181,7 @@ fn buttons(
     mut view: ResMut<JournalView>,
     mut next: ResMut<NextState<PlayState>>,
     mut finale: ResMut<super::finale::FinaleRequest>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     for (interaction, act) in &pressed {
         if *interaction != Interaction::Pressed {
@@ -202,7 +202,7 @@ fn buttons(
     }
 }
 
-fn watch_events(mut events: EventReader<GameEventMsg>, mut view: ResMut<JournalView>) {
+fn watch_events(mut events: MessageReader<GameEventMsg>, mut view: ResMut<JournalView>) {
     for GameEventMsg(e) in events.read() {
         if matches!(e, GameEvent::AchievementUnlocked { .. }) {
             view.stale = true;
@@ -277,16 +277,17 @@ fn bar(parent: &mut ChildSpawnerCommands, fraction: f32, done: bool) {
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(5.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
                 ..default()
             },
             BackgroundColor(palette::BEIGE),
-            BorderRadius::all(Val::Px(3.0)),
         ))
         .with_children(|b| {
             b.spawn((
                 Node {
                     width: Val::Percent(fraction.clamp(0.0, 1.0) * 100.0),
                     height: Val::Percent(100.0),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
                     ..default()
                 },
                 BackgroundColor(if done {
@@ -294,7 +295,6 @@ fn bar(parent: &mut ChildSpawnerCommands, fraction: f32, done: bool) {
                 } else {
                     palette::SAGE
                 }),
-                BorderRadius::all(Val::Px(3.0)),
             ));
         });
 }
@@ -323,6 +323,7 @@ fn achievements(body: &mut ChildSpawnerCommands, session: &Session) {
                             row_gap: Val::Px(2.0),
                             padding: UiRect::axes(Val::Px(space::SM), Val::Px(4.0)),
                             border: UiRect::all(Val::Px(1.5)),
+                            border_radius: BorderRadius::all(Val::Px(radius::SM)),
                             ..default()
                         },
                         BackgroundColor(if done {
@@ -330,8 +331,7 @@ fn achievements(body: &mut ChildSpawnerCommands, session: &Session) {
                         } else {
                             palette::PARCHMENT
                         }),
-                        BorderColor(palette::BEIGE),
-                        BorderRadius::all(Val::Px(radius::SM)),
+                        BorderColor::all(palette::BEIGE),
                     ))
                     .with_children(|row| {
                         row.spawn(Node {
@@ -400,7 +400,7 @@ fn stat_row(col: &mut ChildSpawnerCommands, label: &str, value: String) {
         border: UiRect::bottom(Val::Px(1.0)),
         ..default()
     })
-    .insert(BorderColor(palette::BEIGE))
+    .insert(BorderColor::all(palette::BEIGE))
     .with_children(|r| {
         r.spawn(theme::text(label, font::BODY, palette::INK_SOFT));
         r.spawn(theme::text(value, font::BODY, palette::INK));
@@ -671,11 +671,11 @@ fn progress(body: &mut ChildSpawnerCommands, session: &Session) {
                 Node {
                     padding: UiRect::axes(Val::Px(space::SM), Val::Px(6.0)),
                     border: UiRect::all(Val::Px(1.5)),
+                    border_radius: BorderRadius::all(Val::Px(radius::SM)),
                     ..default()
                 },
                 BackgroundColor(palette::PARCHMENT),
-                BorderColor(palette::BEIGE),
-                BorderRadius::all(Val::Px(radius::SM)),
+                BorderColor::all(palette::BEIGE),
             ))
             .with_children(|b| {
                 b.spawn(theme::text(line, font::BODY, palette::INK));

@@ -106,7 +106,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     // Region card, top left.
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             theme::card(Node {
                 position_type: PositionType::Absolute,
@@ -141,7 +141,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     // Coins and level, top right.
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             theme::card(Node {
                 position_type: PositionType::Absolute,
@@ -162,10 +162,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                 Node {
                     width: Val::Px(150.0),
                     height: Val::Px(7.0),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
                     ..default()
                 },
                 BackgroundColor(palette::BEIGE),
-                BorderRadius::all(Val::Px(4.0)),
             ))
             .with_children(|bar| {
                 bar.spawn((
@@ -173,10 +173,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                     Node {
                         width: Val::Percent(0.0),
                         height: Val::Percent(100.0),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
                         ..default()
                     },
                     BackgroundColor(palette::SAGE),
-                    BorderRadius::all(Val::Px(4.0)),
                 ));
             });
             card.spawn((
@@ -196,7 +196,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     // Crosshair and the look-at prompt just below it.
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             Node {
                 position_type: PositionType::Absolute,
@@ -214,11 +214,11 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                     width: Val::Px(7.0),
                     height: Val::Px(7.0),
                     border: UiRect::all(Val::Px(1.0)),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
                     ..default()
                 },
                 BackgroundColor(palette::CREAM.with_alpha(0.9)),
-                BorderColor(palette::INK.with_alpha(0.55)),
-                BorderRadius::all(Val::Px(4.0)),
+                BorderColor::all(palette::INK.with_alpha(0.55)),
             ));
             root.spawn((
                 Prompt,
@@ -230,10 +230,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                     align_items: AlignItems::Center,
                     padding: UiRect::axes(Val::Px(space::LG), Val::Px(space::SM)),
                     row_gap: Val::Px(4.0),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(palette::CREAM.with_alpha(0.88)),
-                BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|prompt| {
                 prompt.spawn((PromptName, theme::text("", font::BODY, palette::INK)));
@@ -252,10 +252,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                             Node {
                                 padding: UiRect::axes(Val::Px(7.0), Val::Px(1.0)),
                                 border: UiRect::all(Val::Px(1.5)),
+                                border_radius: BorderRadius::all(Val::Px(5.0)),
                                 ..default()
                             },
-                            BorderColor(palette::INK_SOFT),
-                            BorderRadius::all(Val::Px(5.0)),
+                            BorderColor::all(palette::INK_SOFT),
                             BackgroundColor(palette::PARCHMENT),
                         ))
                         .with_children(|key| {
@@ -271,7 +271,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
 
     // Tool bar, just above the controls hint.
     commands.spawn((
-        StateScoped(AppState::InGame),
+        DespawnOnExit(AppState::InGame),
         crate::ui::HudRoot,
         ToolBar,
         Node {
@@ -287,7 +287,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     // Controls hint, bottom centre.
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             Node {
                 position_type: PositionType::Absolute,
@@ -301,10 +301,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             row.spawn((
                 Node {
                     padding: UiRect::axes(Val::Px(space::LG), Val::Px(space::SM)),
+                    border_radius: BorderRadius::all(Val::Px(radius::PILL)),
                     ..default()
                 },
                 BackgroundColor(palette::CREAM.with_alpha(0.78)),
-                BorderRadius::all(Val::Px(radius::PILL)),
             ))
             .with_children(|hint| {
                 hint.spawn((
@@ -574,6 +574,7 @@ fn update_toolbar(
                     padding: UiRect::axes(Val::Px(space::MD), Val::Px(5.0)),
                     column_gap: Val::Px(space::SM),
                     border: UiRect::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(if active {
@@ -581,12 +582,11 @@ fn update_toolbar(
                 } else {
                     palette::CREAM.with_alpha(0.82)
                 }),
-                BorderColor(if active {
+                BorderColor::all(if active {
                     palette::SAGE_DARK
                 } else {
                     palette::BEIGE
                 }),
-                BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|b| {
                 let ink = if active {

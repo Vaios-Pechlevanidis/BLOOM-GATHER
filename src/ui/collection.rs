@@ -50,7 +50,7 @@ fn toggle(
 fn close_button(
     pressed: Query<&Interaction, (Changed<Interaction>, With<Close>)>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     if pressed.iter().any(|i| *i == Interaction::Pressed) {
         sfx.write(PlaySfx::new(Sfx::Click));
@@ -74,11 +74,11 @@ pub fn swatch(parent: &mut ChildSpawnerCommands, species: &FlowerSpecies, known:
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.5)),
+                border_radius: BorderRadius::all(Val::Px(size)),
                 ..default()
             },
             BackgroundColor(petal),
-            BorderColor(palette::INK_SOFT.with_alpha(0.35)),
-            BorderRadius::all(Val::Px(size)),
+            BorderColor::all(palette::INK_SOFT.with_alpha(0.35)),
         ))
         .with_children(|ring| {
             if known {
@@ -86,10 +86,10 @@ pub fn swatch(parent: &mut ChildSpawnerCommands, species: &FlowerSpecies, known:
                     Node {
                         width: Val::Px(size * 0.38),
                         height: Val::Px(size * 0.38),
+                        border_radius: BorderRadius::all(Val::Px(size)),
                         ..default()
                     },
                     BackgroundColor(center),
-                    BorderRadius::all(Val::Px(size)),
                 ));
             } else {
                 ring.spawn(theme::text("?", font::BODY, palette::INK_SOFT));
@@ -125,7 +125,7 @@ fn spawn_screen(mut commands: Commands, session: Res<Session>, bindings: Res<Bin
     let found = game.state().discovered.len();
     commands
         .spawn((
-            StateScoped(PlayState::Collection),
+            DespawnOnExit(PlayState::Collection),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -231,6 +231,7 @@ fn species_card(grid: &mut ChildSpawnerCommands, game: &Game, idx: usize, sp: &F
             padding: UiRect::all(Val::Px(space::SM)),
             row_gap: Val::Px(3.0),
             border: UiRect::all(Val::Px(1.5)),
+            border_radius: BorderRadius::all(Val::Px(radius::MD)),
             ..default()
         },
         BackgroundColor(if known {
@@ -238,8 +239,7 @@ fn species_card(grid: &mut ChildSpawnerCommands, game: &Game, idx: usize, sp: &F
         } else {
             palette::PARCHMENT
         }),
-        BorderColor(palette::BEIGE_DEEP),
-        BorderRadius::all(Val::Px(radius::MD)),
+        BorderColor::all(palette::BEIGE_DEEP),
     ))
     .with_children(|c| {
         c.spawn(Node {

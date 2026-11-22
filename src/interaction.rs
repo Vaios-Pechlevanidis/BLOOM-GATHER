@@ -123,8 +123,8 @@ fn interact(
     session: Option<ResMut<Session>>,
     mut open: ResMut<OpenScreen>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     if !Bindings::just_pressed(&keys, &bindings.interact) {
         return;
@@ -166,11 +166,11 @@ fn capitalise(s: &str) -> String {
 
 /// Sounds, view nudges and toasts for things that happened in the game.
 fn react_to_events(
-    mut events: EventReader<GameEventMsg>,
+    mut events: MessageReader<GameEventMsg>,
     session: Option<Res<Session>>,
     player: Option<ResMut<Player>>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
     bindings: Res<Bindings>,
 ) {
     let Some(session) = session else { return };

@@ -13,10 +13,10 @@
 
 use std::f32::consts::{FRAC_PI_2, PI};
 
+use bevy::camera::visibility::RenderLayers;
 use bevy::input::mouse::AccumulatedMouseMotion;
-use bevy::pbr::{NotShadowCaster, NotShadowReceiver};
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
 use bloom_core::data::HarvestMode;
 use bloom_core::game::GameEvent;
 
@@ -152,10 +152,10 @@ fn spawn_viewmodel(
             Camera {
                 order: 1,
                 clear_color: ClearColorConfig::None,
-                // Same HDR mode as the world camera it draws over.
-                hdr: true,
                 ..default()
             },
+            // Same HDR mode as the world camera it draws over.
+            bevy::render::view::Hdr,
             Projection::Perspective(PerspectiveProjection {
                 fov: 62f32.to_radians(),
                 near: 0.01,
@@ -202,7 +202,7 @@ fn spawn_viewmodel(
 
 /// Start the matching animation when a pick actually happened.
 fn trigger_actions(
-    mut events: EventReader<GameEventMsg>,
+    mut events: MessageReader<GameEventMsg>,
     selected: Res<SelectedMode>,
     session: Option<Res<Session>>,
     content: Option<Res<Content>>,

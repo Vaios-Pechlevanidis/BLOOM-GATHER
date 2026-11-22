@@ -749,7 +749,7 @@ pub fn build(species: &FlowerSpecies) -> FlowerModel {
 pub fn build_far(species: &FlowerSpecies, full: &Mesh) -> Mesh {
     let h = species.height;
     let positions: Vec<Vec3> = match full.attribute(Mesh::ATTRIBUTE_POSITION) {
-        Some(bevy::render::mesh::VertexAttributeValues::Float32x3(p)) => {
+        Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) => {
             p.iter().map(|v| Vec3::from(*v)).collect()
         }
         _ => Vec::new(),

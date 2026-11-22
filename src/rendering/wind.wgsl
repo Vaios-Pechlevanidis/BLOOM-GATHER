@@ -17,7 +17,7 @@ struct Wind {
     params: vec4<f32>,
 }
 
-@group(2) @binding(100) var<uniform> wind: Wind;
+@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> wind: Wind;
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {

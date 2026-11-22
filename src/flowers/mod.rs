@@ -240,7 +240,7 @@ fn spawn_flower(
             // Far stand-in until the level-of-detail pass sees it near.
             Mesh3d(assets.fars[species].clone()),
             MeshMaterial3d(assets.material.clone()),
-            bevy::pbr::NotShadowCaster,
+            bevy::light::NotShadowCaster,
         ))
         .id();
     if let (Some(mesh), Some(mat)) = (&assets.glows[species], &assets.glow_materials[species]) {
@@ -379,7 +379,7 @@ fn level_of_detail(
             mesh.0 = assets.plants[field.species(i)].clone();
         }
         if shadows {
-            commands.entity(e).remove::<bevy::pbr::NotShadowCaster>();
+            commands.entity(e).remove::<bevy::light::NotShadowCaster>();
         }
     }
     for &i in near.set.difference(&now) {
@@ -389,7 +389,7 @@ fn level_of_detail(
         if let Ok(mut mesh) = meshes.get_mut(e) {
             mesh.0 = assets.fars[field.species(i)].clone();
         }
-        commands.entity(e).insert(bevy::pbr::NotShadowCaster);
+        commands.entity(e).insert(bevy::light::NotShadowCaster);
     }
     near.set = now;
 }
@@ -435,7 +435,7 @@ fn highlight(
 
 fn start_harvest_animation(
     mut commands: Commands,
-    mut events: EventReader<GameEventMsg>,
+    mut events: MessageReader<GameEventMsg>,
     mut spawned: ResMut<SpawnedFlowers>,
     assets: Option<Res<FlowerAssets>>,
     scene: Option<Res<RegionScene>>,
@@ -611,13 +611,13 @@ fn sync_memory(
                 Transform::from_translation(ground)
                     .with_rotation(Quat::from_rotation_y(field.yaw(i)))
                     .with_scale(Vec3::splat(0.001)),
-                bevy::pbr::NotShadowCaster,
+                bevy::light::NotShadowCaster,
                 children![(
                     Mesh3d(assets.particle.clone()),
                     MeshMaterial3d(orb),
                     Transform::from_xyz(0.0, bloom_height + 0.05, 0.0)
                         .with_scale(Vec3::splat(0.03)),
-                    bevy::pbr::NotShadowCaster,
+                    bevy::light::NotShadowCaster,
                 )],
             ))
             .id();

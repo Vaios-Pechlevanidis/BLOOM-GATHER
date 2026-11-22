@@ -15,10 +15,10 @@
 use std::path::PathBuf;
 
 use bevy::input::mouse::AccumulatedMouseMotion;
-use bevy::input::InputSystem;
+use bevy::input::InputSystems;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy::window::{CursorGrabMode, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use bloom_core::game::GameError;
 use bloom_core::persistence::decode;
 use bloom_core::player::{CharacterBody, Environment};
@@ -79,7 +79,7 @@ impl Plugin for SmokeTestPlugin {
             master_volume: 0.0,
             ..default()
         })
-        .add_systems(PreUpdate, inject_input.after(InputSystem))
+        .add_systems(PreUpdate, inject_input.after(InputSystems))
         .add_systems(Update, drive);
     }
 }
@@ -322,9 +322,9 @@ fn drive(
     (mut session_mut, scene, content, saves): SmokeWorld<'_>,
     (spawned, target, diagnostics, selected): SmokeView<'_>,
     (settings_screen, settings, bindings): SmokeSettings<'_>,
-    windows: Query<&Window, With<PrimaryWindow>>,
+    windows: Query<&CursorOptions, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     smoke.wait -= time.delta_secs();
     if smoke.wait > 0.0 {
@@ -337,7 +337,7 @@ fn drive(
     let body = player.as_ref().map(|p| p.body);
     let locked = windows
         .single()
-        .map(|w| w.cursor_options.grab_mode == CursorGrabMode::Locked)
+        .map(|w| w.grab_mode == CursorGrabMode::Locked)
         .unwrap_or(false);
 
     let next_wait = if smoke.resume {
@@ -1609,7 +1609,7 @@ fn stand_in_workshop(
     player.pitch = (d.y / d.length()).asin();
 }
 
-fn finish(smoke: &mut Smoke, exit: &mut EventWriter<AppExit>) -> f32 {
+fn finish(smoke: &mut Smoke, exit: &mut MessageWriter<AppExit>) -> f32 {
     if smoke.failures.is_empty() {
         info!("SMOKE PASSED");
         exit.write(AppExit::Success);

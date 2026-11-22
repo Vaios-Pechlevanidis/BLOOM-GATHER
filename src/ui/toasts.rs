@@ -11,13 +11,13 @@ pub struct ToastsPlugin;
 
 impl Plugin for ToastsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<Toast>()
+        app.add_message::<Toast>()
             .add_systems(Startup, spawn_root)
             .add_systems(Update, (place_root, spawn_toasts, age_toasts).chain());
     }
 }
 
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct Toast {
     pub title: String,
     pub body: Option<String>,
@@ -106,7 +106,7 @@ fn spawn_root(mut commands: Commands) {
 
 fn spawn_toasts(
     mut commands: Commands,
-    mut events: EventReader<Toast>,
+    mut events: MessageReader<Toast>,
     state: Option<Res<State<PlayState>>>,
     root: Query<Entity, With<ToastRoot>>,
     existing: Query<(Entity, &ToastCard)>,
@@ -139,11 +139,11 @@ fn spawn_toasts(
                     padding: UiRect::axes(Val::Px(space::LG), Val::Px(space::SM)),
                     border: UiRect::all(Val::Px(2.0)),
                     max_width: Val::Px(560.0),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(palette::CREAM.with_alpha(0.95)),
-                BorderColor(accent),
-                BorderRadius::all(Val::Px(radius::MD)),
+                BorderColor::all(accent),
             ))
             .with_children(|card| {
                 card.spawn(theme::text(toast.title.clone(), font::BODY, palette::INK));

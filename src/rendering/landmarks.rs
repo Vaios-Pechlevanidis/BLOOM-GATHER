@@ -4,8 +4,8 @@
 //!
 //! Temporary procedural art (see TODO.md), in the same style as the trees.
 
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
 use bloom_core::world::LandmarkKind;
 
 use super::meshes::{hash3, lin, mix, MeshBuilder};
@@ -73,7 +73,7 @@ fn spawn_landmarks(
                     Mesh3d(glass.clone()),
                     MeshMaterial3d(lamp.clone()),
                     Transform::from_xyz(0.0, 2.05, 0.32),
-                    bevy::pbr::NotShadowCaster,
+                    bevy::light::NotShadowCaster,
                 ));
                 if night {
                     post.spawn((

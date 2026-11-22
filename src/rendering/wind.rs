@@ -2,10 +2,11 @@
 //! vertices according to their vertex-colour alpha (see `wind.wgsl`).
 
 use bevy::asset::embedded_asset;
+use bevy::mesh::VertexAttributeValues;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
-use bevy::render::mesh::VertexAttributeValues;
-use bevy::render::render_resource::{AsBindGroup, ShaderRef};
+use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 
 pub type WindMaterial = ExtendedMaterial<StandardMaterial, Wind>;
 

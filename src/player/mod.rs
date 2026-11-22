@@ -11,7 +11,7 @@
 
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, PrimaryWindow, WindowFocused};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowFocused};
 use bloom_core::player::{wish_direction, CharacterBody, Environment, MoveInput};
 
 use crate::game::{AppState, Content, PlayState, RegionScene, Session, Settings};
@@ -163,29 +163,29 @@ fn begin_camera_blend(mut commands: Commands, cameras: Query<&Transform, With<Ma
     }
 }
 
-fn set_cursor_locked(window: &mut Window, locked: bool) {
-    window.cursor_options.grab_mode = if locked {
+fn set_cursor_locked(cursor: &mut CursorOptions, locked: bool) {
+    cursor.grab_mode = if locked {
         CursorGrabMode::Locked
     } else {
         CursorGrabMode::None
     };
-    window.cursor_options.visible = !locked;
+    cursor.visible = !locked;
 }
 
-fn grab_cursor(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
+fn grab_cursor(mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>) {
     for mut window in &mut windows {
         set_cursor_locked(&mut window, true);
     }
 }
 
-fn release_cursor(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
+fn release_cursor(mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>) {
     for mut window in &mut windows {
         set_cursor_locked(&mut window, false);
     }
 }
 
 fn pause_on_focus_loss(
-    mut focus: EventReader<WindowFocused>,
+    mut focus: MessageReader<WindowFocused>,
     settings: Res<Settings>,
     mut next: ResMut<NextState<PlayState>>,
 ) {

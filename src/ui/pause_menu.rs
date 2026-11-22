@@ -35,7 +35,7 @@ enum PauseAction {
 fn spawn_overlay(mut commands: Commands) {
     commands
         .spawn((
-            StateScoped(PlayState::Paused),
+            DespawnOnExit(PlayState::Paused),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -124,7 +124,7 @@ fn handle_buttons(
     mut screen: ResMut<SettingsScreen>,
     mut play_state: ResMut<NextState<PlayState>>,
     mut app_state: ResMut<NextState<AppState>>,
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     if !screen.open && keys.just_pressed(KeyCode::KeyO) {
         screen.show();

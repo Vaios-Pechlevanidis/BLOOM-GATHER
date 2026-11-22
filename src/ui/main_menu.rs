@@ -54,7 +54,7 @@ fn spawn_menu(mut commands: Commands, content: Res<Content>, saves: Res<Saves>) 
 
     commands
         .spawn((
-            StateScoped(AppState::MainMenu),
+            DespawnOnExit(AppState::MainMenu),
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
@@ -86,10 +86,10 @@ fn spawn_menu(mut commands: Commands, content: Res<Content>, saves: Res<Saves>) 
                             Node {
                                 width: Val::Px(12.0),
                                 height: Val::Px(12.0),
+                                border_radius: BorderRadius::all(Val::Px(6.0)),
                                 ..default()
                             },
                             BackgroundColor(petal),
-                            BorderRadius::all(Val::Px(6.0)),
                         ));
                     }
                 });
@@ -197,8 +197,8 @@ fn handle_buttons(
     session: Option<Res<Session>>,
     mut saves: ResMut<Saves>,
     mut next_state: ResMut<NextState<AppState>>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut exit: EventWriter<AppExit>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut exit: MessageWriter<AppExit>,
     mut screen: ResMut<SettingsScreen>,
 ) {
     for (interaction, action) in &buttons {

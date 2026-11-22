@@ -15,7 +15,7 @@
 //! `GlobalTransform` would lag a frame behind.
 
 use bevy::input::mouse::AccumulatedMouseScroll;
-use bevy::pbr::NotShadowCaster;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bloom_core::data::HarvestMode;
 use bloom_core::game::GameError;
@@ -117,8 +117,8 @@ fn select_mode(
     session: Option<Res<Session>>,
     mut selected: ResMut<SelectedMode>,
     mut aim: ResMut<GroundAim>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     let Some(session) = session else { return };
     let available = session.available_modes();
@@ -212,8 +212,8 @@ fn act(
     selected: Res<SelectedMode>,
     target: Res<LookTarget>,
     mut aim: ResMut<GroundAim>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     let (Some(scene), Some(mut session), Ok(camera)) = (scene, session, cameras.single()) else {
         return;
@@ -293,7 +293,7 @@ fn spawn_markers(
     });
     for i in 0..MARKERS {
         commands.spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             Marker(i),
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),

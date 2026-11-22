@@ -96,10 +96,12 @@ pub fn spawn_button(
     parent
         .spawn((
             Button,
-            variant.node(),
+            Node {
+                border_radius: BorderRadius::all(Val::Px(radius::PILL)),
+                ..variant.node()
+            },
             BackgroundColor(colors.normal),
-            BorderColor(border),
-            BorderRadius::all(Val::Px(radius::PILL)),
+            BorderColor::all(border),
             BoxShadow::new(
                 palette::SHADOW,
                 Val::Px(0.0),

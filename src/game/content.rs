@@ -47,7 +47,7 @@ pub struct RegionScene {
 pub fn load_content(
     mut commands: Commands,
     mut next_state: ResMut<NextState<AppState>>,
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     let data = match crate::bench::requested() {
         Some(flowers) => bloom_core::bench::benchmark_data(flowers),

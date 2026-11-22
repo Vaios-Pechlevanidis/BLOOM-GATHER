@@ -142,7 +142,7 @@ fn spawn_screen(
     let at_shelf = view.at_shelf;
     commands
         .spawn((
-            StateScoped(PlayState::Inventory),
+            DespawnOnExit(PlayState::Inventory),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -318,7 +318,7 @@ fn tab_keys(
     bindings: Res<Bindings>,
     session: Option<ResMut<Session>>,
     mut view: ResMut<View>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let [basket, shop, upgrades, _] = bindings.tool_slots;
     let tab = if keys.just_pressed(basket) {
@@ -381,7 +381,7 @@ fn handle_buttons(
     mut view: ResMut<View>,
     session: Option<ResMut<Session>>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let Some(mut session) = session else { return };
     for (interaction, action) in &buttons {
@@ -533,6 +533,7 @@ fn rebuild_grid(
                     column_gap: Val::Px(space::SM),
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.5)),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(if count > 0 {
@@ -540,8 +541,7 @@ fn rebuild_grid(
                 } else {
                     palette::CREAM
                 }),
-                BorderColor(palette::BEIGE),
-                BorderRadius::all(Val::Px(radius::MD)),
+                BorderColor::all(palette::BEIGE),
             ))
             .with_children(|tile| {
                 let swatch = if known {
@@ -554,15 +554,15 @@ fn rebuild_grid(
                         width: Val::Px(22.0),
                         height: Val::Px(22.0),
                         border: UiRect::all(Val::Px(3.0)),
+                        border_radius: BorderRadius::all(Val::Px(11.0)),
                         ..default()
                     },
                     BackgroundColor(swatch),
-                    BorderColor(if known {
+                    BorderColor::all(if known {
                         color(species.center_color)
                     } else {
                         palette::BEIGE_DEEP
                     }),
-                    BorderRadius::all(Val::Px(11.0)),
                 ));
                 tile.spawn(Node {
                     flex_direction: FlexDirection::Column,
@@ -627,6 +627,7 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                     border: UiRect::all(Val::Px(if i == selected { 2.5 } else { 1.5 })),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(if owned {
@@ -634,12 +635,11 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected
                 } else {
                     palette::PARCHMENT
                 }),
-                BorderColor(if i == selected {
+                BorderColor::all(if i == selected {
                     palette::INK
                 } else {
                     palette::BEIGE
                 }),
-                BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|tile| {
                 tile.spawn(Node {
@@ -652,10 +652,10 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected
                         Node {
                             width: Val::Px(16.0),
                             height: Val::Px(16.0),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
                             ..default()
                         },
                         BackgroundColor(color(tool.icon_color)),
-                        BorderRadius::all(Val::Px(4.0)),
                     ));
                     row.spawn(theme::text(tool.name.clone(), font::BODY, palette::INK));
                 });
@@ -735,6 +735,7 @@ fn upgrade_tiles(commands: &mut Commands, grid: Entity, session: &Session, selec
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                     border: UiRect::all(Val::Px(if i == selected { 2.5 } else { 1.5 })),
+                    border_radius: BorderRadius::all(Val::Px(radius::MD)),
                     ..default()
                 },
                 BackgroundColor(if maxed {
@@ -742,12 +743,11 @@ fn upgrade_tiles(commands: &mut Commands, grid: Entity, session: &Session, selec
                 } else {
                     palette::PARCHMENT
                 }),
-                BorderColor(if i == selected {
+                BorderColor::all(if i == selected {
                     palette::INK
                 } else {
                     palette::BEIGE
                 }),
-                BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|tile| {
                 tile.spawn(Node {

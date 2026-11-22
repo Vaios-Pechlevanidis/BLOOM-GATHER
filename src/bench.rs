@@ -89,7 +89,7 @@ fn run(
     scene: Option<Res<RegionScene>>,
     player: Option<ResMut<Player>>,
     diagnostics: Res<DiagnosticsStore>,
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     let dt = time.delta_secs();
     bench.t += dt;

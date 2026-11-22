@@ -1,8 +1,9 @@
 //! The single 3D camera. In game it is driven by the player (see
 //! `player`); behind the title screen it slowly circles the region.
 
-use bevy::core_pipeline::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
+use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
+use bevy::render::view::Hdr;
 
 use crate::game::{AppState, RegionScene, Settings};
 
@@ -29,10 +30,7 @@ fn spawn_camera(mut commands: Commands, settings: Res<Settings>) {
         Camera3d::default(),
         // HDR so bright things (lanterns, glowing flowers, fireflies) can
         // bloom softly on Medium and High.
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         MainCamera,
         if settings.quality.msaa() {
             Msaa::Sample4

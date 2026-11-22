@@ -12,8 +12,8 @@ license = "MIT OR Apache-2.0"
 bloom_core = { path = "crates/bloom_core" }
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
-# Same version Bevy 0.16 uses, so core math types *are* Bevy's types.
-glam = "0.29"
+# Same version Bevy uses, so core math types *are* Bevy's types.
+glam = "0.30"
 
 [package]
 name = "bloom-and-gather"
@@ -27,7 +27,7 @@ default-run = "bloom-and-gather"
 [dependencies]
 bloom_core.workspace = true
 # `wav`: sound effects are synthesised as WAV data at startup.
-bevy = { version = "0.16", features = ["wav"] }
+bevy = { version = "0.18", features = ["wav"] }
 serde.workspace = true
 ron.workspace = true
 # Only for the window icon on Windows and Linux; the same version Bevy uses.

@@ -109,7 +109,7 @@ fn spawn_screen(mut commands: Commands, mut bench: ResMut<Bench>, mut open: ResM
     bench.stale = true;
     commands
         .spawn((
-            StateScoped(PlayState::Workshop),
+            DespawnOnExit(PlayState::Workshop),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -187,10 +187,10 @@ fn spawn_screen(mut commands: Commands, mut bench: ResMut<Bench>, mut open: ResM
                             Node {
                                 width: Val::Percent(100.0),
                                 height: Val::Px(8.0),
+                                border_radius: BorderRadius::all(Val::Px(4.0)),
                                 ..default()
                             },
                             BackgroundColor(palette::BEIGE),
-                            BorderRadius::all(Val::Px(4.0)),
                         ))
                         .with_children(|bar| {
                             bar.spawn((
@@ -198,10 +198,10 @@ fn spawn_screen(mut commands: Commands, mut bench: ResMut<Bench>, mut open: ResM
                                 Node {
                                     width: Val::Percent(0.0),
                                     height: Val::Percent(100.0),
+                                    border_radius: BorderRadius::all(Val::Px(4.0)),
                                     ..default()
                                 },
                                 BackgroundColor(palette::SAGE),
-                                BorderRadius::all(Val::Px(4.0)),
                             ));
                         });
                     });
@@ -255,8 +255,8 @@ fn keys(
 fn bind(
     session: &mut Session,
     bench: &Bench,
-    sfx: &mut EventWriter<PlaySfx>,
-    toasts: &mut EventWriter<Toast>,
+    sfx: &mut MessageWriter<PlaySfx>,
+    toasts: &mut MessageWriter<Toast>,
 ) {
     match session.craft(bench.selected, bench.quantity, &bench.keep) {
         Ok(_) => {}
@@ -286,8 +286,8 @@ fn buttons(
     session: Option<ResMut<Session>>,
     mut bench: ResMut<Bench>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     let Some(mut session) = session else { return };
     if bench.tab == BenchTab::Recipes && Bindings::just_pressed(&keys, &bindings.confirm) {
@@ -354,7 +354,7 @@ fn buttons(
 }
 
 /// Rebuild when the workbench finishes, recipes appear, or anything sells.
-fn watch_events(mut events: EventReader<GameEventMsg>, mut bench: ResMut<Bench>) {
+fn watch_events(mut events: MessageReader<GameEventMsg>, mut bench: ResMut<Bench>) {
     for GameEventMsg(e) in events.read() {
         if matches!(
             e,
@@ -469,6 +469,7 @@ fn rebuild(
                             padding: UiRect::axes(Val::Px(space::MD), Val::Px(6.0)),
                             justify_content: JustifyContent::SpaceBetween,
                             border: UiRect::all(Val::Px(1.5)),
+                            border_radius: BorderRadius::all(Val::Px(radius::SM)),
                             ..default()
                         },
                         BackgroundColor(if active {
@@ -476,12 +477,11 @@ fn rebuild(
                         } else {
                             palette::PARCHMENT
                         }),
-                        BorderColor(if active {
+                        BorderColor::all(if active {
                             palette::SAGE_DARK
                         } else {
                             palette::BEIGE
                         }),
-                        BorderRadius::all(Val::Px(radius::SM)),
                     ))
                     .with_children(|row| {
                         let ink = if active {
@@ -667,11 +667,11 @@ fn rebuild(
                             justify_content: JustifyContent::SpaceBetween,
                             align_items: AlignItems::Center,
                             border: UiRect::all(Val::Px(1.5)),
+                            border_radius: BorderRadius::all(Val::Px(radius::MD)),
                             ..default()
                         },
                         BackgroundColor(palette::PARCHMENT),
-                        BorderColor(palette::BEIGE),
-                        BorderRadius::all(Val::Px(radius::MD)),
+                        BorderColor::all(palette::BEIGE),
                     ))
                     .with_children(|row| {
                         row.spawn(theme::text(

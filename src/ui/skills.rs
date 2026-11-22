@@ -73,7 +73,7 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<TreeView>, bindings: Re
     view.stale = true;
     commands
         .spawn((
-            StateScoped(PlayState::Skills),
+            DespawnOnExit(PlayState::Skills),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -151,8 +151,8 @@ fn keys(
     bindings: Res<Bindings>,
     session: Option<ResMut<Session>>,
     mut view: ResMut<TreeView>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     let Some(mut session) = session else { return };
     let cols = columns(&session);
@@ -193,8 +193,8 @@ fn keys(
 fn learn(
     session: &mut Session,
     skill: usize,
-    sfx: &mut EventWriter<PlaySfx>,
-    toasts: &mut EventWriter<Toast>,
+    sfx: &mut MessageWriter<PlaySfx>,
+    toasts: &mut MessageWriter<Toast>,
 ) {
     // Success feedback comes from the SkillLearned event.
     if let Err(err) = session.learn_skill(skill) {
@@ -214,8 +214,8 @@ fn buttons(
     session: Option<ResMut<Session>>,
     mut view: ResMut<TreeView>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
-    mut toasts: EventWriter<Toast>,
+    mut sfx: MessageWriter<PlaySfx>,
+    mut toasts: MessageWriter<Toast>,
 ) {
     let Some(mut session) = session else { return };
     for (interaction, act) in &pressed {
@@ -237,7 +237,7 @@ fn buttons(
     }
 }
 
-fn watch_events(mut events: EventReader<GameEventMsg>, mut view: ResMut<TreeView>) {
+fn watch_events(mut events: MessageReader<GameEventMsg>, mut view: ResMut<TreeView>) {
     for GameEventMsg(e) in events.read() {
         if matches!(
             e,
@@ -342,11 +342,11 @@ fn rebuild(
                 padding: UiRect::all(Val::Px(space::MD)),
                 border: UiRect::all(Val::Px(1.5)),
                 min_height: Val::Px(150.0),
+                border_radius: BorderRadius::all(Val::Px(radius::MD)),
                 ..default()
             },
             BackgroundColor(palette::PARCHMENT),
-            BorderColor(palette::BEIGE),
-            BorderRadius::all(Val::Px(radius::MD)),
+            BorderColor::all(palette::BEIGE),
         ))
         .with_children(|d| {
             d.spawn(Node {
@@ -436,11 +436,11 @@ fn skill_node(col: &mut ChildSpawnerCommands, session: &Session, skill: usize, s
             padding: UiRect::axes(Val::Px(space::SM), Val::Px(6.0)),
             row_gap: Val::Px(2.0),
             border: UiRect::all(Val::Px(if selected { 2.5 } else { 1.5 })),
+            border_radius: BorderRadius::all(Val::Px(radius::SM)),
             ..default()
         },
         BackgroundColor(bg),
-        BorderColor(border),
-        BorderRadius::all(Val::Px(radius::SM)),
+        BorderColor::all(border),
     ))
     .with_children(|n| {
         n.spawn(theme::text(def.name.clone(), font::CAPTION, ink));

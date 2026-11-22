@@ -295,7 +295,7 @@ fn spawn_minimap(
     let height = MINIMAP_WIDTH * aspect(&images, active.0);
     commands
         .spawn((
-            StateScoped(AppState::InGame),
+            DespawnOnExit(AppState::InGame),
             crate::ui::HudRoot,
             MinimapFrame,
             Node {
@@ -305,10 +305,10 @@ fn spawn_minimap(
                 width: Val::Px(MINIMAP_WIDTH + 8.0),
                 height: Val::Px(height + 8.0),
                 padding: UiRect::all(Val::Px(4.0)),
+                border_radius: BorderRadius::all(Val::Px(radius::SM)),
                 ..default()
             },
             BackgroundColor(palette::CREAM.with_alpha(0.85)),
-            BorderRadius::all(Val::Px(radius::SM)),
             Pickable::IGNORE,
         ))
         .with_children(|frame| {
@@ -334,11 +334,11 @@ fn spawn_minimap(
                                 width: Val::Px(size),
                                 height: Val::Px(size),
                                 border: UiRect::all(Val::Px(1.5)),
+                                border_radius: BorderRadius::all(Val::Px(size)),
                                 ..default()
                             },
                             BackgroundColor(col),
-                            BorderColor(palette::CREAM),
-                            BorderRadius::all(Val::Px(size)),
+                            BorderColor::all(palette::CREAM),
                         ));
                     }
                 });
@@ -381,7 +381,7 @@ fn toggle(
 
 /// Picked flowers, opened gates and travel make images out of date.
 fn mark_stale(
-    mut events: EventReader<GameEventMsg>,
+    mut events: MessageReader<GameEventMsg>,
     mut images: ResMut<MapImages>,
     mut view: ResMut<MapView>,
 ) {
@@ -495,7 +495,7 @@ fn spawn_screen(
     view.stale = true;
     commands
         .spawn((
-            StateScoped(PlayState::Map),
+            DespawnOnExit(PlayState::Map),
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -556,9 +556,9 @@ fn keys(
     session: Res<Session>,
     mut view: ResMut<MapView>,
     active: Res<ActiveRegion>,
-    mut travel: EventWriter<TravelTo>,
+    mut travel: MessageWriter<TravelTo>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let n = session.data().regions.len();
     let before = view.selected;
@@ -589,9 +589,9 @@ fn go(
     session: &Session,
     to: usize,
     here: usize,
-    travel: &mut EventWriter<TravelTo>,
+    travel: &mut MessageWriter<TravelTo>,
     next: &mut NextState<PlayState>,
-    sfx: &mut EventWriter<PlaySfx>,
+    sfx: &mut MessageWriter<PlaySfx>,
 ) {
     if to == here || !session.is_region_unlocked(to) {
         sfx.write(PlaySfx::new(Sfx::Deny));
@@ -611,9 +611,9 @@ fn buttons(
     session: Res<Session>,
     mut view: ResMut<MapView>,
     active: Res<ActiveRegion>,
-    mut travel: EventWriter<TravelTo>,
+    mut travel: MessageWriter<TravelTo>,
     mut next: ResMut<NextState<PlayState>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     for (interaction, act) in &pressed {
         if *interaction != Interaction::Pressed {
@@ -708,10 +708,10 @@ fn rebuild(
                             width: Val::Px(PREVIEW_WIDTH),
                             height: Val::Px(PREVIEW_WIDTH * preview_aspect),
                             border: UiRect::all(Val::Px(2.0)),
+                            border_radius: BorderRadius::all(Val::Px(radius::SM)),
                             ..default()
                         },
-                        BorderColor(palette::BEIGE_DEEP),
-                        BorderRadius::all(Val::Px(radius::SM)),
+                        BorderColor::all(palette::BEIGE_DEEP),
                     ));
                 }
                 None => {
@@ -721,10 +721,10 @@ fn rebuild(
                             height: Val::Px(PREVIEW_WIDTH * 0.6),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
+                            border_radius: BorderRadius::all(Val::Px(radius::SM)),
                             ..default()
                         },
                         BackgroundColor(palette::PARCHMENT),
-                        BorderRadius::all(Val::Px(radius::SM)),
                     ))
                     .with_children(|blank| {
                         blank.spawn(theme::text(
@@ -755,20 +755,21 @@ fn region_card(row: &mut ChildSpawnerCommands, game: &Game, r: usize, here: bool
             padding: UiRect::all(Val::Px(space::SM)),
             row_gap: Val::Px(3.0),
             border: UiRect::all(Val::Px(if selected { 3.0 } else { 1.5 })),
+            border_radius: BorderRadius::all(Val::Px(radius::MD)),
             ..default()
         },
         BackgroundColor(if open { palette::CREAM } else { palette::BEIGE }),
-        BorderColor(if selected {
+        BorderColor::all(if selected {
             palette::SAGE_DARK
         } else {
             palette::BEIGE_DEEP
         }),
-        BorderRadius::all(Val::Px(radius::MD)),
     ))
     .with_children(|c| {
         c.spawn((
             Node {
                 height: Val::Px(6.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
                 ..default()
             },
             BackgroundColor(if open {
@@ -776,7 +777,6 @@ fn region_card(row: &mut ChildSpawnerCommands, game: &Game, r: usize, here: bool
             } else {
                 accent.with_alpha(0.35)
             }),
-            BorderRadius::all(Val::Px(3.0)),
         ));
         c.spawn(theme::text(def.name.clone(), font::BODY, palette::INK));
         let status = if here {

@@ -9,8 +9,8 @@
 //! material, so all trees (and all rocks) batch into very few draw calls.
 
 use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bloom_core::data::{FlowerRows, RegionPalette};
 use bloom_core::world::RegionLayout;
 

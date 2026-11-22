@@ -21,7 +21,7 @@ pub struct AudioPlugin;
 
 impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<PlaySfx>()
+        app.add_message::<PlaySfx>()
             .add_systems(Startup, (create_sounds, compose_music))
             .add_systems(Update, footsteps)
             .add_systems(
@@ -56,7 +56,7 @@ pub enum Sfx {
 }
 
 /// Request a sound. `pitch` varies playback speed (1 = normal).
-#[derive(Event, Debug, Clone, Copy)]
+#[derive(Message, Debug, Clone, Copy)]
 pub struct PlaySfx {
     pub sfx: Sfx,
     pub pitch: f32,
@@ -163,7 +163,7 @@ fn create_sounds(mut commands: Commands, mut sources: ResMut<Assets<AudioSource>
 
 fn play_sounds(
     mut commands: Commands,
-    mut requests: EventReader<PlaySfx>,
+    mut requests: MessageReader<PlaySfx>,
     sounds: Option<Res<Sounds>>,
     settings: Res<Settings>,
 ) {
@@ -306,7 +306,7 @@ fn footsteps(
     mut walked: Local<f32>,
     mut airborne: Local<f32>,
     mut last: Local<Option<Vec3>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let (Some(player), Some(scene)) = (player, scene) else {
         return;

@@ -14,7 +14,7 @@
 //! mid-finale, it plays again on the next start.
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
+use bevy::window::{CursorOptions, PrimaryWindow};
 use bloom_core::rng::SplitMix64;
 use bloom_core::Game;
 
@@ -151,9 +151,9 @@ fn start_when_complete(
     }
 }
 
-fn set_cursor(windows: &mut Query<&mut Window, With<PrimaryWindow>>, visible: bool) {
+fn set_cursor(windows: &mut Query<&mut CursorOptions, With<PrimaryWindow>>, visible: bool) {
     for mut w in windows.iter_mut() {
-        w.cursor_options.visible = visible;
+        w.visible = visible;
     }
 }
 
@@ -164,10 +164,10 @@ fn begin(
     active: Res<ActiveRegion>,
     player: Option<Res<Player>>,
     cameras: Query<&Transform, With<MainCamera>>,
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     let from = cameras.single().copied().unwrap_or_default();
     let summary_only = request.summary_only;
@@ -208,7 +208,7 @@ fn begin(
         let a = rng.range_f32(0.0, std::f32::consts::TAU);
         let out = rng.range_f32(0.8, 3.0);
         commands.spawn((
-            StateScoped(PlayState::Finale),
+            DespawnOnExit(PlayState::Finale),
             GoldPetal {
                 velocity: Vec3::new(a.cos() * out, rng.range_f32(2.0, 5.5), a.sin() * out),
                 spin: Vec3::new(
@@ -238,7 +238,7 @@ fn set_alpha(color: &mut TextColor, shadow: &mut TextShadow, a: f32) {
 }
 
 fn spawn_overlay(commands: &mut Commands) {
-    let scoped = StateScoped(PlayState::Finale);
+    let scoped = DespawnOnExit(PlayState::Finale);
     commands.spawn((
         scoped.clone(),
         Fade,
@@ -319,10 +319,10 @@ fn spawn_overlay(commands: &mut Commands) {
                 bottom: Val::Px(space::MD),
                 right: Val::Px(space::MD),
                 padding: UiRect::axes(Val::Px(space::MD), Val::Px(space::XS)),
+                border_radius: BorderRadius::all(Val::Px(radius::PILL)),
                 ..default()
             },
             BackgroundColor(palette::CREAM.with_alpha(0.7)),
-            BorderRadius::all(Val::Px(radius::PILL)),
             GlobalZIndex(56),
         ))
         .with_children(|c| {
@@ -333,7 +333,7 @@ fn spawn_overlay(commands: &mut Commands) {
 fn end(
     mut commands: Commands,
     mut memory: ResMut<MemoryBloom>,
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
     commands.remove_resource::<Director>();
     commands.remove_resource::<crate::game::Touring>();
@@ -520,7 +520,7 @@ fn animate_overlay(
     mut director: ResMut<Director>,
     session: Res<Session>,
     content: Res<crate::game::Content>,
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut windows: Query<&mut CursorOptions, With<PrimaryWindow>>,
     mut titles: TitleTexts,
     mut caption: CaptionTexts<Caption, CaptionDetail>,
     mut detail: CaptionTexts<CaptionDetail, Caption>,
@@ -676,7 +676,7 @@ fn spawn_summary(commands: &mut Commands, game: &Game, bindings: &Bindings) {
     ];
     commands
         .spawn((
-            StateScoped(PlayState::Finale),
+            DespawnOnExit(PlayState::Finale),
             SummaryCard,
             Node {
                 position_type: PositionType::Absolute,
@@ -762,7 +762,7 @@ fn spawn_summary(commands: &mut Commands, game: &Game, bindings: &Bindings) {
                             super::collection::swatch(cell, sp, true, 30.0);
                             cell.spawn((
                                 theme::text(sp.name.clone(), font::CAPTION, palette::INK_SOFT),
-                                TextLayout::new_with_justify(JustifyText::Center),
+                                TextLayout::new_with_justify(Justify::Center),
                             ));
                         });
                     }
@@ -795,7 +795,7 @@ fn summary_buttons(
     mut session: ResMut<Session>,
     mut next: ResMut<NextState<PlayState>>,
     mut next_app: ResMut<NextState<AppState>>,
-    mut sfx: EventWriter<PlaySfx>,
+    mut sfx: MessageWriter<PlaySfx>,
 ) {
     if director.phase != Phase::Summary || !director.summary_spawned {
         return;

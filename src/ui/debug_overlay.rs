@@ -44,10 +44,10 @@ fn spawn_overlay(mut commands: Commands) {
                 right: Val::Px(space::MD),
                 top: Val::Px(150.0),
                 padding: UiRect::axes(Val::Px(space::MD), Val::Px(space::SM)),
+                border_radius: BorderRadius::all(Val::Px(radius::SM)),
                 ..default()
             },
             BackgroundColor(palette::INK.with_alpha(0.78)),
-            BorderRadius::all(Val::Px(radius::SM)),
             GlobalZIndex(100),
             Visibility::Hidden,
         ))

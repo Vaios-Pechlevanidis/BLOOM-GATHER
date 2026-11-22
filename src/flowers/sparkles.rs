@@ -104,7 +104,7 @@ fn sync_sparkles(
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
             Transform::from_translation(base),
-            bevy::pbr::NotShadowCaster,
+            bevy::light::NotShadowCaster,
         ));
     }
 }

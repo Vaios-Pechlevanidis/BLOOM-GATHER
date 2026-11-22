@@ -60,10 +60,12 @@ pub const TRANSITION_RATE: f32 = 14.0;
 /// A raised, rounded parchment card.
 pub fn card(node: Node) -> impl Bundle {
     (
-        node,
+        Node {
+            border_radius: BorderRadius::all(Val::Px(radius::LG)),
+            ..node
+        },
         BackgroundColor(palette::CREAM),
-        BorderColor(palette::BEIGE),
-        BorderRadius::all(Val::Px(radius::LG)),
+        BorderColor::all(palette::BEIGE),
         BoxShadow::new(
             palette::SHADOW,
             Val::Px(0.0),

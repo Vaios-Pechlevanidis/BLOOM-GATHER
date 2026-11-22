@@ -19,7 +19,7 @@ pub fn build() -> App {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: GAME_TITLE.into(),
-            resolution: WindowResolution::new(1280.0, 800.0),
+            resolution: WindowResolution::new(1280, 800),
             resize_constraints: WindowResizeConstraints {
                 min_width: 960.0,
                 min_height: 600.0,
@@ -32,7 +32,7 @@ pub fn build() -> App {
     }))
     .add_plugins((
         FrameTimeDiagnosticsPlugin::default(),
-        EntityCountDiagnosticsPlugin,
+        EntityCountDiagnosticsPlugin::default(),
     ))
     .add_plugins((
         game::GamePlugin,

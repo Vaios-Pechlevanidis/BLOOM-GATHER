@@ -3,9 +3,9 @@
 //! The horizon colour equals the fog colour, so distant hills melt into the
 //! sky. Sky and clouds are unlit and ignore fog.
 
-use bevy::pbr::NotShadowCaster;
+use bevy::light::NotShadowCaster;
+use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
-use bevy::render::mesh::VertexAttributeValues;
 use bloom_core::rng::SplitMix64;
 
 use super::camera::MainCamera;
