@@ -137,10 +137,33 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Smoke test buys an upgrade and learns three skills with the keyboard, screenshots the glints,
   and verifies upgrades and skills persist across a restart
 
+## Phase P: Progression & achievements ✅
+
+- ✅ 19 data-driven achievements in five categories (`data/achievements.rs`, `game_data.ron`)
+  with conditions, small coin or skill-point rewards; never required for the ending
+- ✅ Validation: unique ids, every target reachable in the finite world (flowers, bouquets the
+  world could make, species, regions)
+- ✅ Core (`game/progress.rs`): achievements re-checked after every command that moves a
+  condition, unlocked once, rewards paid once, `AchievementUnlocked` event; older saves catch
+  up quietly; skill points from achievements join the derived total
+- ✅ Completion check (`Game::completion`) with the six ending requirements (for Phase Z)
+- ✅ Statistics: coins spent and distance walked added; rare flowers picked derived
+- ✅ Journal screen (J): achievements with progress bars and rewards, statistics, and the road
+  to the ending (completion checklist + next level, region, tool, collection milestone and
+  closest achievement)
+- ✅ Level-up toast says what the level brings (skill point, tools now at the shelf, regions
+  that now only wait for flowers); achievement toasts with rewards
+- ✅ Toasts move to the bottom edge, title only, while a screen is open, so they never cover a
+  heading or button
+- ✅ Tests: 8 new (first steps, capped progress, rare finds, crafting achievements, spending and
+  distance, the whole journey to completion, quiet catch-up and tamper check, content rules);
+  146 tests in all
+- ✅ Smoke test opens the journal on all three pages and verifies achievements and distance
+  persist across a restart
+
 ## Later phases ⬜
 
-P Progression & achievements (next) · F Remaining regions · Z Completion & ending ·
-G Polish & release
+F Remaining regions (next) · Z Completion & ending · G Polish & release
 
 ## Temporary assets (replace before release)
 
@@ -166,8 +189,6 @@ G Polish & release
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
 - Key rebinding UI arrives with the full settings screen (Phase G); bindings are
   already data in `Bindings`.
-- Toasts sit above open screens and can briefly cover the top of the skill tree when several
-  skills are learned in a row.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
 - Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
 - macOS: transitive dependency `block v0.1.6` emits a future-incompatibility warning.

@@ -211,7 +211,7 @@ fn step_player(
     time: Res<Time>,
     content: Res<Content>,
     scene: Option<Res<RegionScene>>,
-    session: Option<Res<Session>>,
+    session: Option<ResMut<Session>>,
     player: Option<ResMut<Player>>,
     mut pending: ResMut<PendingInput>,
 ) {
@@ -219,7 +219,7 @@ fn step_player(
         return;
     };
     // Garden Boots and Trailblazer make walking and running faster.
-    let speed = session.map_or(1.0, |s| s.move_speed_multiplier());
+    let speed = session.as_ref().map_or(1.0, |s| s.move_speed_multiplier());
     let mut cfg = content.player.clone();
     cfg.walk_speed *= speed;
     cfg.sprint_speed *= speed;
@@ -235,6 +235,13 @@ fn step_player(
     };
     player.previous = player.body.position;
     let events = player.body.step(&input, time.delta_secs(), &cfg, &env);
+    // Distance walked, for the journal's statistics.
+    let moved = (player.body.position - player.previous)
+        .with_y(0.0)
+        .length();
+    if let (Some(mut session), true) = (session, moved > 1e-4) {
+        session.add_distance(moved);
+    }
     if events.landed && events.landing_speed > 2.5 {
         let dip = ((events.landing_speed - 2.5) * 0.025).min(0.14);
         player.landing_dip = player.landing_dip.max(dip);

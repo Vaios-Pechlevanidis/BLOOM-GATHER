@@ -301,6 +301,7 @@ impl Game {
             first: before == 0,
         });
         self.events.push(GameEvent::CraftStarted { recipe, count });
+        self.refresh_achievements(true);
         // Efficient Production: each bouquet may save one of its flowers
         // (only ever flowers this craft used, so the world stays finite).
         let chance = self.modifiers().flower_saver;

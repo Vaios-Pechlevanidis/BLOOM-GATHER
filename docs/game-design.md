@@ -244,16 +244,37 @@ gate — so level is never a blocker; crafting just gets you there faster.
 Each shows total / harvested / remaining / species discovered / completion %.
 Completion grants coins, XP and 1 SP, and is permanent.
 
-## 11. Achievements (Phase 7)
+## 11. Achievements and the journal
 
-Harvesting (First Flower, 100, 1,000, Master Harvester = all 1,900),
-Crafting (First Bouquet, 10, 100, Master Florist = 500),
-Exploration (First Discovery, First Region Completed, All Regions Unlocked,
-World Explorer = all regions complete), Collection (First Rare Flower, Half
-Collection, Complete Collection), Completion (All Tools, All Recipes
-Discovered, All Required Bouquets Crafted, Bloom & Gather Completed).
-Optional achievements reward small coin/SP bonuses or cosmetics and are never
-required for the ending.
+Nineteen optional achievements in five categories, each with a small reward
+(coins, or a skill point for the long ones). They are never required for the
+ending.
+
+| Category | Achievements |
+|---|---|
+| Harvesting | First Flower (1), Armful (100), Field Hand (1,000; +1 SP), Master Harvester (all 1,900) |
+| Crafting | First Bouquet (1), Busy Bench (10), Florist (100), Grand Florist (500; +1 SP) |
+| Exploration | First Discovery, Meadow Cleared (1 region), Open Valley (all regions open), World Explorer (all complete; +1 SP) |
+| Collection | Rare Find (a rare or very rare flower), Half the Herbarium (9 species), Complete Collection (+1 SP) |
+| Completion | Fully Equipped (all tools), Recipe Book (all recipes), Every Bouquet (every required bouquet once), Bloom & Gather (the game complete) |
+
+"Master Florist" from the first draft became **Grand Florist**, because a
+Floristry skill already has that name. 500 bouquets is reachable (the world
+could make up to 633 Simple Bouquets) but asks for a deliberate choice.
+
+The **journal (J)** has three pages:
+
+* **Achievements:** progress bars and rewards.
+* **Statistics:** time played, distance walked, flowers picked, sold and
+  rare ones, bouquets, coins earned and spent, tools, upgrade and skill
+  levels, regions, achievements.
+* **Progress:** the six completion requirements as a checklist, and what's
+  next (next level, the next region's requirements, the next tool, the next
+  collection milestone, the closest achievement).
+
+**Level-ups** announce what the level brings: a skill point, tools now
+sold at the shelf, and regions whose level is reached but which still wait
+for harvested flowers.
 
 ## 12. Ending
 

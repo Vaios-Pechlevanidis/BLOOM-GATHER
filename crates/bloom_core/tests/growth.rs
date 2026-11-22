@@ -126,6 +126,8 @@ fn the_guard_keeps_coins_needed_for_required_tools() {
     // Tight content: required tools cost exactly the guaranteed income, so
     // every coin earned by selling flowers is already spoken for.
     let mut tight = GameData::builtin().unwrap();
+    // Achievement rewards would be spare coins on top; leave them out here.
+    tight.achievements.clear();
     let total = tight.required_tool_cost();
     let slack = tight.guaranteed_income() - total;
     let last = tight.tools.len() - 1;

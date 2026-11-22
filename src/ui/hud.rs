@@ -264,7 +264,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ))
             .with_children(|hint| {
                 hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   Esc  pause",
+                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   Esc  pause",
                     font::CAPTION,
                     palette::INK_SOFT,
                 ));

@@ -198,15 +198,23 @@ fn react_to_events(
             }
             GameEvent::LevelUp { level } => {
                 sfx.write(PlaySfx::new(Sfx::LevelUp));
-                let points = data.progression.skill_points_per_level;
                 toasts.write(Toast::highlight(
                     format!("Level {level}!"),
-                    if points > 0 {
-                        format!("+{points} skill point. Press K to open the skill tree.")
-                    } else {
-                        "Your gathering grows more practised.".into()
-                    },
+                    level_up_text(&session, level),
                 ));
+            }
+            GameEvent::AchievementUnlocked { achievement } => {
+                let a = &data.achievements[achievement];
+                sfx.write(PlaySfx::new(Sfx::Discover));
+                let mut body = a.description.clone();
+                let r = a.reward;
+                match (r.coins, r.skill_points) {
+                    (0, 0) => {}
+                    (c, 0) => body.push_str(&format!(" +{c} coins")),
+                    (0, p) => body.push_str(&format!(" +{p} skill point")),
+                    (c, p) => body.push_str(&format!(" +{c} coins, +{p} skill point")),
+                }
+                toasts.write(Toast::highlight(format!("Achievement: {}", a.name), body));
             }
             GameEvent::RegionCompleted { region, coins } => {
                 sfx.write(PlaySfx::new(Sfx::LevelUp));
@@ -301,4 +309,47 @@ fn react_to_events(
             }
         }
     }
+}
+
+/// What a new level brings: skill points and anything that opens at it.
+fn level_up_text(game: &bloom_core::Game, level: u32) -> String {
+    let data = game.data();
+    let mut parts = Vec::new();
+    let points = data.progression.skill_points_per_level;
+    if points > 0 {
+        parts.push(format!(
+            "+{points} skill point{} (K)",
+            if points == 1 { "" } else { "s" }
+        ));
+    }
+    let tools: Vec<&str> = data
+        .tools
+        .iter()
+        .filter(|t| t.unlock_level == level)
+        .map(|t| t.name.as_str())
+        .collect();
+    if !tools.is_empty() {
+        parts.push(format!("now at the tool shelf: {}", tools.join(", ")));
+    }
+    // Regions whose level is now reached but which still wait for flowers
+    // (ones that open right away get their own announcement).
+    for (r, region) in data.regions.iter().enumerate() {
+        if region.unlock.level == level && level > 1 && !game.is_region_unlocked(r) {
+            parts.push(format!(
+                "{} opens after {} flowers picked ({} so far)",
+                region.name,
+                game.region_harvest_threshold(r),
+                game.state().stats.flowers_harvested
+            ));
+        }
+    }
+    if parts.is_empty() {
+        return "Your gathering grows more practised.".into();
+    }
+    let mut text = parts.join(". ");
+    if let Some(first) = text.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    text.push('.');
+    text
 }

@@ -26,4 +26,6 @@ pub enum PlayState {
     Workshop,
     /// The skill tree is open.
     Skills,
+    /// The journal (achievements, statistics, progress) is open.
+    Journal,
 }

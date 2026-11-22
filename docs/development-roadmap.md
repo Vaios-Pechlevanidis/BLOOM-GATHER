@@ -54,11 +54,11 @@ Physical 3D workshop (workbench → crafting, storage → inventory, tool displa
 → tool shop, bouquet display); recipes, validation, batch crafting with
 craft timer, keepsake reserve, bouquet models and selling.
 
-## Phase U — Upgrades & skill tree ✅ (current)
+## Phase U — Upgrades & skill tree ✅
 Modifier pipeline, upgrade shop with before/after values, progression guard;
 five-branch skill tree UI, SP accounting, prerequisites, tool requirements.
 
-## Phase P — Progression & achievements
+## Phase P — Progression & achievements ✅ (current)
 Level-up rewards & UI, milestones, achievements and toasts, statistics.
 
 ## Phase F — Remaining regions

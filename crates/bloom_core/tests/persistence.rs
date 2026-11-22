@@ -40,7 +40,7 @@ fn encode_decode_round_trip() {
 fn damage_is_detected() {
     let game = played_game(&[1]);
     let text = encode(game.state());
-    let edited = text.replacen("coins: 0", "coins: 99999", 1);
+    let edited = text.replacen("coins: ", "coins: 9999", 1);
     assert_ne!(edited, text);
     assert_eq!(decode(&edited), Err(SaveError::Corrupt));
     assert_eq!(decode(&text[..text.len() / 2]), Err(SaveError::Corrupt));

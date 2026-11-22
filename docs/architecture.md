@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase U (upgrades & skill tree) done. This document describes the
+Status: Phase P (progression & achievements) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -102,12 +102,12 @@ Rust's built-in `core` crate and breaks macro expansions.
 ## 4. Game states
 
 ```
-Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills}
+Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills | Journal}
   │                           ▲                           │
   └──(invalid data)──► log + exit      └──Main Menu (pause)──┘
 ```
 
-* `Inventory` (basket / Tool Shop / Upgrades), `Skills` and `Paused` stop game time; `Workshop`
+* `Inventory` (basket / Tool Shop / Upgrades), `Skills`, `Journal` and `Paused` stop game time; `Workshop`
   (the workbench screen) keeps it running so a batch binds while you watch.
 * State-scoped entities despawn on exit. The 3D region scene is *not*
   state-scoped: it is built once per region and shown behind the title screen
@@ -272,6 +272,23 @@ profiling ever shows a need.
   Upgrades tab lives in `ui::inventory`; `flowers::sparkles` draws Flower
   Recognition's glints; `player` scales walk/sprint speed.
 
+## 7e. Achievements, completion and statistics (Phase P)
+
+* **Content:** `GameData::achievements` (`data/achievements.rs`): a
+  `Condition` plus a reward. Validation rejects targets the finite world
+  can't reach.
+* **Core (`game/progress.rs`):** `refresh_achievements` runs after XP
+  awards (which cover harvests, finished batches and skills), tool
+  purchases and craft starts. Each achievement unlocks once, pays once and
+  raises `AchievementUnlocked`. `from_state` catches up older saves without
+  announcing anything. `Game::completion()` reports the six ending
+  requirements; the `GameCompleted` condition and the Phase Z ending both
+  use it.
+* **Statistics:** `Stats` gained `coins_spent` and `distance_walked_m`. The
+  player system feeds distance through `Game::add_distance` each fixed step.
+* **Presentation:** `ui::journal` (J). Toasts move to the bottom edge and show
+  titles only while any screen is open.
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -309,7 +326,8 @@ profiling ever shows a need.
   player resumes where they stood. Later phases extend it: tools and every
   harvesting mode (Phase D), walking into the workshop, binding bouquets at
   the workbench and checking they persist (Phase E), buying an upgrade with
-the keyboard at the tool shelf and learning skills in the tree (Phase U).
+the keyboard at the tool shelf and learning skills in the tree (Phase U),
+and opening every journal page, checking achievements and distance (Phase P).
 Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 

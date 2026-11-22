@@ -7,6 +7,7 @@ mod debug_overlay;
 mod effects;
 mod hud;
 mod inventory;
+mod journal;
 mod main_menu;
 mod pause_menu;
 mod skills;
@@ -33,6 +34,7 @@ impl Plugin for UiPlugin {
             toasts::ToastsPlugin,
             workshop::WorkshopPlugin,
             skills::SkillsPlugin,
+            journal::JournalPlugin,
         ));
     }
 }

@@ -169,9 +169,12 @@ Stacking rules, all in `bloom_core::game::growth`:
   first crafts (8 × 50 = 400) and ≈ 600 bouquets (≈ 6,000 XP) a full
   playthrough reaches about level 30 (the cap).
 * SP: 1 per level from 2 (up to 29), +5 region completions, +2 collection
-  milestones (8 and 16 species), +up to 5 from Collection Bonuses ≈ 41 SP
-  (achievements in Phase P may add a few), against a tree that costs 44 SP to
-  max — the player chooses a focus until late game.
+  milestones (8 and 16 species), +up to 5 from Collection Bonuses, +4 from
+  achievements ≈ 45 SP, against a tree that costs 44 SP to max. The player
+  chooses a focus until the very end of the game.
+* Achievement coin rewards total 1,070. They are extra money, not part of
+  the guaranteed income, so the progression guard (§5.2) ignores them and
+  stays safe.
 
 ## 8. Tuning knobs
 

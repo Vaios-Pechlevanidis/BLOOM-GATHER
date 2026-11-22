@@ -816,6 +816,56 @@ fn drive(
             }
             72 => {
                 smoke.shot(&mut commands, "18_new_species_sparkle");
+                smoke.tap(KeyCode::KeyJ);
+                0.5
+            }
+            // --- the journal: achievements, statistics, progress ---
+            73 => {
+                smoke.expect("J opens the journal", play_state, PlayState::Journal);
+                if let Some(s) = session_mut.as_deref() {
+                    let got = &s.state().achievements;
+                    let want = [
+                        "first_flower",
+                        "first_discovery",
+                        "first_bouquet",
+                        "first_rare",
+                    ];
+                    let missing: Vec<&str> = want
+                        .iter()
+                        .copied()
+                        .filter(|id| !got.contains(*id))
+                        .collect();
+                    // first_rare only if a rare flower was picked; the
+                    // meadow has none, so it must still be locked.
+                    let ok = missing == ["first_rare"];
+                    smoke.check(
+                        "early achievements unlocked",
+                        ok,
+                        format!("missing {missing:?}"),
+                    );
+                    let walked = s.state().stats.distance_walked_m;
+                    smoke.check(
+                        "distance walked is counted",
+                        walked > 1.0,
+                        format!("{walked:.1} m"),
+                    );
+                }
+                smoke.shot(&mut commands, "19_journal_achievements");
+                smoke.tap(KeyCode::Digit2);
+                0.5
+            }
+            74 => {
+                smoke.shot(&mut commands, "20_journal_statistics");
+                smoke.tap(KeyCode::Digit3);
+                0.5
+            }
+            75 => {
+                smoke.shot(&mut commands, "21_journal_progress");
+                smoke.tap(KeyCode::KeyJ);
+                0.4
+            }
+            76 => {
+                smoke.expect("J closes the journal", play_state, PlayState::Playing);
                 smoke.tap(KeyCode::Escape);
                 smoke.step = 12; // → 13: pause and save
                 0.6
@@ -847,9 +897,15 @@ fn drive(
                 // Everything picked (by hand and with tools) and the tools owned.
                 let growth = session_mut.as_deref().map_or(String::new(), |se| {
                     format!(
-                        "{}\n{}",
+                        "{}\n{}\n{}",
                         levels_line(&se.state().upgrades),
-                        levels_line(&se.state().skills)
+                        levels_line(&se.state().skills),
+                        se.state()
+                            .achievements
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(",")
                     )
                 });
                 let (picks, tools, bouquets, held): (Vec<String>, Vec<String>, Vec<String>, u32) =
@@ -924,6 +980,7 @@ fn verify_resumed(
         .unwrap_or(u32::MAX);
     let upgrades = lines.next().unwrap_or("").to_string();
     let skills = lines.next().unwrap_or("").to_string();
+    let achievements = lines.next().unwrap_or("").to_string();
     smoke.check(
         "run 1 recorded its picks",
         expected.len() > PICKS,
@@ -978,6 +1035,18 @@ fn verify_resumed(
         "skills restored",
         skills_now == skills && !skills.is_empty(),
         &skills,
+    );
+    let achievements_now: Vec<String> = session.state().achievements.iter().cloned().collect();
+    smoke.check(
+        "achievements restored",
+        achievements_now.join(",") == achievements && !achievements.is_empty(),
+        &achievements,
+    );
+    let walked = session.state().stats.distance_walked_m;
+    smoke.check(
+        "distance walked restored",
+        walked > 1.0,
+        format!("{walked:.1} m"),
     );
     smoke.check(
         "bouquets restored",

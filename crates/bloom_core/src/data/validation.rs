@@ -39,6 +39,7 @@ impl GameData {
         self.validate_recipes(&mut r);
         self.validate_global_balance(&mut r);
         self.validate_growth(&mut r);
+        self.validate_achievements(&mut r);
         if r.0.is_empty() {
             Ok(())
         } else {
@@ -137,6 +138,11 @@ impl GameData {
         unique(r, "region", self.regions.iter().map(|x| x.id.as_str()));
         unique(r, "upgrade", self.upgrades.iter().map(|x| x.id.as_str()));
         unique(r, "skill", self.skills.iter().map(|x| x.id.as_str()));
+        unique(
+            r,
+            "achievement",
+            self.achievements.iter().map(|x| x.id.as_str()),
+        );
     }
 
     fn validate_species(&self, r: &mut Report) {
@@ -554,5 +560,41 @@ impl GameData {
                 .all(|&n| n >= 1 && n as usize <= self.species.len()),
             || "collection_milestones must be between 1 and the number of species".into(),
         );
+    }
+
+    /// Achievements: every target can actually be reached in this world.
+    fn validate_achievements(&self, r: &mut Report) {
+        use super::Condition as C;
+        let world = self.world_flower_total();
+        // The most bouquets the finite world could ever make.
+        let smallest = self
+            .recipes
+            .iter()
+            .map(|x| x.flower_count)
+            .min()
+            .unwrap_or(1)
+            .max(1);
+        let max_bouquets = world / smallest as u64;
+        for a in &self.achievements {
+            let id = format!("achievement '{}'", a.id);
+            r.check(!a.name.trim().is_empty(), || format!("{id} has no name"));
+            let (ok, why) = match a.condition {
+                C::FlowersHarvested(n) => (n >= 1 && n <= world, format!("1..={world} flowers")),
+                C::BouquetsCrafted(n) => (
+                    n >= 1 && n <= max_bouquets,
+                    format!("1..={max_bouquets} bouquets"),
+                ),
+                C::SpeciesDiscovered(n) => (
+                    n >= 1 && n as usize <= self.species.len(),
+                    format!("1..={} species", self.species.len()),
+                ),
+                C::RegionsCompleted(n) => (
+                    n >= 1 && n as usize <= self.regions.len(),
+                    format!("1..={} regions", self.regions.len()),
+                ),
+                _ => (true, String::new()),
+            };
+            r.check(ok, || format!("{id}: target must be {why}"));
+        }
     }
 }

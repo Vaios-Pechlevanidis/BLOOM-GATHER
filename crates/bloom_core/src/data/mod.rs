@@ -5,6 +5,7 @@
 //! types below, indexed for fast lookup and validated by
 //! [`GameData::validate`] (see `validation.rs`).
 
+mod achievements;
 mod growth;
 mod validation;
 
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::economy::{Coins, EconomyConfig};
 use crate::progression::ProgressionConfig;
 
+pub use achievements::{AchievementCategory, AchievementDef, AchievementReward, Condition};
 pub use growth::{
     Effect, SkillBranch, SkillDef, UpgradeCategory, UpgradeDef, MIN_PRICE_FACTOR, MIN_TIME_FACTOR,
 };
@@ -409,6 +411,8 @@ pub struct GameData {
     pub upgrades: Vec<UpgradeDef>,
     #[serde(default)]
     pub skills: Vec<SkillDef>,
+    #[serde(default)]
+    pub achievements: Vec<AchievementDef>,
     #[serde(skip)]
     index: Index,
 }
@@ -421,6 +425,7 @@ struct Index {
     regions: HashMap<String, usize>,
     upgrades: HashMap<String, usize>,
     skills: HashMap<String, usize>,
+    achievements: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -485,6 +490,7 @@ impl GameData {
             regions: build(&self.regions, |r| &r.id),
             upgrades: build(&self.upgrades, |u| &u.id),
             skills: build(&self.skills, |s| &s.id),
+            achievements: build(&self.achievements, |a| &a.id),
         };
     }
 
@@ -526,6 +532,17 @@ impl GameData {
 
     pub fn skill_index(&self, id: &str) -> Option<usize> {
         self.index.skills.get(id).copied()
+    }
+
+    pub fn achievement(&self, id: &str) -> Option<&AchievementDef> {
+        self.index
+            .achievements
+            .get(id)
+            .map(|&i| &self.achievements[i])
+    }
+
+    pub fn achievement_index(&self, id: &str) -> Option<usize> {
+        self.index.achievements.get(id).copied()
     }
 
     pub fn region(&self, id: &str) -> Option<&RegionDef> {

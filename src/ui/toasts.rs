@@ -3,6 +3,8 @@
 
 use bevy::prelude::*;
 
+use crate::game::PlayState;
+
 use super::theme::{self, font, palette, radius, space};
 
 pub struct ToastsPlugin;
@@ -11,7 +13,7 @@ impl Plugin for ToastsPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<Toast>()
             .add_systems(Startup, spawn_root)
-            .add_systems(Update, (spawn_toasts, age_toasts).chain());
+            .add_systems(Update, (place_root, spawn_toasts, age_toasts).chain());
     }
 }
 
@@ -43,6 +45,29 @@ impl Toast {
 #[derive(Component)]
 struct ToastRoot;
 
+/// Toasts sit at the top while playing; while a screen (basket, workbench,
+/// skill tree, journal, pause) is open they move to the bottom edge so they
+/// never cover its heading.
+fn place_root(state: Option<Res<State<PlayState>>>, mut roots: Query<&mut Node, With<ToastRoot>>) {
+    let screen_open = state.is_some_and(|s| *s.get() != PlayState::Playing);
+    for mut node in &mut roots {
+        let (top, bottom) = if screen_open {
+            (Val::Auto, Val::Px(space::MD))
+        } else {
+            (Val::Px(space::MD), Val::Auto)
+        };
+        if node.top != top || node.bottom != bottom {
+            node.top = top;
+            node.bottom = bottom;
+            node.flex_direction = if screen_open {
+                FlexDirection::ColumnReverse
+            } else {
+                FlexDirection::Column
+            };
+        }
+    }
+}
+
 #[derive(Component)]
 struct ToastCard {
     age: f32,
@@ -71,6 +96,7 @@ fn spawn_root(mut commands: Commands) {
 fn spawn_toasts(
     mut commands: Commands,
     mut events: EventReader<Toast>,
+    state: Option<Res<State<PlayState>>>,
     root: Query<Entity, With<ToastRoot>>,
     existing: Query<(Entity, &ToastCard)>,
 ) {
@@ -110,7 +136,12 @@ fn spawn_toasts(
             ))
             .with_children(|card| {
                 card.spawn(theme::text(toast.title.clone(), font::BODY, palette::INK));
-                if let Some(body) = &toast.body {
+                // Over an open screen, titles only: short enough to stay
+                // clear of its buttons at the bottom edge.
+                let compact = state
+                    .as_ref()
+                    .is_some_and(|s| *s.get() != PlayState::Playing);
+                if let Some(body) = toast.body.as_ref().filter(|_| !compact) {
                     card.spawn(theme::text(body.clone(), font::CAPTION, palette::INK_SOFT));
                 }
             });

@@ -27,6 +27,6 @@ pub mod world;
 
 pub use data::{DataError, GameData};
 pub use game::{
-    BatchOutcome, CraftPlan, Game, GameError, GameEvent, GameState, Modifiers, RecipeStatus,
-    SkillStatus, ToolStatus, UpgradeStatus,
+    BatchOutcome, Completion, CraftPlan, Game, GameError, GameEvent, GameState, Modifiers,
+    RecipeStatus, SkillStatus, ToolStatus, UpgradeStatus,
 };

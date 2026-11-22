@@ -307,6 +307,7 @@ impl Game {
             UpgradeStatus::Buyable { price } => price,
         };
         self.state.coins -= price;
+        self.state.stats.coins_spent += price;
         let id = self.data.upgrades[upgrade].id.clone();
         let level = {
             let l = self.state.upgrades.entry(id).or_default();
@@ -362,7 +363,7 @@ impl Game {
         if self.modifiers().collection_skill_points {
             points += self.fully_discovered_regions();
         }
-        points
+        points + self.achievement_skill_points()
     }
 
     pub fn skill_points_spent(&self) -> u32 {

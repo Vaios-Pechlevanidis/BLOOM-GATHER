@@ -119,7 +119,19 @@ fn clearing_a_region_completes_it_once_and_pays_out() {
     }
     assert_eq!(game.remaining_in_region(0), 0);
     assert!(game.state().completed_regions.contains("sunny_meadow"));
-    assert_eq!(game.state().coins, d.regions[0].completion_reward.coins);
+    // The completion reward, plus the coin rewards of the achievements
+    // clearing a region earns on the way.
+    let achievements: u64 = game
+        .state()
+        .achievements
+        .iter()
+        .map(|id| d.achievement(id).unwrap().reward.coins)
+        .sum();
+    assert!(achievements > 0);
+    assert_eq!(
+        game.state().coins,
+        d.regions[0].completion_reward.coins + achievements
+    );
     let events = game.drain_events();
     let completions = events
         .iter()
@@ -160,6 +172,7 @@ fn selling_pays_the_same_for_every_species() {
 fn selling_validates_quantities() {
     let mut game = Game::new(data());
     pick(&mut game, 0, 0).unwrap();
+    let coins = game.state().coins; // first-flower achievement rewards
     let species = game.region(0).field.species(0);
     assert_eq!(game.sell(species, 0), Err(GameError::NothingToSell));
     assert_eq!(
@@ -167,7 +180,7 @@ fn selling_validates_quantities() {
         Err(GameError::NotEnoughFlowers { have: 1 })
     );
     assert_eq!(game.sell(999, 1), Err(GameError::UnknownSpecies));
-    assert_eq!(game.state().coins, 0, "failed sales change nothing");
+    assert_eq!(game.state().coins, coins, "failed sales change nothing");
 }
 
 #[test]

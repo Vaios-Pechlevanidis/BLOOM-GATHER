@@ -20,9 +20,11 @@ use crate::world::{FlowerField, RegionLayout};
 
 mod crafting;
 mod growth;
+mod progress;
 
 pub use crafting::{CraftJob, CraftPlan, RecipeLock, RecipeStatus};
 pub use growth::{Modifiers, SkillLock, SkillStatus, UpgradeLock, UpgradeStatus};
+pub use progress::Completion;
 
 /// Everything that is saved. Keys are content ids (not indices) so saves
 /// survive content being reordered. Missing fields (saves from older
@@ -58,6 +60,8 @@ pub struct GameState {
     pub skills: BTreeMap<String, u32>,
     /// Regions whose unlock conditions have been met (announced once).
     pub unlocked_regions: BTreeSet<String>,
+    /// Achievements unlocked (each pays its reward once).
+    pub achievements: BTreeSet<String>,
     /// State of the gameplay RNG (chance-based skills), saved so reloading
     /// can't re-roll a result.
     pub rng: u64,
@@ -74,7 +78,11 @@ pub struct Stats {
     pub bouquets_crafted: u64,
     pub bouquets_sold: u64,
     pub coins_earned: Coins,
+    /// Coins paid for tools and upgrades.
+    pub coins_spent: Coins,
     pub playtime_secs: f64,
+    /// Metres walked (and run) in the world.
+    pub distance_walked_m: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -151,6 +159,9 @@ pub enum GameEvent {
     /// Discovering species reached a milestone (+1 skill point).
     CollectionMilestone {
         species_found: u32,
+    },
+    AchievementUnlocked {
+        achievement: usize,
     },
 }
 
@@ -437,6 +448,11 @@ impl Game {
                 return bad(format!("unknown region '{id}'"));
             }
         }
+        for id in &state.achievements {
+            if data.achievement(id).is_none() {
+                return bad(format!("unknown achievement '{id}'"));
+            }
+        }
 
         let mut game = Self::with_state(data.clone(), state);
         let mut counted: BTreeMap<String, u32> = BTreeMap::new();
@@ -502,6 +518,9 @@ impl Game {
         // saves, content updates), without announcing them.
         game.refresh_regions(false);
         game.refresh_recipes();
+        // Older saves: catch up achievements already earned (rewards paid,
+        // not announced).
+        game.refresh_achievements(false);
         game.events.clear();
         Ok(game)
     }
@@ -993,6 +1012,7 @@ impl Game {
             self.events.push(GameEvent::LevelUp { level });
         }
         self.refresh_recipes();
+        self.refresh_achievements(true);
         self.dirty = true;
     }
 
@@ -1044,9 +1064,11 @@ impl Game {
             ToolStatus::Buyable => {
                 let price = self.tool_price(tool);
                 self.state.coins -= price;
+                self.state.stats.coins_spent += price;
                 self.state.tools.insert(def.id.clone());
                 self.events.push(GameEvent::ToolBought { tool });
                 self.refresh_recipes();
+                self.refresh_achievements(true);
                 self.dirty = true;
                 Ok(price)
             }

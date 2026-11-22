@@ -113,7 +113,9 @@ fn toggle(
         match state.get() {
             PlayState::Playing => next.set(PlayState::Inventory),
             PlayState::Inventory => next.set(PlayState::Playing),
-            PlayState::Workshop | PlayState::Skills => next.set(PlayState::Playing),
+            PlayState::Workshop | PlayState::Skills | PlayState::Journal => {
+                next.set(PlayState::Playing)
+            }
             PlayState::Paused => {}
         }
     }
