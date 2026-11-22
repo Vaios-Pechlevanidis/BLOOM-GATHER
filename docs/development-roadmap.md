@@ -85,10 +85,16 @@ VSync, interface size, separate volumes; calm synthesised music (day and
 night), footsteps by surface, landing and travel sounds; a breeze that
 rises and falls; soft bloom on bright things.
 
-**G2 Performance ✅ (current):** core and in-game benchmarks at 1k–500k
+**G2 Performance ✅:** core and in-game benchmarks at 1k–500k
 flowers (`scripts/bench.sh`, results in `docs/performance.md`); spatial
 grids for layout and placement, GPU wind sway for flowers, a distant
 stand-in model without shadows, flowers streamed around the camera.
+
+**G3 Packaging ✅ (current):** app icon in every format, `dist` profile,
+macOS `.app` + `.dmg` (ad-hoc signed), Linux tarball + AppImage, Windows
+zip + Inno Setup installer, window icon on Windows/Linux, CI (fmt, clippy,
+tests on three systems) and a release workflow building every package
+(`docs/release.md`).
 
 Still to come, in this order unless decided otherwise:
 Painted glTF art replacing procedural meshes, day/night and weather,

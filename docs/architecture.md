@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase G2 (performance) done. This document describes the
+Status: Phase G3 (packaging) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -394,6 +394,16 @@ without shadows (`flowers::level_of_detail`), and flowers are streamed in
 and out around the camera (`flowers::sync_flowers`). `bloom_core::bench`
 builds the synthetic fields for `scripts/bench.sh`; `src/bench.rs` is the
 in-game benchmark (only active with `BLOOM_BENCH`).
+
+## 7j. Packaging (Phase G3)
+
+The executable is self-contained (content, shaders and sounds are inside
+it), so each package is the `dist`-profile binary plus an icon and platform
+metadata: `scripts/package-{macos,linux,windows}` and `packaging/` (icon,
+Info.plist, desktop entry, Inno Setup script). `src/icon.rs` sets the
+window icon on Windows and Linux (the `winit` dependency is the version
+Bevy uses). GitHub Actions run fmt, clippy and tests on three systems and
+build all packages; see `docs/release.md`.
 
 ## 8. Persistence (implemented in Phase B)
 

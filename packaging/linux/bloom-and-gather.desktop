@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Bloom & Gather
+Comment=A cozy first-person flower-picking and bouquet-crafting game
+Exec=bloom-and-gather
+Icon=bloom-and-gather
+Categories=Game;Simulation;
+Terminal=false
+StartupWMClass=bloom-and-gather

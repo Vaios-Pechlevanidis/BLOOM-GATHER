@@ -253,10 +253,26 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Result at High: 10k flowers 24 → 49 FPS, 100k 9.5 → 29, 500k 4.7 → 26 (Medium: 50 FPS at
   500k; Low: 60 at every size); real regions stay at the display's 60 FPS
 
+## Phase G3: Packaging ✅
+
+- ✅ App icon drawn by `scripts/make_icon.py`: `.icns`, `.ico`, PNGs and a raw RGBA window icon
+  (set at runtime on Windows and Linux); committed, so packaging needs no Python
+- ✅ `dist` build profile (release, thin LTO, one codegen unit, stripped)
+- ✅ macOS: `scripts/package-macos.sh` builds `Bloom & Gather.app` (Info.plist, icon, ad-hoc
+  signature, optional Developer ID) and a `.dmg` with an Applications link; Intel via `TARGET`
+- ✅ Linux: `scripts/package-linux.sh` builds a tarball (binary, icon, desktop entry) and an
+  AppImage when `appimagetool` is available
+- ✅ Windows: `scripts/package-windows.ps1` builds a zip and an Inno Setup installer (per-user by
+  default, Start menu and optional desktop shortcut)
+- ✅ GitHub Actions: CI (fmt, clippy, tests on Linux, macOS, Windows) and a release workflow
+  that builds every package and, for a `v*` tag, drafts a GitHub release with them
+- ✅ Tested here: the macOS `.dmg` built, mounted, and the game in it ran from `/`; the Windows
+  and Linux scripts and the workflows run on GitHub and have not run yet
+- ⬜ Code signing and notarization need an Apple Developer account and a Windows certificate
+
 ## Later phases ⬜
 
-G3 Packaging (macOS, Windows, Linux) · G4 Bevy upgrade · art pass (painted models need real 3D
-assets)
+G4 Bevy upgrade · art pass (painted models need real 3D assets)
 
 ## Temporary assets (replace before release)
 

@@ -30,6 +30,8 @@ bloom_core.workspace = true
 bevy = { version = "0.16", features = ["wav"] }
 serde.workspace = true
 ron.workspace = true
+# Only for the window icon on Windows and Linux; the same version Bevy uses.
+winit = { version = "0.30", default-features = false }
 
 [features]
 # Faster incremental rebuilds during development: `cargo run --features dev`.
@@ -46,3 +48,8 @@ opt-level = 3
 [profile.release]
 codegen-units = 1
 lto = "thin"
+
+# What the packages ship (`scripts/package-*.sh`): release plus no symbols.
+[profile.dist]
+inherits = "release"
+strip = true

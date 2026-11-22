@@ -14,6 +14,7 @@ mod bench;
 mod dev;
 mod flowers;
 mod game;
+mod icon;
 mod input;
 mod interaction;
 mod player;

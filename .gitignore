@@ -3,3 +3,4 @@
 .DS_Store
 # Local save data written during development runs
 /saves/
+/dist
