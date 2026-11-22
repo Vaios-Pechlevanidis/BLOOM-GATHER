@@ -74,6 +74,7 @@ Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
 cargo test                      # all unit + integration tests
 cargo test -p bloom_core        # gameplay/content tests only (no Bevy, fast)
 cargo clippy --all-targets
+scripts/bench.sh               # performance: core + game at 1k-500k flowers (docs/performance.md)
 scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, journal, map, travel, gates, settings, key rebinding, save, restart, verify, ending, herbarium); screenshots
 ```
 

@@ -239,10 +239,24 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Smoke test opens the settings by keyboard, changes the quality, rebinds the map key and
   verifies both were saved
 
+## Phase G2: Performance ✅
+
+- ✅ Benchmarks at 1k / 10k / 100k / 500k flowers: core (`--example bench`: placement, queries,
+  harvesting, saves) and the real game (`BLOOM_BENCH`, a 12 s walk, FPS and p99 frame time);
+  `scripts/bench.sh` runs both; results and analysis in `docs/performance.md`
+- ✅ Spatial grids for trees, rocks and footpath segments: placement at 100k 751 → 75 ms, save
+  restore 799 → 129 ms (answers unchanged; the meadow fingerprint test still holds)
+- ✅ Flowers sway on the GPU (wind shader) and are one entity each (plus a glow child at night)
+- ✅ Level of detail: flowers beyond 12 / 22 / 32 m (by quality) use a ~50-triangle stand-in
+  without shadows (the full model is ~2,900 triangles); refreshed from the flower grid
+- ✅ Flowers stream in and out around the camera (90 / 120 / 160 m); real regions fit entirely
+- ✅ Result at High: 10k flowers 24 → 49 FPS, 100k 9.5 → 29, 500k 4.7 → 26 (Medium: 50 FPS at
+  500k; Low: 60 at every size); real regions stay at the display's 60 FPS
+
 ## Later phases ⬜
 
-G2 Performance (benchmarks, optimisation) · G3 Packaging (macOS, Windows, Linux) ·
-G4 Bevy upgrade · art pass (painted models need real 3D assets)
+G3 Packaging (macOS, Windows, Linux) · G4 Bevy upgrade · art pass (painted models need real 3D
+assets)
 
 ## Temporary assets (replace before release)
 
@@ -269,7 +283,6 @@ G4 Bevy upgrade · art pass (painted models need real 3D assets)
 - Grass and tree shadows: shadows use the un-swayed shape (prepass shader not overridden).
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
-- Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
 - Travelling rebuilds the whole region behind a short fade (30-90 ms per region measured in the
   smoke test); no preloading of the neighbour yet.
 - The workshop exists only in the Sunny Meadow; the world map is the quick way back to it.

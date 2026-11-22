@@ -15,6 +15,7 @@
 //! and static collision ([`world`]) — and the first-person character
 //! controller ([`player`]).
 
+pub mod bench;
 pub mod bitset;
 pub mod data;
 pub mod economy;

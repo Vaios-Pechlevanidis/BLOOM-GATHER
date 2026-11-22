@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase G1 (settings & feel) done. This document describes the
+Status: Phase G2 (performance) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -384,6 +384,16 @@ profiling ever shows a need.
   minutes; the wind shader, flower sway and clouds follow it.
 * **Bloom:** HDR cameras; on Medium and High a thresholded bloom lets only
   bright things glow (lanterns, fireflies, glowing flowers).
+
+## 7i. Performance (Phase G2)
+
+See `docs/performance.md` for the numbers. In short: trees, rocks and path
+segments are in spatial grids (`world::grid`), flowers sway on the GPU and
+are one entity each, flowers beyond a short distance use a cheap stand-in
+without shadows (`flowers::level_of_detail`), and flowers are streamed in
+and out around the camera (`flowers::sync_flowers`). `bloom_core::bench`
+builds the synthetic fields for `scripts/bench.sh`; `src/bench.rs` is the
+in-game benchmark (only active with `BLOOM_BENCH`).
 
 ## 8. Persistence (implemented in Phase B)
 

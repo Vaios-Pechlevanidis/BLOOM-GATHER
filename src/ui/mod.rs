@@ -20,6 +20,8 @@ mod toasts;
 mod widgets;
 mod workshop;
 
+// Read by the debug-only smoke test.
+#[cfg_attr(not(debug_assertions), allow(unused_imports))]
 pub use settings::SettingsScreen;
 pub use toasts::Toast;
 

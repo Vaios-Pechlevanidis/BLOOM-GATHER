@@ -9,6 +9,7 @@
 
 mod app;
 mod audio;
+mod bench;
 #[cfg(debug_assertions)]
 mod dev;
 mod flowers;

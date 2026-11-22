@@ -743,6 +743,62 @@ pub fn build(species: &FlowerSpecies) -> FlowerModel {
     p.finish()
 }
 
+/// A distant stand-in for a flower (about 50 triangles instead of a few
+/// thousand): a thin stem, a ball where the bloom is, sized and placed from
+/// the full model, and a centre dot. At 25 m and beyond it reads the same.
+pub fn build_far(species: &FlowerSpecies, full: &Mesh) -> Mesh {
+    let h = species.height;
+    let positions: Vec<Vec3> = match full.attribute(Mesh::ATTRIBUTE_POSITION) {
+        Some(bevy::render::mesh::VertexAttributeValues::Float32x3(p)) => {
+            p.iter().map(|v| Vec3::from(*v)).collect()
+        }
+        _ => Vec::new(),
+    };
+    // The bloom: everything in the top part of the plant.
+    let top: Vec<Vec3> = positions
+        .iter()
+        .copied()
+        .filter(|p| p.y > h * 0.6)
+        .collect();
+    let (centre, radius) = if top.is_empty() {
+        (Vec3::Y * h, 0.05)
+    } else {
+        let c = top.iter().copied().sum::<Vec3>() / top.len() as f32;
+        let r = top
+            .iter()
+            .map(|p| Vec2::new(p.x - c.x, p.z - c.z).length())
+            .fold(0.0f32, f32::max);
+        (c, (r * 0.75).clamp(0.03, 0.3))
+    };
+    let stem_col = lin(Color::srgb_u8(104, 146, 86));
+    let petal = lin(color(species.petal_color));
+    let center = lin(color(species.center_color));
+    let mut b = MeshBuilder::default();
+    let stem = Mesh::from(Cylinder::new(1.0, 1.0).mesh().resolution(4));
+    b.add(
+        &stem,
+        Transform::from_xyz(centre.x * 0.5, centre.y * 0.5, centre.z * 0.5).with_scale(Vec3::new(
+            0.008,
+            centre.y.max(0.05),
+            0.008,
+        )),
+        move |_| stem_col,
+    );
+    let ball = Sphere::new(1.0).mesh().ico(0).expect("valid icosphere");
+    b.add(
+        &ball,
+        Transform::from_translation(centre).with_scale(Vec3::new(radius, radius * 0.6, radius)),
+        move |p| mix(petal, LinearRgba::WHITE, (p.y * 0.5 + 0.5) * 0.2),
+    );
+    b.add(
+        &ball,
+        Transform::from_translation(centre + Vec3::Y * radius * 0.45)
+            .with_scale(Vec3::splat(radius * 0.35)),
+        move |_| center,
+    );
+    b.build()
+}
+
 /// Small flat petal used for harvest particles (unit size).
 pub fn petal_particle() -> Mesh {
     Sphere::new(1.0).mesh().ico(0).expect("valid icosphere")

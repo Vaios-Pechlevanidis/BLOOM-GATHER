@@ -17,7 +17,7 @@ mod wind;
 
 pub use camera::MainCamera;
 pub use scene::SceneSet;
-pub use wind::Weather;
+pub use wind::{sway_by_height, wind_material, Weather, Wind, WindMaterial};
 
 use bevy::prelude::*;
 use bloom_core::data::Rgb;

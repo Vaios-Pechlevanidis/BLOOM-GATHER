@@ -79,11 +79,16 @@ crash.
 
 ## Phase G — Polish & release (in parts)
 
-**G1 Settings & feel ✅ (current):** settings screen (controls, video,
+**G1 Settings & feel ✅:** settings screen (controls, video,
 audio, keys) with key rebinding, graphics quality levels, fullscreen,
 VSync, interface size, separate volumes; calm synthesised music (day and
 night), footsteps by surface, landing and travel sounds; a breeze that
 rises and falls; soft bloom on bright things.
+
+**G2 Performance ✅ (current):** core and in-game benchmarks at 1k–500k
+flowers (`scripts/bench.sh`, results in `docs/performance.md`); spatial
+grids for layout and placement, GPU wind sway for flowers, a distant
+stand-in model without shadows, flowers streamed around the camera.
 
 Still to come, in this order unless decided otherwise:
 Painted glTF art replacing procedural meshes, day/night and weather,

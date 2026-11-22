@@ -1,4 +1,6 @@
-//! Flowers in the 3D world: one entity per unharvested flower, wind sway,
+//! Flowers in the 3D world: one entity per unharvested flower (plus one
+//! child for the glowing parts of night flowers), swaying in the wind on
+//! the GPU (the wind shader; nothing moves on the CPU),
 //! look-at highlight, and the pick animation with a burst of petals.
 //!
 //! Which flowers exist comes only from the session (`bloom_core`): this
@@ -13,9 +15,11 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bloom_core::game::GameEvent;
 
+use bloom_core::world::FlowerField;
+
 use crate::game::{Content, EventsForwarded, GameEventMsg, RegionScene, Session};
 use crate::interaction::LookTarget;
-use crate::rendering::{color, MainCamera};
+use crate::rendering::{color, sway_by_height, wind_material, MainCamera, Wind, WindMaterial};
 
 pub struct FlowersPlugin;
 
@@ -23,12 +27,12 @@ impl Plugin for FlowersPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpawnedFlowers>()
             .init_resource::<MemoryBloom>()
+            .init_resource::<NearFlowers>()
             .add_plugins(sparkles::SparklesPlugin)
             .add_systems(
                 Update,
                 (
-                    (ensure_assets, sync_flowers).chain(),
-                    sway,
+                    (ensure_assets, sync_flowers, level_of_detail).chain(),
                     highlight,
                     start_harvest_animation.after(EventsForwarded),
                     animate_harvest,
@@ -60,27 +64,32 @@ struct Memory {
     scale: f32,
 }
 
+/// Flowers near the camera get the full model and cast shadows; the rest
+/// use a simple stand-in (see `models::build_far`). This set holds the near
+/// ones; it is refreshed a few times a second from the flower grid.
+#[derive(Resource, Default)]
+struct NearFlowers {
+    set: std::collections::HashSet<u32>,
+    key: Option<(u64, usize)>,
+    since: f32,
+}
+
 #[derive(Resource)]
 struct FlowerAssets {
     plants: Vec<Handle<Mesh>>,
+    /// Distant stand-ins, per species.
+    fars: Vec<Handle<Mesh>>,
     glows: Vec<Option<Handle<Mesh>>>,
-    material: Handle<StandardMaterial>,
-    highlight: Handle<StandardMaterial>,
-    glow_materials: Vec<Option<Handle<StandardMaterial>>>,
+    material: Handle<WindMaterial>,
+    highlight: Handle<WindMaterial>,
+    glow_materials: Vec<Option<Handle<WindMaterial>>>,
     particle: Handle<Mesh>,
     particle_materials: Vec<Handle<StandardMaterial>>,
 }
 
 /// Root of one flower in the world.
 #[derive(Component)]
-pub struct FlowerEntity {
-    yaw: f32,
-    phase: f32,
-}
-
-/// The non-glowing mesh child (its material is swapped to highlight).
-#[derive(Component)]
-struct FlowerBody;
+pub struct FlowerEntity;
 
 /// Which flowers are currently spawned, by index.
 #[derive(Resource, Default)]
@@ -115,27 +124,43 @@ fn ensure_assets(
     content: Option<Res<Content>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut wind_materials: ResMut<Assets<WindMaterial>>,
 ) {
     let (None, Some(content)) = (assets, content) else {
         return;
     };
+    // Flowers lean in the wind: rooted at the ground, freest at the bloom.
+    let wind = || Wind::new(0.06, 1.7, 0.25);
     let started = std::time::Instant::now();
     let mut plants = Vec::new();
+    let mut fars = Vec::new();
     let mut glows = Vec::new();
     let mut glow_materials = Vec::new();
     let mut particle_materials = Vec::new();
     for species in &content.species {
         let model = models::build(species);
-        plants.push(meshes.add(model.plant));
-        glows.push(model.glow.map(|m| meshes.add(m)));
+        let mut plant = model.plant;
+        let mut far = models::build_far(species, &plant);
+        sway_by_height(&mut plant, 0.0, species.height, 1.0);
+        sway_by_height(&mut far, 0.0, species.height, 1.0);
+        plants.push(meshes.add(plant));
+        fars.push(meshes.add(far));
+        glows.push(model.glow.map(|mut m| {
+            with_sway_colors(&mut m);
+            sway_by_height(&mut m, 0.0, species.height, 1.0);
+            meshes.add(m)
+        }));
         let petal = color(species.petal_color);
         glow_materials.push((species.glow > 0.0).then(|| {
-            materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                emissive: petal.to_linear() * (species.glow * 4.0),
-                perceptual_roughness: 0.6,
-                ..default()
-            })
+            wind_materials.add(wind_material(
+                StandardMaterial {
+                    base_color: Color::WHITE,
+                    emissive: petal.to_linear() * (species.glow * 4.0),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                },
+                wind(),
+            ))
         }));
         particle_materials.push(materials.add(StandardMaterial {
             base_color: petal,
@@ -143,26 +168,39 @@ fn ensure_assets(
             ..default()
         }));
     }
-    let material = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        perceptual_roughness: 0.72,
-        reflectance: 0.2,
-        ..default()
-    });
+    let material = wind_materials.add(wind_material(
+        StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.72,
+            reflectance: 0.2,
+            ..default()
+        },
+        wind(),
+    ));
     // Subtle highlight: the same vertex colours, gently lit from within.
-    let highlight = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        emissive: LinearRgba::new(0.10, 0.09, 0.05, 1.0),
-        perceptual_roughness: 0.6,
-        ..default()
-    });
+    let highlight = wind_materials.add(wind_material(
+        StandardMaterial {
+            base_color: Color::WHITE,
+            emissive: LinearRgba::new(0.10, 0.09, 0.05, 1.0),
+            perceptual_roughness: 0.6,
+            ..default()
+        },
+        wind(),
+    ));
+    let triangles: usize = plants
+        .iter()
+        .filter_map(|h| meshes.get(h))
+        .map(|m| m.indices().map_or(0, |i| i.len() / 3))
+        .sum();
     info!(
-        "Built {} flower models in {:.1} ms",
+        "Built {} flower models in {:.1} ms ({} triangles on average)",
         plants.len(),
-        started.elapsed().as_secs_f64() * 1000.0
+        started.elapsed().as_secs_f64() * 1000.0,
+        triangles / plants.len().max(1)
     );
     commands.insert_resource(FlowerAssets {
         plants,
+        fars,
         glows,
         material,
         highlight,
@@ -172,83 +210,196 @@ fn ensure_assets(
     });
 }
 
-/// (Re)spawn flowers when the session or region changes.
+/// Flowers are spawned around the camera: everything within the stream
+/// radius (all of every real region), and despawned again beyond it plus a
+/// margin, so even a field of hundreds of thousands keeps only the nearby
+/// ones as entities. Picked flowers are never spawned again.
+fn stream_radius(q: crate::game::Quality) -> f32 {
+    match q {
+        crate::game::Quality::Low => 90.0,
+        crate::game::Quality::Medium => 120.0,
+        crate::game::Quality::High => 160.0,
+    }
+}
+const STREAM_MARGIN: f32 = 15.0;
+
+fn spawn_flower(
+    commands: &mut Commands,
+    assets: &FlowerAssets,
+    field: &FlowerField,
+    i: u32,
+) -> Entity {
+    let species = field.species(i);
+    let ground = field.ground_point(i);
+    let root = commands
+        .spawn((
+            FlowerEntity,
+            Transform::from_translation(ground)
+                .with_rotation(Quat::from_rotation_y(field.yaw(i)))
+                .with_scale(Vec3::splat(field.scale(i))),
+            // Far stand-in until the level-of-detail pass sees it near.
+            Mesh3d(assets.fars[species].clone()),
+            MeshMaterial3d(assets.material.clone()),
+            bevy::pbr::NotShadowCaster,
+        ))
+        .id();
+    if let (Some(mesh), Some(mat)) = (&assets.glows[species], &assets.glow_materials[species]) {
+        commands
+            .entity(root)
+            .with_child((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone())));
+    }
+    root
+}
+
+/// Keep the flowers around the camera spawned (and only those). Starts over
+/// when the session or region changes.
+#[allow(clippy::too_many_arguments)]
 fn sync_flowers(
     mut commands: Commands,
+    time: Res<Time<Real>>,
+    settings: Res<crate::game::Settings>,
     assets: Option<Res<FlowerAssets>>,
     session: Option<Res<Session>>,
     scene: Option<Res<RegionScene>>,
     mut spawned: ResMut<SpawnedFlowers>,
+    mut near: ResMut<NearFlowers>,
+    mut since: Local<f32>,
+    cameras: Query<&GlobalTransform, With<MainCamera>>,
 ) {
     let (Some(assets), Some(session), Some(scene)) = (assets, session, scene) else {
         return;
     };
     let key = (session.generation, scene.region);
-    if spawned.key == Some(key) {
+    let fresh = spawned.key != Some(key);
+    if fresh {
+        for (_, entity) in spawned.map.drain() {
+            commands.entity(entity).despawn();
+        }
+        spawned.highlighted.clear();
+        spawned.key = Some(key);
+    }
+    *since += time.delta_secs();
+    if !fresh && *since < 0.25 && !settings.is_changed() {
         return;
     }
-    for (_, entity) in spawned.map.drain() {
-        commands.entity(entity).despawn();
-    }
-    spawned.highlighted.clear();
+    *since = 0.0;
     let field = &scene.field;
-    let mut count = 0;
-    for i in 0..field.len() as u32 {
-        if session.is_harvested(scene.region, i) {
-            continue; // picked flowers never return
+    // Around the camera; before it is placed, around the region's start.
+    let at = cameras
+        .single()
+        .map(|c| Vec2::new(c.translation().x, c.translation().z))
+        .unwrap_or(scene.layout.spawn);
+    let radius = stream_radius(settings.quality);
+    let none = bloom_core::bitset::BitSet::new(field.len() as u32);
+    let mut added = 0;
+    for i in field.query_radius(at, radius, &none) {
+        if spawned.map.contains_key(&i) || session.is_harvested(scene.region, i) {
+            continue;
         }
-        let species = field.species(i);
-        let ground = field.ground_point(i);
-        let root = commands
-            .spawn((
-                FlowerEntity {
-                    yaw: field.yaw(i),
-                    phase: ground.x * 0.31 + ground.z * 0.17,
-                },
-                Transform::from_translation(ground)
-                    .with_rotation(Quat::from_rotation_y(field.yaw(i)))
-                    .with_scale(Vec3::splat(field.scale(i))),
-                Visibility::default(),
-            ))
-            .with_children(|flower| {
-                flower.spawn((
-                    FlowerBody,
-                    Mesh3d(assets.plants[species].clone()),
-                    MeshMaterial3d(assets.material.clone()),
-                ));
-                if let (Some(mesh), Some(mat)) =
-                    (&assets.glows[species], &assets.glow_materials[species])
-                {
-                    flower.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone())));
-                }
-            })
-            .id();
-        spawned.map.insert(i, root);
-        count += 1;
+        let e = spawn_flower(&mut commands, &assets, field, i);
+        spawned.map.insert(i, e);
+        added += 1;
     }
-    spawned.key = Some(key);
-    info!(
-        "Spawned {count} flowers ({} already picked)",
-        field.len() - count
-    );
+    let far = radius + STREAM_MARGIN;
+    let leaving: Vec<u32> = spawned
+        .map
+        .keys()
+        .copied()
+        .filter(|&i| field.position(i).distance(at) > far)
+        .collect();
+    for i in &leaving {
+        if let Some(e) = spawned.map.remove(i) {
+            commands.entity(e).despawn();
+        }
+        near.set.remove(i);
+    }
+    if fresh {
+        info!(
+            "Spawned {added} flowers ({} already picked)",
+            (0..field.len() as u32)
+                .filter(|&i| session.is_harvested(scene.region, i))
+                .count()
+        );
+    }
 }
 
-/// Gentle wind: each flower leans and recovers, with gusts rolling across
-/// the field (phase from position).
-fn sway(
-    time: Res<Time>,
-    weather: Res<crate::rendering::Weather>,
-    mut flowers: Query<(&FlowerEntity, &mut Transform), Without<Harvesting>>,
+/// Full models (with shadows) within this distance of the camera.
+fn near_distance(q: crate::game::Quality) -> f32 {
+    match q {
+        crate::game::Quality::Low => 12.0,
+        crate::game::Quality::Medium => 22.0,
+        crate::game::Quality::High => 32.0,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn level_of_detail(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    settings: Res<crate::game::Settings>,
+    assets: Option<Res<FlowerAssets>>,
+    session: Option<Res<Session>>,
+    scene: Option<Res<RegionScene>>,
+    spawned: Res<SpawnedFlowers>,
+    mut near: ResMut<NearFlowers>,
+    cameras: Query<&GlobalTransform, With<MainCamera>>,
+    mut meshes: Query<&mut Mesh3d, With<FlowerEntity>>,
 ) {
-    let t = time.elapsed_secs();
-    let w = weather.wind;
-    for (flower, mut transform) in &mut flowers {
-        let gust = (t * 0.45 + flower.phase * 0.25).sin() * 0.5 + 0.5;
-        let lean_x = (t * 1.7 + flower.phase).sin() * (0.025 + 0.05 * gust) * w;
-        let lean_z = (t * 1.3 + flower.phase * 1.3).cos() * 0.03 * w;
-        transform.rotation = Quat::from_rotation_z(lean_z)
-            * Quat::from_rotation_x(lean_x)
-            * Quat::from_rotation_y(flower.yaw);
+    let (Some(assets), Some(session), Some(scene)) = (assets, session, scene) else {
+        return;
+    };
+    let key = (session.generation, scene.region);
+    if near.key != Some(key) {
+        // A fresh set of flowers (all far): start over.
+        near.set.clear();
+        near.key = Some(key);
+        near.since = f32::MAX;
+    }
+    near.since += time.delta_secs();
+    if near.since < 0.15 && !settings.is_changed() {
+        return;
+    }
+    near.since = 0.0;
+    let Ok(camera) = cameras.single() else { return };
+    let at = camera.translation();
+    let field = &scene.field;
+    let none = bloom_core::bitset::BitSet::new(field.len() as u32);
+    let radius = near_distance(settings.quality);
+    let now: std::collections::HashSet<u32> = field
+        .query_radius(Vec2::new(at.x, at.z), radius, &none)
+        .into_iter()
+        .filter(|i| spawned.map.contains_key(i))
+        .collect();
+    let shadows = settings.quality.shadows();
+    for &i in now.difference(&near.set) {
+        let Some(&e) = spawned.map.get(&i) else {
+            continue;
+        };
+        if let Ok(mut mesh) = meshes.get_mut(e) {
+            mesh.0 = assets.plants[field.species(i)].clone();
+        }
+        if shadows {
+            commands.entity(e).remove::<bevy::pbr::NotShadowCaster>();
+        }
+    }
+    for &i in near.set.difference(&now) {
+        let Some(&e) = spawned.map.get(&i) else {
+            continue;
+        };
+        if let Ok(mut mesh) = meshes.get_mut(e) {
+            mesh.0 = assets.fars[field.species(i)].clone();
+        }
+        commands.entity(e).insert(bevy::pbr::NotShadowCaster);
+    }
+    near.set = now;
+}
+
+/// Give a mesh white vertex colours (if it has none) so the wind shader can
+/// read sway weights from their alpha.
+fn with_sway_colors(mesh: &mut Mesh) {
+    if mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_none() {
+        let n = mesh.count_vertices();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0f32, 1.0, 1.0, 1.0]; n]);
     }
 }
 
@@ -256,8 +407,7 @@ fn highlight(
     target: Res<LookTarget>,
     assets: Option<Res<FlowerAssets>>,
     mut spawned: ResMut<SpawnedFlowers>,
-    children: Query<&Children>,
-    mut bodies: Query<&mut MeshMaterial3d<StandardMaterial>, With<FlowerBody>>,
+    mut bodies: Query<&mut MeshMaterial3d<WindMaterial>, With<FlowerEntity>>,
 ) {
     let Some(assets) = assets else { return };
     let wanted: Vec<Entity> = target
@@ -269,13 +419,9 @@ fn highlight(
     if wanted == spawned.highlighted {
         return;
     }
-    let mut set = |root: Entity, material: &Handle<StandardMaterial>| {
-        if let Ok(kids) = children.get(root) {
-            for kid in kids.iter() {
-                if let Ok(mut m) = bodies.get_mut(kid) {
-                    m.0 = material.clone();
-                }
-            }
+    let mut set = |root: Entity, material: &Handle<WindMaterial>| {
+        if let Ok(mut m) = bodies.get_mut(root) {
+            m.0 = material.clone();
         }
     };
     for &old in spawned.highlighted.iter().filter(|e| !wanted.contains(e)) {

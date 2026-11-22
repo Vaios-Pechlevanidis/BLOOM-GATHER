@@ -49,5 +49,6 @@ pub fn build() -> App {
     ));
     #[cfg(debug_assertions)]
     app.add_plugins(crate::dev::SmokeTestPlugin);
+    app.add_plugins(crate::bench::BenchPlugin);
     app
 }

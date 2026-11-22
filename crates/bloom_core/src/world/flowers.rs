@@ -13,6 +13,7 @@ use std::f32::consts::TAU;
 
 use glam::{Vec2, Vec3};
 
+use super::grid::SpatialGrid as Grid;
 use super::layout::RegionLayout;
 use crate::bitset::BitSet;
 use crate::data::{GameData, RegionDef};
@@ -161,14 +162,12 @@ impl FlowerField {
             && p.distance(layout.spawn) >= SPAWN_CLEARANCE
             && layout.distance_to_path(p) >= layout.path_half_width + PATH_CLEARANCE
             && layout.terrain.normal_at(p).y >= MIN_GROUND_NORMAL_Y
-            && layout
-                .trees
-                .iter()
-                .all(|t| t.position.distance(p) >= t.trunk_radius + TREE_CLEARANCE)
-            && layout
-                .rocks
-                .iter()
-                .all(|r| r.position.distance(p) >= r.radius + ROCK_CLEARANCE)
+            && !layout.any_tree_near(p, 2.5, |t| {
+                t.position.distance(p) < t.trunk_radius + TREE_CLEARANCE
+            })
+            && !layout.any_rock_near(p, 2.0, |r| {
+                r.position.distance(p) < r.radius + ROCK_CLEARANCE
+            })
             && !layout.near_landmark(p, LANDMARK_CLEARANCE)
             && !layout.in_water(p, WATER_CLEARANCE)
             && !self.grid.any_within(p, spacing, &self.positions)
@@ -299,63 +298,6 @@ fn ray_sphere(origin: Vec3, dir: Vec3, center: Vec3, radius: f32) -> Option<f32>
 }
 
 /// Uniform grid of flower indices.
-#[derive(Debug, Clone)]
-struct Grid {
-    origin: Vec2,
-    cell: f32,
-    nx: usize,
-    nz: usize,
-    cells: Vec<Vec<u32>>,
-}
-
-impl Grid {
-    fn new(min: Vec2, max: Vec2, cell: f32) -> Self {
-        let size = max - min;
-        let nx = (size.x / cell).ceil().max(1.0) as usize;
-        let nz = (size.y / cell).ceil().max(1.0) as usize;
-        Self {
-            origin: min,
-            cell,
-            nx,
-            nz,
-            cells: vec![Vec::new(); nx * nz],
-        }
-    }
-
-    fn cell_of(&self, p: Vec2) -> (usize, usize) {
-        let g = (p - self.origin) / self.cell;
-        (
-            (g.x.floor().max(0.0) as usize).min(self.nx - 1),
-            (g.y.floor().max(0.0) as usize).min(self.nz - 1),
-        )
-    }
-
-    fn insert(&mut self, p: Vec2, i: u32) {
-        let (x, z) = self.cell_of(p);
-        self.cells[z * self.nx + x].push(i);
-    }
-
-    fn for_each_in_rect(&self, min: Vec2, max: Vec2, mut f: impl FnMut(u32)) {
-        let (x0, z0) = self.cell_of(min);
-        let (x1, z1) = self.cell_of(max);
-        for z in z0..=z1 {
-            for x in x0..=x1 {
-                for &i in &self.cells[z * self.nx + x] {
-                    f(i);
-                }
-            }
-        }
-    }
-
-    fn any_within(&self, p: Vec2, r: f32, positions: &[Vec2]) -> bool {
-        let mut found = false;
-        self.for_each_in_rect(p - Vec2::splat(r), p + Vec2::splat(r), |i| {
-            found |= positions[i as usize].distance_squared(p) < r * r;
-        });
-        found
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

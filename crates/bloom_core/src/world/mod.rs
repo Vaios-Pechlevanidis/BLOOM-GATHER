@@ -4,6 +4,7 @@
 pub mod collision;
 pub mod features;
 pub mod flowers;
+mod grid;
 pub mod layout;
 pub mod terrain;
 

@@ -49,7 +49,11 @@ pub fn load_content(
     mut next_state: ResMut<NextState<AppState>>,
     mut exit: EventWriter<AppExit>,
 ) {
-    match GameData::builtin() {
+    let data = match crate::bench::requested() {
+        Some(flowers) => bloom_core::bench::benchmark_data(flowers),
+        None => GameData::builtin(),
+    };
+    match data {
         Ok(data) => {
             info!(
                 "Loaded game data v{}: {} species, {} tools, {} recipes, {} regions, {} flowers",

@@ -16,6 +16,7 @@ use super::collision::{BoxCollider, CircleCollider, ColliderSet};
 use super::features::{
     self, Bridge, Gate, GateSide, Water, GATE_ARRIVAL_DEPTH, GATE_HALF_WIDTH, GATE_TRIGGER_DEPTH,
 };
+use super::grid::SpatialGrid;
 use super::terrain::{FlattenArea, Terrain};
 use crate::data::{RegionDef, WorldConfig};
 use crate::rng::SplitMix64;
@@ -126,7 +127,16 @@ pub struct RegionLayout {
     pub water: Vec<Water>,
     pub bridges: Vec<Bridge>,
     pub colliders: ColliderSet,
+    /// Footpath segments by cell (for `distance_to_path`).
+    path_index: SpatialGrid,
+    trees_index: SpatialGrid,
+    rocks_index: SpatialGrid,
 }
+
+/// `distance_to_path` is exact below this distance; beyond it, it may
+/// report just this value (every caller asks about the path's surroundings).
+pub const PATH_NEAR: f32 = 8.0;
+const INDEX_CELL: f32 = 8.0;
 
 /// How far the terrain (and scenery) extends beyond the region edge.
 pub const OUTSKIRTS: f32 = 30.0;
@@ -252,7 +262,11 @@ impl RegionLayout {
             water,
             bridges: Vec::new(),
             colliders: ColliderSet::default(),
+            path_index: SpatialGrid::new(Vec2::ZERO, Vec2::ONE, 1.0),
+            trees_index: SpatialGrid::new(Vec2::ZERO, Vec2::ONE, 1.0),
+            rocks_index: SpatialGrid::new(Vec2::ZERO, Vec2::ONE, 1.0),
         };
+        layout.build_indexes();
         layout.bridges = layout
             .water
             .iter()
@@ -367,12 +381,42 @@ impl RegionLayout {
         }
     }
 
-    /// Distance from `p` to the footpath centre line.
+    /// Distance from `p` to the footpath centre line: exact up to
+    /// [`PATH_NEAR`] metres, at least `PATH_NEAR` beyond that.
     pub fn distance_to_path(&self, p: Vec2) -> f32 {
-        self.path
-            .windows(2)
-            .map(|w| distance_to_segment(p, w[0], w[1]))
-            .fold(f32::INFINITY, f32::min)
+        self.path_index
+            .at(p)
+            .iter()
+            .map(|&k| distance_to_segment(p, self.path[k as usize], self.path[k as usize + 1]))
+            .fold(PATH_NEAR, f32::min)
+    }
+
+    /// Spatial indexes over the whole terrain (region and outskirts). The
+    /// path's are filled now; trees and rocks as they are placed.
+    fn build_indexes(&mut self) {
+        let extent = self.half_size + Vec2::splat(OUTSKIRTS);
+        let grid = || SpatialGrid::new(-extent, extent, INDEX_CELL);
+        self.path_index = grid();
+        self.trees_index = grid();
+        self.rocks_index = grid();
+        for (k, w) in self.path.windows(2).enumerate() {
+            let pad = Vec2::splat(PATH_NEAR);
+            self.path_index
+                .insert_rect(w[0].min(w[1]) - pad, w[0].max(w[1]) + pad, k as u32);
+        }
+    }
+
+    /// Whether `test` holds for any tree within `r` metres of `p` (by trunk
+    /// position).
+    pub fn any_tree_near(&self, p: Vec2, r: f32, mut test: impl FnMut(&TreeProp) -> bool) -> bool {
+        self.trees_index
+            .any_near(p, r, |i| test(&self.trees[i as usize]))
+    }
+
+    /// Whether `test` holds for any rock within `r` metres of `p`.
+    pub fn any_rock_near(&self, p: Vec2, r: f32, mut test: impl FnMut(&RockProp) -> bool) -> bool {
+        self.rocks_index
+            .any_near(p, r, |i| test(&self.rocks[i as usize]))
     }
 
     pub fn in_bounds(&self, p: Vec2, inset: f32) -> bool {
@@ -453,14 +497,12 @@ impl RegionLayout {
                 || self.near_landmark(p, 3.0)
                 || self.distance_to_path(p) < TREE_PATH_CLEARANCE
                 || self.in_water(p, 1.5)
-                || self
-                    .trees
-                    .iter()
-                    .any(|t| t.position.distance(p) < TREE_SPACING)
+                || self.any_tree_near(p, TREE_SPACING, |t| t.position.distance(p) < TREE_SPACING)
             {
                 continue;
             }
             let tree = self.make_tree(rng, p, min_h, max_h);
+            self.trees_index.insert(p, self.trees.len() as u32);
             self.trees.push(tree);
         }
     }
@@ -521,17 +563,15 @@ impl RegionLayout {
                 || self.near_landmark(p, 1.2)
                 || self.distance_to_path(p) < ROCK_PATH_CLEARANCE
                 || self.in_water(p, 0.3)
-                || self.trees.iter().any(|t| t.position.distance(p) < 3.0)
-                || self
-                    .rocks
-                    .iter()
-                    .any(|r| r.position.distance(p) < ROCK_SPACING)
+                || self.any_tree_near(p, 3.0, |t| t.position.distance(p) < 3.0)
+                || self.any_rock_near(p, ROCK_SPACING, |r| r.position.distance(p) < ROCK_SPACING)
             {
                 continue;
             }
             // Mostly small stones, occasionally a boulder.
             let u = rng.next_f32();
             let radius = 0.3 + 1.0 * u * u;
+            self.rocks_index.insert(p, self.rocks.len() as u32);
             self.rocks.push(RockProp {
                 position: p,
                 base: self.terrain.height_at(p),
