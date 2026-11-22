@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use super::settings::SettingsScreen;
 use super::theme::{self, font, palette, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::game::{AppState, PlayState};
 use crate::input::Bindings;
 
@@ -119,7 +119,8 @@ fn toggle_with_key(
 }
 
 fn handle_buttons(
-    buttons: Query<(&Interaction, &PauseAction), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    buttons: Query<&PauseAction>,
     keys: Res<ButtonInput<KeyCode>>,
     mut screen: ResMut<SettingsScreen>,
     mut play_state: ResMut<NextState<PlayState>>,
@@ -129,8 +130,8 @@ fn handle_buttons(
     if !screen.open && keys.just_pressed(KeyCode::KeyO) {
         screen.show();
     }
-    for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed || screen.open {
+    for action in clicks.read().filter_map(|c| buttons.get(c.0).ok()) {
+        if screen.open {
             continue;
         }
         match *action {

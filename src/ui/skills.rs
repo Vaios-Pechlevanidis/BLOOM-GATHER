@@ -11,7 +11,7 @@ use bloom_core::SkillStatus;
 
 use super::effects::change_lines;
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, EventsForwarded, GameEventMsg, PlayState, Session};
 use crate::input::Bindings;
@@ -210,7 +210,8 @@ fn learn(
 }
 
 fn buttons(
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     session: Option<ResMut<Session>>,
     mut view: ResMut<TreeView>,
     mut next: ResMut<NextState<PlayState>>,
@@ -218,10 +219,7 @@ fn buttons(
     mut toasts: MessageWriter<Toast>,
 ) {
     let Some(mut session) = session else { return };
-    for (interaction, act) in &pressed {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for act in clicks.read().filter_map(|c| pressed.get(c.0).ok()) {
         match *act {
             Act::Select(s) => {
                 view.selected = s;
@@ -429,7 +427,8 @@ fn skill_node(col: &mut ChildSpawnerCommands, session: &Session, skill: usize, s
         palette::BEIGE
     };
     col.spawn((
-        Button,
+        super::widgets::Button,
+        bevy::picking::hover::Hovered::default(),
         Act::Select(skill),
         Node {
             flex_direction: FlexDirection::Column,

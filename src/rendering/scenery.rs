@@ -453,7 +453,7 @@ fn spawn_gate(
                     color: Color::srgb(1.0, 0.82, 0.55),
                     intensity: 60_000.0,
                     range: 10.0,
-                    shadows_enabled: false,
+                    shadow_maps_enabled: false,
                     ..default()
                 },
                 Transform::from_xyz(0.0, 2.6, 0.4),
@@ -1128,7 +1128,7 @@ fn pulse_shafts(
     let Some((shaft, handle)) = shafts.iter().next() else {
         return;
     };
-    if let Some(m) = materials.get_mut(&handle.0) {
+    if let Some(mut m) = materials.get_mut(&handle.0) {
         let a = 0.14 + 0.04 * (time.elapsed_secs() * 0.4 + shaft.phase).sin();
         m.base_color = m.base_color.with_alpha(a);
     }

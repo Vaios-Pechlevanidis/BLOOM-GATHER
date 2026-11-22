@@ -81,7 +81,7 @@ fn spawn_landmarks(
                             color: Color::srgb(1.0, 0.8, 0.52),
                             intensity: 45_000.0,
                             range: 9.0,
-                            shadows_enabled: false,
+                            shadow_maps_enabled: false,
                             ..default()
                         },
                         Transform::from_xyz(0.0, 2.0, 0.4),
@@ -97,7 +97,7 @@ fn spawn_landmarks(
                         color: Color::srgb(1.0, 0.86, 0.66),
                         intensity: 90_000.0,
                         range: 9.0,
-                        shadows_enabled: false,
+                        shadow_maps_enabled: false,
                         ..default()
                     },
                     Transform::from_xyz(0.0, 2.35, -0.6),

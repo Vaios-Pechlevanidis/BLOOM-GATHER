@@ -173,7 +173,7 @@ fn spawn_banner(mut commands: Commands) {
                 b.spawn((
                     BannerDetail,
                     theme::text("", font::CAPTION, palette::INK_SOFT),
-                    TextLayout::new_with_justify(Justify::Center),
+                    TextLayout::justify(Justify::Center),
                 ));
             });
         });

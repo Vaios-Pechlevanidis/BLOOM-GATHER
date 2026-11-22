@@ -155,7 +155,7 @@ fn spawn_viewmodel(
                 ..default()
             },
             // Same HDR mode as the world camera it draws over.
-            bevy::render::view::Hdr,
+            bevy::camera::Hdr,
             Projection::Perspective(PerspectiveProjection {
                 fov: 62f32.to_radians(),
                 near: 0.01,

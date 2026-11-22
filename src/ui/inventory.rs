@@ -12,7 +12,7 @@ use bloom_core::data::Rarity;
 
 use super::effects::change_lines;
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, PlayState, Session};
 use crate::input::Bindings;
@@ -377,17 +377,15 @@ fn tab_keys(
 const TILES_PER_ROW: isize = 4;
 
 fn handle_buttons(
-    buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    buttons: Query<&Action>,
     mut view: ResMut<View>,
     session: Option<ResMut<Session>>,
     mut next: ResMut<NextState<PlayState>>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
     let Some(mut session) = session else { return };
-    for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for action in clicks.read().filter_map(|c| buttons.get(c.0).ok()) {
         match *action {
             Action::Sort(sort) => {
                 view.sort = sort;

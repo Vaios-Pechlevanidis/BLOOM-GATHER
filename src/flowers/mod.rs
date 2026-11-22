@@ -9,6 +9,7 @@
 
 pub mod models;
 mod sparkles;
+mod sprites;
 
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ impl Plugin for FlowersPlugin {
             .add_systems(
                 Update,
                 (
-                    (ensure_assets, sync_flowers, level_of_detail).chain(),
+                    (ensure_assets, sync_flowers, level_of_detail, face_player).chain(),
                     highlight,
                     start_harvest_animation.after(EventsForwarded),
                     animate_harvest,
@@ -53,6 +54,8 @@ pub struct MemoryBloom {
     built: Option<usize>,
     entities: Vec<Entity>,
     material: Option<Handle<StandardMaterial>>,
+    /// Ghost materials for species drawn from a picture.
+    pictured: HashMap<usize, Handle<StandardMaterial>>,
     orbs: HashMap<usize, Handle<StandardMaterial>>,
 }
 
@@ -80,9 +83,12 @@ struct FlowerAssets {
     /// Distant stand-ins, per species.
     fars: Vec<Handle<Mesh>>,
     glows: Vec<Option<Handle<Mesh>>>,
-    material: Handle<WindMaterial>,
-    highlight: Handle<WindMaterial>,
+    /// Per species; procedural species share one handle.
+    materials: Vec<Handle<WindMaterial>>,
+    highlights: Vec<Handle<WindMaterial>>,
     glow_materials: Vec<Option<Handle<WindMaterial>>>,
+    /// The painted picture, for species drawn from one (`sprites`).
+    pictures: Vec<Option<Handle<Image>>>,
     particle: Handle<Mesh>,
     particle_materials: Vec<Handle<StandardMaterial>>,
 }
@@ -91,13 +97,18 @@ struct FlowerAssets {
 #[derive(Component)]
 pub struct FlowerEntity;
 
+/// A flower drawn from a picture: its card turns to face the player.
+#[derive(Component)]
+struct Billboard;
+
 /// Which flowers are currently spawned, by index.
 #[derive(Resource, Default)]
 pub struct SpawnedFlowers {
     /// (session generation, region) the entities were built for.
     key: Option<(u64, usize)>,
     pub map: HashMap<u32, Entity>,
-    highlighted: Vec<Entity>,
+    /// Highlighted flowers and their species.
+    highlighted: Vec<(Entity, usize)>,
 }
 
 #[derive(Component)]
@@ -118,11 +129,16 @@ struct Particle {
 
 const HARVEST_SECS: f32 = 0.42;
 
+/// Lights a looked-at flower gently from within.
+const HIGHLIGHT: LinearRgba = LinearRgba::new(0.10, 0.09, 0.05, 1.0);
+
+#[allow(clippy::too_many_arguments)]
 fn ensure_assets(
     mut commands: Commands,
     assets: Option<Res<FlowerAssets>>,
     content: Option<Res<Content>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut wind_materials: ResMut<Assets<WindMaterial>>,
 ) {
@@ -132,12 +148,79 @@ fn ensure_assets(
     // Flowers lean in the wind: rooted at the ground, freest at the bloom.
     let wind = || Wind::new(0.06, 1.7, 0.25);
     let started = std::time::Instant::now();
+    // Procedural models are vertex-coloured and all share one material
+    // (and one highlight), so they batch together.
+    let shared = wind_materials.add(wind_material(
+        StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.72,
+            reflectance: 0.2,
+            ..default()
+        },
+        wind(),
+    ));
+    // Subtle highlight: the same vertex colours, gently lit from within.
+    let shared_highlight = wind_materials.add(wind_material(
+        StandardMaterial {
+            base_color: Color::WHITE,
+            emissive: HIGHLIGHT,
+            perceptual_roughness: 0.6,
+            ..default()
+        },
+        wind(),
+    ));
     let mut plants = Vec::new();
     let mut fars = Vec::new();
     let mut glows = Vec::new();
     let mut glow_materials = Vec::new();
+    let mut bodies = Vec::new();
+    let mut highlights = Vec::new();
+    let mut pictures = Vec::new();
     let mut particle_materials = Vec::new();
     for species in &content.species {
+        let petal = color(species.petal_color);
+        particle_materials.push(materials.add(StandardMaterial {
+            base_color: petal,
+            perceptual_roughness: 0.7,
+            ..default()
+        }));
+        if let Some(sprite) = sprites::load(species) {
+            // A painted picture on a card: cheap enough to serve near and
+            // far alike.
+            let mut plant = sprite.mesh;
+            sway_by_height(&mut plant, 0.0, species.height, 1.0);
+            let plant = meshes.add(plant);
+            plants.push(plant.clone());
+            fars.push(plant);
+            glows.push(None);
+            glow_materials.push(None);
+            let picture = images.add(sprite.image);
+            let glow = sprite.glow.map(|g| images.add(g));
+            let base = StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(picture.clone()),
+                alpha_mode: AlphaMode::Mask(sprites::CUTOFF),
+                emissive: if glow.is_some() {
+                    petal.to_linear() * (species.glow.max(0.2) * 4.0)
+                } else {
+                    LinearRgba::BLACK
+                },
+                emissive_texture: glow,
+                perceptual_roughness: 0.8,
+                reflectance: 0.2,
+                ..default()
+            };
+            highlights.push(wind_materials.add(wind_material(
+                StandardMaterial {
+                    emissive: base.emissive + HIGHLIGHT,
+                    ..base.clone()
+                },
+                wind(),
+            )));
+            bodies.push(wind_materials.add(wind_material(base, wind())));
+            pictures.push(Some(picture));
+            continue;
+        }
         let model = models::build(species);
         let mut plant = model.plant;
         let mut far = models::build_far(species, &plant);
@@ -150,7 +233,6 @@ fn ensure_assets(
             sway_by_height(&mut m, 0.0, species.height, 1.0);
             meshes.add(m)
         }));
-        let petal = color(species.petal_color);
         glow_materials.push((species.glow > 0.0).then(|| {
             wind_materials.add(wind_material(
                 StandardMaterial {
@@ -162,39 +244,19 @@ fn ensure_assets(
                 wind(),
             ))
         }));
-        particle_materials.push(materials.add(StandardMaterial {
-            base_color: petal,
-            perceptual_roughness: 0.7,
-            ..default()
-        }));
+        bodies.push(shared.clone());
+        highlights.push(shared_highlight.clone());
+        pictures.push(None);
     }
-    let material = wind_materials.add(wind_material(
-        StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 0.72,
-            reflectance: 0.2,
-            ..default()
-        },
-        wind(),
-    ));
-    // Subtle highlight: the same vertex colours, gently lit from within.
-    let highlight = wind_materials.add(wind_material(
-        StandardMaterial {
-            base_color: Color::WHITE,
-            emissive: LinearRgba::new(0.10, 0.09, 0.05, 1.0),
-            perceptual_roughness: 0.6,
-            ..default()
-        },
-        wind(),
-    ));
     let triangles: usize = plants
         .iter()
         .filter_map(|h| meshes.get(h))
         .map(|m| m.indices().map_or(0, |i| i.len() / 3))
         .sum();
     info!(
-        "Built {} flower models in {:.1} ms ({} triangles on average)",
+        "Built {} flower models ({} from pictures) in {:.1} ms ({} triangles on average)",
         plants.len(),
+        pictures.iter().flatten().count(),
         started.elapsed().as_secs_f64() * 1000.0,
         triangles / plants.len().max(1)
     );
@@ -202,9 +264,10 @@ fn ensure_assets(
         plants,
         fars,
         glows,
-        material,
-        highlight,
+        materials: bodies,
+        highlights,
         glow_materials,
+        pictures,
         particle: meshes.add(models::petal_particle()),
         particle_materials,
     });
@@ -239,10 +302,13 @@ fn spawn_flower(
                 .with_scale(Vec3::splat(field.scale(i))),
             // Far stand-in until the level-of-detail pass sees it near.
             Mesh3d(assets.fars[species].clone()),
-            MeshMaterial3d(assets.material.clone()),
+            MeshMaterial3d(assets.materials[species].clone()),
             bevy::light::NotShadowCaster,
         ))
         .id();
+    if assets.pictures[species].is_some() {
+        commands.entity(root).insert(Billboard);
+    }
     if let (Some(mesh), Some(mat)) = (&assets.glows[species], &assets.glow_materials[species]) {
         commands
             .entity(root)
@@ -394,6 +460,29 @@ fn level_of_detail(
     near.set = now;
 }
 
+/// Turn every pictured flower's card towards the player (around the
+/// upright only, so the plant keeps standing). Flowers being picked spin
+/// on their own.
+fn face_player(
+    cameras: Query<&GlobalTransform, With<MainCamera>>,
+    mut cards: Query<&mut Transform, (With<Billboard>, Without<Harvesting>)>,
+) {
+    let Ok(camera) = cameras.single() else { return };
+    let eye = camera.translation();
+    for mut transform in &mut cards {
+        let to_eye = eye - transform.translation;
+        if to_eye.x.abs() + to_eye.z.abs() < 1e-4 {
+            continue;
+        }
+        let facing = Quat::from_rotation_y(to_eye.x.atan2(to_eye.z));
+        // Only touch flowers that actually need turning (change detection
+        // and transform propagation stay cheap while standing still).
+        if transform.rotation.angle_between(facing) > 0.002 {
+            transform.rotation = facing;
+        }
+    }
+}
+
 /// Give a mesh white vertex colours (if it has none) so the wind shader can
 /// read sway weights from their alpha.
 fn with_sway_colors(mesh: &mut Mesh) {
@@ -406,15 +495,18 @@ fn with_sway_colors(mesh: &mut Mesh) {
 fn highlight(
     target: Res<LookTarget>,
     assets: Option<Res<FlowerAssets>>,
+    scene: Option<Res<RegionScene>>,
     mut spawned: ResMut<SpawnedFlowers>,
     mut bodies: Query<&mut MeshMaterial3d<WindMaterial>, With<FlowerEntity>>,
 ) {
-    let Some(assets) = assets else { return };
-    let wanted: Vec<Entity> = target
+    let (Some(assets), Some(scene)) = (assets, scene) else {
+        return;
+    };
+    let wanted: Vec<(Entity, usize)> = target
         .flower
         .iter()
         .chain(&target.group)
-        .filter_map(|i| spawned.map.get(i).copied())
+        .filter_map(|&i| Some((*spawned.map.get(&i)?, scene.field.species(i))))
         .collect();
     if wanted == spawned.highlighted {
         return;
@@ -424,11 +516,11 @@ fn highlight(
             m.0 = material.clone();
         }
     };
-    for &old in spawned.highlighted.iter().filter(|e| !wanted.contains(e)) {
-        set(old, &assets.material);
+    for &(old, species) in spawned.highlighted.iter().filter(|e| !wanted.contains(e)) {
+        set(old, &assets.materials[species]);
     }
-    for &new in &wanted {
-        set(new, &assets.highlight);
+    for &(new, species) in &wanted {
+        set(new, &assets.highlights[species]);
     }
     spawned.highlighted = wanted;
 }
@@ -459,7 +551,7 @@ fn start_harvest_animation(
         let Some(entity) = spawned.map.remove(&flower) else {
             continue;
         };
-        spawned.highlighted.retain(|e| *e != entity);
+        spawned.highlighted.retain(|(e, _)| *e != entity);
         let Ok(transform) = flowers.get(entity) else {
             continue;
         };
@@ -598,6 +690,21 @@ fn sync_memory(
                 })
             })
             .clone();
+        // A picture is cut out by its own alpha, faded like the rest.
+        let ghost = match &assets.pictures[species] {
+            Some(picture) => memory
+                .pictured
+                .entry(species)
+                .or_insert_with(|| {
+                    let faded = materials.get(&material).cloned().unwrap_or_default();
+                    materials.add(StandardMaterial {
+                        base_color_texture: Some(picture.clone()),
+                        ..faded
+                    })
+                })
+                .clone(),
+            None => material.clone(),
+        };
         let bloom_height = (field.pick_sphere(i).0.y - ground.y) / field.scale(i);
         let e = commands
             .spawn((
@@ -607,7 +714,7 @@ fn sync_memory(
                     scale: field.scale(i) * 1.3,
                 },
                 Mesh3d(assets.plants[species].clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(ghost),
                 Transform::from_translation(ground)
                     .with_rotation(Quat::from_rotation_y(field.yaw(i)))
                     .with_scale(Vec3::splat(0.001)),
@@ -621,6 +728,9 @@ fn sync_memory(
                 )],
             ))
             .id();
+        if assets.pictures[species].is_some() {
+            commands.entity(e).insert(Billboard);
+        }
         memory.entities.push(e);
     }
 }

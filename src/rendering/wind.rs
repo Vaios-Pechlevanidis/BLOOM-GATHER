@@ -1,5 +1,5 @@
 //! The wind material: a standard PBR material whose vertex shader sways
-//! vertices according to their vertex-colour alpha (see `wind.wgsl`).
+//! vertices according to their vertex-colour alpha (see `wind.wesl`).
 
 use bevy::asset::embedded_asset;
 use bevy::mesh::VertexAttributeValues;
@@ -14,7 +14,7 @@ pub struct WindPlugin;
 
 impl Plugin for WindPlugin {
     fn build(&self, app: &mut App) {
-        embedded_asset!(app, "wind.wgsl");
+        embedded_asset!(app, "wind.wesl");
         app.add_plugins(MaterialPlugin::<WindMaterial>::default())
             .insert_resource(Weather { wind: 1.0 })
             .add_systems(Update, breeze);
@@ -72,7 +72,7 @@ impl Wind {
 
 impl MaterialExtension for Wind {
     fn vertex_shader() -> ShaderRef {
-        "embedded://bloom_and_gather/rendering/wind.wgsl".into()
+        "embedded://bloom_and_gather/rendering/wind.wesl".into()
     }
 }
 

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use super::settings::SettingsScreen;
 use super::theme::{self, font, palette, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::app::{GAME_TITLE, GAME_VERSION};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{start_new_game, AppState, Content, Saves, Session, SessionSet};
@@ -191,7 +191,8 @@ fn show_panel(panels: &mut Query<(&Panel, &mut Node)>, which: Panel) {
 
 fn handle_buttons(
     mut commands: Commands,
-    buttons: Query<(&Interaction, &MenuAction), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    buttons: Query<&MenuAction>,
     mut panels: Query<(&Panel, &mut Node)>,
     content: Res<Content>,
     session: Option<Res<Session>>,
@@ -201,8 +202,8 @@ fn handle_buttons(
     mut exit: MessageWriter<AppExit>,
     mut screen: ResMut<SettingsScreen>,
 ) {
-    for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed || screen.open {
+    for action in clicks.read().filter_map(|c| buttons.get(c.0).ok()) {
+        if screen.open {
             continue;
         }
         sfx.write(PlaySfx::new(Sfx::Click));

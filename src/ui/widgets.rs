@@ -1,6 +1,15 @@
 //! Reusable UI widgets.
+//!
+//! Buttons are Bevy's headless `ui_widgets::Button`: hovering is tracked by
+//! `Hovered`, pressing by `Pressed`, and a click (press and release on the
+//! button) triggers `Activate`, which is passed on as a [`Clicked`] message
+//! so screens can read clicks like any other message.
 
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
+use bevy::ui::Pressed;
+use bevy::ui_widgets::Activate;
+pub use bevy::ui_widgets::Button;
 
 use super::theme::{font, palette, radius, space, TRANSITION_RATE};
 
@@ -8,8 +17,19 @@ pub struct WidgetsPlugin;
 
 impl Plugin for WidgetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, animate_buttons);
+        app.add_message::<Clicked>()
+            .add_observer(forward_clicks)
+            .add_systems(Update, animate_buttons);
     }
+}
+
+/// A button (any entity with `Button`) was clicked this frame. Screens look
+/// up their own action component on the entity.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Clicked(pub Entity);
+
+fn forward_clicks(activate: On<Activate>, mut clicked: MessageWriter<Clicked>) {
+    clicked.write(Clicked(activate.entity));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +44,7 @@ pub enum ButtonVariant {
     Small,
 }
 
-/// Colours a button eases between depending on its [`Interaction`].
+/// Colours a button eases between when hovered and pressed.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct ButtonPalette {
     pub normal: Color,
@@ -96,6 +116,7 @@ pub fn spawn_button(
     parent
         .spawn((
             Button,
+            Hovered::default(),
             Node {
                 border_radius: BorderRadius::all(Val::Px(radius::PILL)),
                 ..variant.node()
@@ -115,9 +136,9 @@ pub fn spawn_button(
         .with_children(|button| {
             button.spawn((
                 Text::new(label),
-                TextLayout::new_with_no_wrap(),
+                TextLayout::no_wrap(),
                 TextFont {
-                    font_size,
+                    font_size: FontSize::Px(font_size),
                     ..default()
                 },
                 TextColor(text_color),
@@ -129,14 +150,16 @@ pub fn spawn_button(
 /// Uses real time so menus stay responsive while the game is paused.
 fn animate_buttons(
     time: Res<Time<Real>>,
-    mut buttons: Query<(&Interaction, &ButtonPalette, &mut BackgroundColor)>,
+    mut buttons: Query<(Has<Pressed>, &Hovered, &ButtonPalette, &mut BackgroundColor)>,
 ) {
     let k = 1.0 - (-TRANSITION_RATE * time.delta_secs()).exp();
-    for (interaction, colors, mut background) in &mut buttons {
-        let target = match interaction {
-            Interaction::Pressed => colors.pressed,
-            Interaction::Hovered => colors.hovered,
-            Interaction::None => colors.normal,
+    for (pressed, hovered, colors, mut background) in &mut buttons {
+        let target = if pressed {
+            colors.pressed
+        } else if hovered.get() {
+            colors.hovered
+        } else {
+            colors.normal
         };
         let current = background.0.to_srgba();
         let next = current.mix(&target.to_srgba(), k);

@@ -305,6 +305,10 @@ type SmokeWorld<'a> = (
     Res<'a, Content>,
     Res<'a, Saves>,
 );
+type SmokeButtons<'w, 's> = (
+    Query<'w, 's, (Entity, &'static Children), With<bevy::ui_widgets::Button>>,
+    Query<'w, 's, &'static Text>,
+);
 type SmokeSettings<'a> = (
     Res<'a, crate::ui::SettingsScreen>,
     Res<'a, Settings>,
@@ -322,6 +326,7 @@ fn drive(
     (mut session_mut, scene, content, saves): SmokeWorld<'_>,
     (spawned, target, diagnostics, selected): SmokeView<'_>,
     (settings_screen, settings, bindings): SmokeSettings<'_>,
+    (buttons, texts): SmokeButtons,
     windows: Query<&CursorOptions, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
     mut exit: MessageWriter<AppExit>,
@@ -1248,11 +1253,14 @@ fn drive(
                     format!("{n} picked in save, {live} live"),
                 );
                 smoke.shot(&mut commands, "06_paused");
-                smoke.tap(KeyCode::Escape);
+                // Click "Resume" the way a mouse click does (the button
+                // widget's Activate event).
+                let clicked = click_button(&mut commands, &buttons, &texts, "Resume");
+                smoke.check("found the Resume button", clicked, clicked);
                 0.4
             }
             14 => {
-                smoke.expect("Esc resumes", play_state, PlayState::Playing);
+                smoke.expect("clicking Resume resumes", play_state, PlayState::Playing);
                 next_app.set(AppState::MainMenu);
                 0.8
             }
@@ -1499,6 +1507,25 @@ fn complete_game(game: &bloom_core::Game) -> Result<bloom_core::Game, String> {
     }
     g.tick(100.0);
     Ok(g)
+}
+
+/// Trigger `Activate` on the button whose label is `label` (what a mouse
+/// click on it does). False if there is no such button.
+fn click_button(
+    commands: &mut Commands,
+    buttons: &Query<(Entity, &Children), With<bevy::ui_widgets::Button>>,
+    texts: &Query<&Text>,
+    label: &str,
+) -> bool {
+    let Some(entity) = buttons.iter().find_map(|(e, kids)| {
+        kids.iter()
+            .any(|k| texts.get(k).is_ok_and(|t| t.0 == label))
+            .then_some(e)
+    }) else {
+        return false;
+    };
+    commands.trigger(bevy::ui_widgets::Activate { entity });
+    true
 }
 
 /// After a journey: in the right region, playing, standing on the ground.

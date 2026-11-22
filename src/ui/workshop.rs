@@ -19,7 +19,7 @@ use bloom_core::world::InteractableKind;
 use bloom_core::RecipeStatus;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{EventsForwarded, GameEventMsg, PlayState, Session};
 use crate::input::Bindings;
@@ -282,7 +282,8 @@ fn capitalise(s: &str) -> String {
 fn buttons(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     session: Option<ResMut<Session>>,
     mut bench: ResMut<Bench>,
     mut next: ResMut<NextState<PlayState>>,
@@ -294,10 +295,7 @@ fn buttons(
         bind(&mut session, &bench, &mut sfx, &mut toasts);
         bench.stale = true;
     }
-    for (interaction, act) in &pressed {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for act in clicks.read().filter_map(|c| pressed.get(c.0).ok()) {
         match *act {
             Act::Tab(tab) => bench.tab = tab,
             Act::Select(r) => {
@@ -463,7 +461,8 @@ fn rebuild(
                     let known = session.is_recipe_discovered(i);
                     let active = i == selected;
                     list.spawn((
-                        Button,
+                        super::widgets::Button,
+                        bevy::picking::hover::Hovered::default(),
                         Act::Select(i),
                         Node {
                             padding: UiRect::axes(Val::Px(space::MD), Val::Px(6.0)),

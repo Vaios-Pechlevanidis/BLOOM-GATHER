@@ -17,7 +17,7 @@ use bloom_core::world::{FlowerField, GateSide, LandmarkKind, RegionLayout};
 use bloom_core::Game;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{ActiveRegion, AppState, EventsForwarded, GameEventMsg, PlayState, Session};
 use crate::input::Bindings;
@@ -443,7 +443,7 @@ fn refresh_images(
         let field = session.region(region).field.clone();
         let img = &images.images[&region];
         let px = draw_flowers(&session.game, region, &field, img);
-        if let Some(image) = assets.get_mut(&img.handle) {
+        if let Some(mut image) = assets.get_mut(&img.handle) {
             image.data = Some(px);
         }
         if let Some(img) = images.images.get_mut(&region) {
@@ -607,7 +607,8 @@ fn go(
 
 #[allow(clippy::too_many_arguments)]
 fn buttons(
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     session: Res<Session>,
     mut view: ResMut<MapView>,
     active: Res<ActiveRegion>,
@@ -615,10 +616,7 @@ fn buttons(
     mut next: ResMut<NextState<PlayState>>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
-    for (interaction, act) in &pressed {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for act in clicks.read().filter_map(|c| pressed.get(c.0).ok()) {
         match *act {
             Act::Select(r) => {
                 sfx.write(PlaySfx::new(Sfx::Click));
@@ -746,7 +744,8 @@ fn region_card(row: &mut ChildSpawnerCommands, game: &Game, r: usize, here: bool
     let left = game.remaining_in_region(r);
     let accent = color(def.palette.accent);
     row.spawn((
-        Button,
+        super::widgets::Button,
+        bevy::picking::hover::Hovered::default(),
         Act::Select(r),
         Node {
             flex_direction: FlexDirection::Column,

@@ -1,9 +1,9 @@
 //! The single 3D camera. In game it is driven by the player (see
 //! `player`); behind the title screen it slowly circles the region.
 
+use bevy::camera::Hdr;
 use bevy::post_process::bloom::{Bloom, BloomCompositeMode, BloomPrefilter};
 use bevy::prelude::*;
-use bevy::render::view::Hdr;
 
 use crate::game::{AppState, RegionScene, Settings};
 

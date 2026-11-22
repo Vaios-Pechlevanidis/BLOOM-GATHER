@@ -277,7 +277,9 @@ G4 Bevy upgrade · art pass (painted models need real 3D assets)
 ## Temporary assets (replace before release)
 
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
-- Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
+- Flowers: procedural models in `src/flowers/models.rs`; a painted picture in `assets/flowers/<id>.png`
+  replaces one per species (a card turned to the player, `src/flowers/sprites.rs`; format in `assets/flowers/README.md`).
+  Pictures so far: daisy
 - Sound effects, footsteps, ambience and music: synthesised in `src/audio.rs`
 - Landmarks, workshop cottage and furniture, bouquets, glints, butterflies, bees, clouds: procedural meshes
 - Gates, bridges, lanterns, water surfaces, mushrooms, glow plants, light shafts, petals, fireflies,

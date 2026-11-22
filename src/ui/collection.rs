@@ -8,7 +8,7 @@ use bloom_core::data::FlowerSpecies;
 use bloom_core::Game;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, PlayState, Session};
 use crate::input::Bindings;
@@ -48,11 +48,12 @@ fn toggle(
 }
 
 fn close_button(
-    pressed: Query<&Interaction, (Changed<Interaction>, With<Close>)>,
+    mut clicks: MessageReader<Clicked>,
+    closes: Query<(), With<Close>>,
     mut next: ResMut<NextState<PlayState>>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
-    if pressed.iter().any(|i| *i == Interaction::Pressed) {
+    if clicks.read().any(|c| closes.contains(c.0)) {
         sfx.write(PlaySfx::new(Sfx::Click));
         next.set(PlayState::Playing);
     }

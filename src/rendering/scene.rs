@@ -58,8 +58,8 @@ fn apply_shadows(
     }
     let q = settings.quality;
     for (mut light, mut config) in &mut lights {
-        if light.shadows_enabled != q.shadows() {
-            light.shadows_enabled = q.shadows();
+        if light.shadow_maps_enabled != q.shadows() {
+            light.shadow_maps_enabled = q.shadows();
         }
         if config.bounds.len() != q.shadow_cascades() {
             *config = cascades(q);
@@ -160,7 +160,7 @@ fn ensure_scene(
         DirectionalLight {
             color: color(air.sun_color),
             illuminance: air.sun_illuminance,
-            shadows_enabled: settings.quality.shadows(),
+            shadow_maps_enabled: settings.quality.shadows(),
             ..default()
         },
         Transform::from_translation(sun_at).looking_at(Vec3::ZERO, Vec3::Y),

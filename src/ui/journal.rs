@@ -9,7 +9,7 @@ use bloom_core::game::GameEvent;
 use bloom_core::ToolStatus;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, EventsForwarded, GameEventMsg, PlayState, Session};
 use crate::input::Bindings;
@@ -177,16 +177,14 @@ fn keys(keys: Res<ButtonInput<KeyCode>>, bindings: Res<Bindings>, mut view: ResM
 }
 
 fn buttons(
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     mut view: ResMut<JournalView>,
     mut next: ResMut<NextState<PlayState>>,
     mut finale: ResMut<super::finale::FinaleRequest>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
-    for (interaction, act) in &pressed {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for act in clicks.read().filter_map(|c| pressed.get(c.0).ok()) {
         sfx.write(PlaySfx::new(Sfx::Click));
         match *act {
             Act::Page(p) => {

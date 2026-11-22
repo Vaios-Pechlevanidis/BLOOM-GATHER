@@ -56,7 +56,7 @@ fn spawn_overlay(mut commands: Commands) {
                 DebugText,
                 Text::new(""),
                 TextFont {
-                    font_size: font::CAPTION,
+                    font_size: FontSize::Px(font::CAPTION),
                     ..default()
                 },
                 TextColor(palette::CREAM),

@@ -9,7 +9,7 @@
 use bevy::prelude::*;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use crate::audio::{PlaySfx, Sfx};
 use crate::game::{AppState, Quality, Settings};
 use crate::input::{key_name, rebind, Action, Bindings, KeyOverrides, RebindError};
@@ -352,15 +352,13 @@ fn keys(
 }
 
 fn buttons(
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     mut screen: ResMut<SettingsScreen>,
     mut settings: ResMut<Settings>,
     mut sfx: MessageWriter<PlaySfx>,
 ) {
-    for (interaction, act) in &pressed {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    for act in clicks.read().filter_map(|c| pressed.get(c.0).ok()) {
         sfx.write(PlaySfx::new(Sfx::Click));
         let rows = screen.tab.rows();
         match *act {

@@ -19,7 +19,7 @@ use bloom_core::rng::SplitMix64;
 use bloom_core::Game;
 
 use super::theme::{self, font, palette, radius, space};
-use super::widgets::{spawn_button, ButtonVariant};
+use super::widgets::{spawn_button, ButtonVariant, Clicked};
 use super::HudRoot;
 use crate::audio::{PlaySfx, Sfx};
 use crate::flowers::MemoryBloom;
@@ -41,8 +41,8 @@ impl Plugin for FinalePlugin {
                 (
                     start_when_complete.run_if(
                         in_state(PlayState::Playing)
-                            .or(in_state(PlayState::Workshop))
-                            .or(in_state(PlayState::Inventory)),
+                            .or_else(in_state(PlayState::Workshop))
+                            .or_else(in_state(PlayState::Inventory)),
                     ),
                     (skip, direct, animate_overlay, fly_petals, summary_buttons)
                         .chain()
@@ -762,7 +762,7 @@ fn spawn_summary(commands: &mut Commands, game: &Game, bindings: &Bindings) {
                             super::collection::swatch(cell, sp, true, 30.0);
                             cell.spawn((
                                 theme::text(sp.name.clone(), font::CAPTION, palette::INK_SOFT),
-                                TextLayout::new_with_justify(Justify::Center),
+                                TextLayout::justify(Justify::Center),
                             ));
                         });
                     }
@@ -791,7 +791,8 @@ fn summary_buttons(
     director: Res<Director>,
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
-    pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
+    mut clicks: MessageReader<Clicked>,
+    pressed: Query<&Act>,
     mut session: ResMut<Session>,
     mut next: ResMut<NextState<PlayState>>,
     mut next_app: ResMut<NextState<AppState>>,
@@ -800,12 +801,11 @@ fn summary_buttons(
     if director.phase != Phase::Summary || !director.summary_spawned {
         return;
     }
-    let mut act = None;
-    for (interaction, a) in &pressed {
-        if *interaction == Interaction::Pressed {
-            act = Some(*a);
-        }
-    }
+    let mut act = clicks
+        .read()
+        .filter_map(|c| pressed.get(c.0).ok())
+        .last()
+        .copied();
     // Keys only once the summary has been up a moment (no accidental skip).
     if director.t > 0.4 {
         if Bindings::just_pressed(&keys, &bindings.confirm) {
