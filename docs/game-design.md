@@ -312,10 +312,28 @@ for harvested flowers.
 
 Completion requires all of: every flower harvested, every region complete,
 every required tool owned, every species discovered, every required recipe
-discovered and crafted at least once. When the last condition flips:
-completion animation → camera tour of the empty, blooming-in-memory world →
-journey summary (flowers, bouquets, coins earned, playtime, tools, regions,
-full collection). Then free-roam mode with no new requirements.
+discovered and crafted at least once (a started batch counts: it always
+finishes). The moment the last one is met, the journey is recorded as it
+stands, and a moment later the finale begins:
+
+1. **Celebration:** golden petals burst around you, the view lifts away and
+   "Every flower gathered" fades in.
+2. **Tour:** the camera glides along the path of each region in turn. Every
+   flower you picked there blooms again *in memory*: pale, glowing,
+   see-through, each with a small light in its own colour. Only for the
+   tour; the flowers stay picked. Esc skips ahead.
+3. **Journey summary:** flowers picked (and rare ones), bouquets bound and
+   sold, coins earned and spent, time played, distance walked, level, tools,
+   regions, recipes, upgrade and skill levels, achievements, and the full
+   collection of 17 species.
+
+"Keep wandering" starts **free roam**: the valley stays open, nothing new
+is asked, and the HUD says so. The summary stays in the journal (Progress
+page). If the game closes during the finale, it plays again next time.
+
+**Herbarium (C).** Every species as a card: its colours, rarity, how many
+you picked of how many exist, and its description; undiscovered species
+only hint at where they grow. Below, every bouquet you have bound.
 
 ## 13. Assumptions (documented per spec)
 

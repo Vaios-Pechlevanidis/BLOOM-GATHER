@@ -197,9 +197,31 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
   records the region, walks back to the meadow through a gate, and verifies visited regions
   persist across a restart
 
+## Phase Z: Completion & ending ✅
+
+- ✅ Core: completion checked after every command that can complete the game; recorded once
+  as a saved `JourneySummary` with a `GameCompleted` event; `finale_seen` and `finale_pending`
+  (an interrupted ending plays again); older saves catch up quietly; forged endings refused
+- ✅ Finale: celebration (golden petals, title), tour of all five regions gliding along each
+  path while every picked flower blooms again in memory (glowing, see-through, with a light in
+  its colour), back home, journey summary; Esc skips the tour; HUD, toasts and hands hidden;
+  saves keep the home region while touring
+- ✅ Journey summary: flowers (rare), bouquets (sold), coins (spent), time, distance, level,
+  tools, regions, recipes, upgrade and skill levels, achievements, the full collection; Keep
+  wandering / Collection / Title screen
+- ✅ Free roam afterwards: HUD says so, the journal's Progress page links to the summary
+- ✅ Herbarium (C): every species card (colours, rarity, picked of total, description, or where
+  an undiscovered one grows) and the bouquets bound
+- ✅ Tests: 7 new (an unpicked flower, a missing tool and an unbound bouquet each keep the game
+  open and complete it when done; species and recipes counted on the way; the summary is a
+  snapshot that free roam doesn't change and completion happens once; the ending survives
+  saves and resumes if unseen; forged endings refused); 165 tests in all
+- ✅ Smoke test run 2 finishes the game through the real rules and watches the ending, free
+  roam, herbarium and journal, and checks the save records it
+
 ## Later phases ⬜
 
-Z Completion & ending (next) · G Polish & release
+G Polish & release (next)
 
 ## Temporary assets (replace before release)
 

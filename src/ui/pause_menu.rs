@@ -231,7 +231,10 @@ fn toggle_with_key(
             | PlayState::Workshop
             | PlayState::Skills
             | PlayState::Journal
-            | PlayState::Map => PlayState::Playing,
+            | PlayState::Map
+            | PlayState::Collection => PlayState::Playing,
+            // The ending handles Esc itself (skip the tour).
+            PlayState::Finale => return,
         });
     }
 }

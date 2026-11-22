@@ -353,6 +353,104 @@ fn drive(
                 smoke.shot(&mut commands, "12_resumed");
                 1.0
             }
+            // --- the ending: finish the game through the real rules ---
+            3 => {
+                if let Some(session) = session_mut.as_deref_mut() {
+                    match complete_game(&session.game) {
+                        Ok(game) => session.game = game,
+                        Err(e) => smoke.check("the game can be completed", false, e),
+                    }
+                    smoke.check(
+                        "every requirement met",
+                        session.completion().is_complete() && session.finale_pending(),
+                        format!("{:?}", session.completion()),
+                    );
+                }
+                4.0
+            }
+            4 => {
+                smoke.expect("the ending begins", play_state, PlayState::Finale);
+                smoke.shot(&mut commands, "30_finale_celebration");
+                6.0
+            }
+            5 => {
+                let here = scene.map(|s| s.region);
+                smoke.check(
+                    "the tour starts in the meadow",
+                    here == Some(0),
+                    format!("{here:?}"),
+                );
+                smoke.shot(&mut commands, "31_finale_tour_meadow");
+                9.4
+            }
+            6 => {
+                let here = scene.map(|s| s.region);
+                smoke.check(
+                    "the tour moves on to the next region",
+                    here == Some(1),
+                    format!("{here:?}"),
+                );
+                smoke.shot(&mut commands, "32_finale_tour_lavender");
+                smoke.tap(KeyCode::Escape);
+                3.0
+            }
+            7 => {
+                smoke.expect("Esc skips to the summary", play_state, PlayState::Finale);
+                let here = scene.map(|s| s.region);
+                smoke.check(
+                    "back in the player's region",
+                    here == Some(0),
+                    format!("{here:?}"),
+                );
+                smoke.shot(&mut commands, "33_journey_summary");
+                smoke.tap(KeyCode::Enter);
+                0.8
+            }
+            8 => {
+                smoke.expect("Enter: keep wandering", play_state, PlayState::Playing);
+                let seen = session_mut
+                    .as_deref()
+                    .is_some_and(|s| s.is_game_complete() && !s.finale_pending());
+                smoke.check("free roam after the ending", seen, seen);
+                smoke.shot(&mut commands, "34_free_roam");
+                smoke.tap(KeyCode::KeyC);
+                0.6
+            }
+            9 => {
+                smoke.expect("C opens the herbarium", play_state, PlayState::Collection);
+                smoke.shot(&mut commands, "35_herbarium");
+                smoke.tap(KeyCode::KeyC);
+                0.5
+            }
+            10 => {
+                smoke.expect("C closes it", play_state, PlayState::Playing);
+                smoke.tap(KeyCode::KeyJ);
+                0.5
+            }
+            11 => {
+                smoke.tap(KeyCode::Digit3);
+                0.5
+            }
+            12 => {
+                smoke.shot(&mut commands, "36_journal_complete");
+                smoke.tap(KeyCode::KeyJ);
+                0.4
+            }
+            13 => {
+                smoke.tap(KeyCode::Escape);
+                0.6
+            }
+            14 => {
+                smoke.expect("Esc pauses (and saves)", play_state, PlayState::Paused);
+                let raw =
+                    std::fs::read_to_string(saves.store.dir().join("save.ron")).unwrap_or_default();
+                let saved = decode(&raw).ok();
+                let ok = saved
+                    .as_ref()
+                    .is_some_and(|s| s.completed.is_some() && s.finale_seen);
+                smoke.check("the save remembers the ending", ok, ok);
+                1.0
+            }
             _ => finish(&mut smoke, &mut exit),
         }
     } else {
@@ -1268,6 +1366,54 @@ fn verify_resumed(
             format!("{d:.2} m"),
         );
     }
+}
+
+/// Play the rest of the game through the real rules (pick every flower,
+/// buy every tool, bind every required bouquet, rarest first).
+fn complete_game(game: &bloom_core::Game) -> Result<bloom_core::Game, String> {
+    let mut g = game.clone();
+    let d = g.data().clone();
+    // Coins for the tools; everything else is earned.
+    let mut state = g.state().clone();
+    state.coins += 50_000;
+    g = bloom_core::Game::from_state(d.clone(), state).map_err(|e| e.to_string())?;
+    for r in 0..d.regions.len() {
+        let field = g.region(r).field.clone();
+        for i in 0..field.len() as u32 {
+            if g.is_harvested(r, i) {
+                continue;
+            }
+            let (c, _) = field.pick_sphere(i);
+            g.tick(1.0);
+            g.harvest(r, i, c + Vec3::Y).map_err(|e| e.to_string())?;
+        }
+    }
+    g.tick(1_000.0);
+    for t in 0..d.tools.len() {
+        if !g.owns_tool(t) {
+            g.buy_tool(t).map_err(|e| e.to_string())?;
+        }
+    }
+    let mut order: Vec<usize> = (0..d.recipes.len())
+        .filter(|&r| d.recipes[r].required_for_completion)
+        .collect();
+    order.sort_by_key(|&r| std::cmp::Reverse(d.recipes[r].tier));
+    for r in order {
+        if g.state()
+            .crafted
+            .get(&d.recipes[r].id)
+            .copied()
+            .unwrap_or(0)
+            > 0
+        {
+            continue;
+        }
+        g.tick(100.0);
+        g.craft(r, 1, &std::collections::BTreeSet::new())
+            .map_err(|e| format!("{}: {e}", d.recipes[r].id))?;
+    }
+    g.tick(100.0);
+    Ok(g)
 }
 
 /// After a journey: in the right region, playing, standing on the ground.

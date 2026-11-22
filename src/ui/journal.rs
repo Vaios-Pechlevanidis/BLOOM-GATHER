@@ -49,6 +49,8 @@ struct JournalView {
 #[derive(Component, Clone, Copy)]
 enum Act {
     Page(Page),
+    /// Open the journey summary (after the ending).
+    Summary,
     Close,
 }
 
@@ -173,6 +175,7 @@ fn buttons(
     pressed: Query<(&Interaction, &Act), Changed<Interaction>>,
     mut view: ResMut<JournalView>,
     mut next: ResMut<NextState<PlayState>>,
+    mut finale: ResMut<super::finale::FinaleRequest>,
     mut sfx: EventWriter<PlaySfx>,
 ) {
     for (interaction, act) in &pressed {
@@ -184,6 +187,10 @@ fn buttons(
             Act::Page(p) => {
                 view.page = p;
                 view.stale = true;
+            }
+            Act::Summary => {
+                finale.summary_only = true;
+                next.set(PlayState::Finale);
             }
             Act::Close => next.set(PlayState::Playing),
         }
@@ -576,6 +583,22 @@ fn progress(body: &mut ChildSpawnerCommands, session: &Session) {
         );
     });
     column(body, |col| {
+        if session.is_game_complete() {
+            heading(col, "The journey is complete");
+            col.spawn(theme::text(
+                "Every flower in the valley has been gathered. Wander as long as you like: nothing new is asked of you.",
+                font::BODY,
+                palette::INK_SOFT,
+            ));
+            col.spawn(Node {
+                margin: UiRect::top(Val::Px(space::SM)),
+                ..default()
+            })
+            .with_children(|b| {
+                spawn_button(b, "Journey summary", ButtonVariant::Compact, Act::Summary);
+            });
+            return;
+        }
         heading(col, "Next up");
         let mut next: Vec<String> = Vec::new();
         match session.level_progress() {

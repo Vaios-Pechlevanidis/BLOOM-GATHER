@@ -30,4 +30,8 @@ pub enum PlayState {
     Journal,
     /// The world map is open.
     Map,
+    /// The herbarium: every species and bouquet collected.
+    Collection,
+    /// The ending: celebration, a tour of the valley, the journey summary.
+    Finale,
 }

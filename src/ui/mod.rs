@@ -3,8 +3,10 @@
 //! UI reads game state and sends intents; it never mutates gameplay state
 //! directly (from Phase 2 every change goes through `bloom_core` commands).
 
+mod collection;
 mod debug_overlay;
 mod effects;
+mod finale;
 mod hud;
 mod inventory;
 mod journal;
@@ -18,6 +20,11 @@ mod widgets;
 mod workshop;
 
 pub use toasts::Toast;
+
+/// Top-level HUD elements (stats, prompt, tool bar, hints, minimap, gate
+/// banner): hidden while the ending plays.
+#[derive(Component)]
+pub struct HudRoot;
 
 use bevy::prelude::*;
 
@@ -37,6 +44,8 @@ impl Plugin for UiPlugin {
             skills::SkillsPlugin,
             journal::JournalPlugin,
             map::MapPlugin,
+            collection::CollectionPlugin,
+            finale::FinalePlugin,
         ));
     }
 }

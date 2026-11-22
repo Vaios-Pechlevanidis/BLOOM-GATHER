@@ -73,6 +73,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             theme::card(Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(space::MD),
@@ -107,6 +108,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             theme::card(Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(space::MD),
@@ -161,6 +163,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
@@ -235,6 +238,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     // Tool bar, just above the controls hint.
     commands.spawn((
         StateScoped(AppState::InGame),
+        crate::ui::HudRoot,
         ToolBar,
         Node {
             position_type: PositionType::Absolute,
@@ -250,6 +254,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             Node {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(space::MD),
@@ -269,7 +274,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ))
             .with_children(|hint| {
                 hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   M  map   Esc  pause",
+                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   M  map   C  collection   Esc  pause",
                     font::CAPTION,
                     palette::INK_SOFT,
                 ));
@@ -314,6 +319,9 @@ fn update_stats(
     for (stat, mut text) in &mut texts {
         let value = match stat {
             Stat::RegionName => region.name.clone(),
+            Stat::Remaining if session.is_game_complete() => {
+                "Every flower gathered. Free roam".to_string()
+            }
             Stat::Remaining => format!(
                 "{} of {} flowers still blooming",
                 session.remaining_in_region(active.0),

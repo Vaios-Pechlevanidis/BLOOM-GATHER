@@ -142,6 +142,7 @@ fn spawn_banner(mut commands: Commands) {
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             // Above the tool bar, clear of the toasts at the top.
             Node {
                 position_type: PositionType::Absolute,

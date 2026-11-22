@@ -9,7 +9,7 @@ mod session;
 mod settings;
 mod states;
 
-pub use content::{ActiveRegion, Content, RegionScene};
+pub use content::{ActiveRegion, Content, RegionScene, Touring};
 pub use session::{start_new_game, EventsForwarded, GameEventMsg, Saves, Session, SessionSet};
 pub use settings::Settings;
 pub use states::{AppState, PlayState};
@@ -33,7 +33,9 @@ impl Plugin for GamePlugin {
             .add_systems(OnEnter(PlayState::Journal), pause_time)
             .add_systems(OnExit(PlayState::Journal), resume_time)
             .add_systems(OnEnter(PlayState::Map), pause_time)
-            .add_systems(OnExit(PlayState::Map), resume_time);
+            .add_systems(OnExit(PlayState::Map), resume_time)
+            .add_systems(OnEnter(PlayState::Collection), pause_time)
+            .add_systems(OnExit(PlayState::Collection), resume_time);
     }
 }
 

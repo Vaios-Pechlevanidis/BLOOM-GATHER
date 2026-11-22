@@ -22,6 +22,13 @@ impl ActiveRegion {
     }
 }
 
+/// While the ending tours the valley, the scene shows other regions but
+/// the player still stands in `home`; saves use it.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct Touring {
+    pub home: usize,
+}
+
 /// The generated layout (terrain, props, colliders) and flower field of the
 /// region currently built in the 3D scene — the same data the session uses,
 /// shared by rendering and the player controller so everyone agrees on where

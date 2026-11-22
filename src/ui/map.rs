@@ -296,6 +296,7 @@ fn spawn_minimap(
     commands
         .spawn((
             StateScoped(AppState::InGame),
+            crate::ui::HudRoot,
             MinimapFrame,
             Node {
                 position_type: PositionType::Absolute,

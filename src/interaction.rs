@@ -295,6 +295,8 @@ fn react_to_events(
                     format!("{body} Follow the path to its gate, or travel with the map (M)."),
                 ));
             }
+            // The ending plays from the finale module.
+            GameEvent::GameCompleted => {}
             GameEvent::RegionEntered {
                 region,
                 first_visit,

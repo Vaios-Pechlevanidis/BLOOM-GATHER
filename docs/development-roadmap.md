@@ -61,7 +61,7 @@ five-branch skill tree UI, SP accounting, prerequisites, tool requirements.
 ## Phase P — Progression & achievements ✅
 Level-up rewards & UI, milestones, achievements and toasts, statistics.
 
-## Phase F — Remaining regions ✅ (current)
+## Phase F — Remaining regions ✅
 Lavender Fields (flower rows, golden light), Blossom Valley (stream, bridge,
 blossom trees, falling petals), Enchanted Forest (tall trees, light shafts,
 mushrooms, glow plants, fireflies), Moonlight Garden (night sky, lanterns,
@@ -70,9 +70,12 @@ stone arch, forest arch, lantern arch; barred while locked), minimap and
 world map (M) with travel, per-region light and ambience, region the player
 stands in saved.
 
-## Phase Z — Completion & ending
-Completion checker (each condition tested), finale sequence, journey summary,
-collection screen, free-roam.
+## Phase Z — Completion & ending ✅ (current)
+Completion checker (each requirement tested; recorded once with a journey
+summary), finale (celebration, tour of all five regions with the picked
+flowers blooming in memory, skippable), journey summary, herbarium (C),
+free roam, summary reachable from the journal, ending resumes after a
+crash.
 
 ## Phase G — Polish & release
 Painted glTF art replacing procedural meshes, day/night and weather,

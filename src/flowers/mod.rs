@@ -22,6 +22,7 @@ pub struct FlowersPlugin;
 impl Plugin for FlowersPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpawnedFlowers>()
+            .init_resource::<MemoryBloom>()
             .add_plugins(sparkles::SparklesPlugin)
             .add_systems(
                 Update,
@@ -32,9 +33,31 @@ impl Plugin for FlowersPlugin {
                     start_harvest_animation.after(EventsForwarded),
                     animate_harvest,
                     animate_particles,
+                    (sync_memory, grow_memory).chain(),
                 ),
             );
     }
+}
+
+/// The ending's "blooming in memory": while `active`, every picked flower of
+/// the region on screen reappears as a soft, glowing, see-through bloom.
+/// Purely visual; the flowers stay picked.
+#[derive(Resource, Default)]
+pub struct MemoryBloom {
+    pub active: bool,
+    /// Region the ghosts were spawned for.
+    built: Option<usize>,
+    entities: Vec<Entity>,
+    material: Option<Handle<StandardMaterial>>,
+    orbs: HashMap<usize, Handle<StandardMaterial>>,
+}
+
+/// One remembered flower, growing in after `delay` seconds.
+#[derive(Component)]
+struct Memory {
+    delay: f32,
+    age: f32,
+    scale: f32,
 }
 
 #[derive(Resource)]
@@ -360,5 +383,104 @@ fn animate_particles(
         transform.rotate(Quat::from_euler(EulerRot::XYZ, spin.x, spin.y, spin.z));
         p.size = 1.0 - (p.age / p.life).powi(2);
         transform.scale = Vec3::new(0.016, 0.004, 0.011) * p.size;
+    }
+}
+
+/// Spawn (or clear) the remembered flowers of the region on screen.
+fn sync_memory(
+    mut commands: Commands,
+    mut memory: ResMut<MemoryBloom>,
+    assets: Option<Res<FlowerAssets>>,
+    session: Option<Res<Session>>,
+    scene: Option<Res<RegionScene>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let want = if memory.active {
+        scene.as_ref().map(|s| s.region)
+    } else {
+        None
+    };
+    if want == memory.built {
+        return;
+    }
+    for e in std::mem::take(&mut memory.entities) {
+        commands.entity(e).despawn();
+    }
+    memory.built = want;
+    let (Some(region), Some(assets), Some(session), Some(scene)) = (want, assets, session, scene)
+    else {
+        return;
+    };
+    let material = memory
+        .material
+        .get_or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+                emissive: LinearRgba::rgb(0.8, 0.72, 0.55),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.5,
+                ..default()
+            })
+        })
+        .clone();
+    let field = &scene.field;
+    // Bloom outwards from the region's start, like a wave of memories.
+    let start = scene.layout.spawn;
+    for i in 0..field.len() as u32 {
+        if !session.is_harvested(region, i) {
+            continue;
+        }
+        let ground = field.ground_point(i);
+        let delay = field.position(i).distance(start) * 0.035;
+        let species = field.species(i);
+        // A small light in the flower's colour, so the field of memories
+        // reads from afar.
+        let orb = memory
+            .orbs
+            .entry(species)
+            .or_insert_with(|| {
+                let petal = color(session.data().species[species].petal_color).to_linear();
+                materials.add(StandardMaterial {
+                    base_color: Color::LinearRgba(petal * 2.2),
+                    unlit: true,
+                    ..default()
+                })
+            })
+            .clone();
+        let bloom_height = (field.pick_sphere(i).0.y - ground.y) / field.scale(i);
+        let e = commands
+            .spawn((
+                Memory {
+                    delay,
+                    age: 0.0,
+                    scale: field.scale(i) * 1.3,
+                },
+                Mesh3d(assets.plants[species].clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(ground)
+                    .with_rotation(Quat::from_rotation_y(field.yaw(i)))
+                    .with_scale(Vec3::splat(0.001)),
+                bevy::pbr::NotShadowCaster,
+                children![(
+                    Mesh3d(assets.particle.clone()),
+                    MeshMaterial3d(orb),
+                    Transform::from_xyz(0.0, bloom_height + 0.05, 0.0)
+                        .with_scale(Vec3::splat(0.03)),
+                    bevy::pbr::NotShadowCaster,
+                )],
+            ))
+            .id();
+        memory.entities.push(e);
+    }
+}
+
+fn grow_memory(time: Res<Time>, mut ghosts: Query<(&mut Memory, &mut Transform)>) {
+    let dt = time.delta_secs();
+    for (mut m, mut t) in &mut ghosts {
+        m.age += dt;
+        let k = ((m.age - m.delay) / 1.2).clamp(0.0, 1.0);
+        // Ease out with a little overshoot, like a bud opening.
+        let grow = 1.0 - (1.0 - k).powi(3) + (k * std::f32::consts::PI).sin() * 0.08;
+        t.scale = Vec3::splat((m.scale * grow).max(0.001));
     }
 }

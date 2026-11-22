@@ -45,7 +45,9 @@ impl Plugin for PlayerPlugin {
                     pause_on_focus_loss.run_if(in_state(PlayState::Playing)),
                     update_camera
                         .in_set(CameraUpdated)
-                        .run_if(in_state(AppState::InGame)),
+                        .run_if(in_state(AppState::InGame))
+                        // The ending flies the camera itself.
+                        .run_if(not(in_state(PlayState::Finale))),
                 )
                     .chain(),
             );

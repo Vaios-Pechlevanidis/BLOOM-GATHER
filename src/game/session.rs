@@ -10,7 +10,7 @@ use bloom_core::game::{GameEvent, PlayerPose};
 use bloom_core::persistence::{LoadSource, SaveStore};
 use bloom_core::Game;
 
-use super::{ActiveRegion, AppState, Content, PlayState};
+use super::{ActiveRegion, AppState, Content, PlayState, Touring};
 use crate::player::Player;
 
 pub struct SessionPlugin;
@@ -226,7 +226,9 @@ fn autosave(
     mut saves: ResMut<Saves>,
     player: Option<Res<Player>>,
     active: Res<ActiveRegion>,
+    touring: Option<Res<Touring>>,
 ) {
+    let active = touring.map_or(*active, |t| ActiveRegion(t.home));
     let Some(mut session) = session else { return };
     if !session.is_dirty() {
         return;
@@ -234,7 +236,7 @@ fn autosave(
     let now = time.elapsed_secs_f64();
     let since = *saves.dirty_since.get_or_insert(now);
     if now - since >= AUTOSAVE_DELAY_SECS {
-        write_save(&mut session, &mut saves, player.as_deref(), *active);
+        write_save(&mut session, &mut saves, player.as_deref(), active);
     }
 }
 
@@ -245,10 +247,12 @@ fn save_now(
     mut saves: ResMut<Saves>,
     player: Option<Res<Player>>,
     active: Res<ActiveRegion>,
+    touring: Option<Res<Touring>>,
 ) {
+    let active = touring.map_or(*active, |t| ActiveRegion(t.home));
     let Some(mut session) = session else { return };
     if session.is_dirty() || (player.is_some() && session.state().stats.flowers_harvested > 0) {
-        write_save(&mut session, &mut saves, player.as_deref(), *active);
+        write_save(&mut session, &mut saves, player.as_deref(), active);
     }
 }
 
@@ -258,13 +262,14 @@ fn save_on_exit(
     saves: ResMut<Saves>,
     player: Option<Res<Player>>,
     active: Res<ActiveRegion>,
+    touring: Option<Res<Touring>>,
 ) {
     if let Some(exit) = exits.read().next() {
         let code = match exit {
             AppExit::Success => 0,
             AppExit::Error(code) => code.get() as i32,
         };
-        save_now(session, saves, player, active);
+        save_now(session, saves, player, active, touring);
         // Shutdown has occasionally hung (first launch after a build; see
         // TODO.md). The save is already safely on disk, so never let quitting
         // leave a frozen window behind: force the exit if it stalls.

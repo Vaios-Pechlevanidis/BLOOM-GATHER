@@ -255,7 +255,9 @@ fn animate(
     mut models: Query<(&ToolModel, &mut Transform, &mut Visibility), Without<ViewRoot>>,
     mut blades: BladeQuery,
 ) {
-    let in_game = state.is_some_and(|s| *s.get() == AppState::InGame);
+    // Hands and tools are hidden while the ending's camera tours the valley.
+    let in_game = state.is_some_and(|s| *s.get() == AppState::InGame)
+        && !play.as_ref().is_some_and(|p| *p.get() == PlayState::Finale);
     for mut v in &mut root {
         *v = if in_game {
             Visibility::Inherited

@@ -49,8 +49,19 @@ struct ToastRoot;
 /// skill tree, journal, pause) is open they move to the bottom edge so they
 /// never cover its heading.
 fn place_root(state: Option<Res<State<PlayState>>>, mut roots: Query<&mut Node, With<ToastRoot>>) {
-    let screen_open = state.is_some_and(|s| *s.get() != PlayState::Playing);
+    let screen_open = state
+        .as_ref()
+        .is_some_and(|s| *s.get() != PlayState::Playing);
+    // Nothing interrupts the ending.
+    let display = if state.is_some_and(|s| *s.get() == PlayState::Finale) {
+        Display::None
+    } else {
+        Display::Flex
+    };
     for mut node in &mut roots {
+        if node.display != display {
+            node.display = display;
+        }
         let (top, bottom) = if screen_open {
             (Val::Auto, Val::Px(space::MD))
         } else {

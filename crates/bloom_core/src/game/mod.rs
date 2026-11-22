@@ -25,7 +25,7 @@ mod travel;
 
 pub use crafting::{CraftJob, CraftPlan, RecipeLock, RecipeStatus};
 pub use growth::{Modifiers, SkillLock, SkillStatus, UpgradeLock, UpgradeStatus};
-pub use progress::Completion;
+pub use progress::{Completion, JourneySummary};
 pub use travel::RegionRequirements;
 
 /// Everything that is saved. Keys are content ids (not indices) so saves
@@ -66,6 +66,10 @@ pub struct GameState {
     pub achievements: BTreeSet<String>,
     /// Regions the player has walked into at least once.
     pub visited_regions: BTreeSet<String>,
+    /// Set the moment every completion requirement is met.
+    pub completed: Option<JourneySummary>,
+    /// The ending has been watched (free roam from then on).
+    pub finale_seen: bool,
     /// State of the gameplay RNG (chance-based skills), saved so reloading
     /// can't re-roll a result.
     pub rng: u64,
@@ -172,6 +176,8 @@ pub enum GameEvent {
         region: usize,
         first_visit: bool,
     },
+    /// Every completion requirement is met: the ending begins.
+    GameCompleted,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -540,6 +546,12 @@ impl Game {
         // Older saves: catch up achievements already earned (rewards paid,
         // not announced).
         game.refresh_achievements(false);
+        if game.state.completed.is_some() && !game.completion().is_complete() {
+            return bad("the save claims a completed game that isn't".into());
+        }
+        if game.state.finale_seen && game.state.completed.is_none() {
+            return bad("the save has seen an ending that never happened".into());
+        }
         game.events.clear();
         Ok(game)
     }

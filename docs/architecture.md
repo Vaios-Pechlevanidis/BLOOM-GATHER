@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase F (remaining regions) done. This document describes the
+Status: Phase Z (completion & ending) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -105,12 +105,13 @@ Rust's built-in `core` crate and breaks macro expansions.
 ## 4. Game states
 
 ```
-Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills | Journal | Map}
+Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills | Journal | Map | Collection | Finale}
   │                           ▲                           │
   └──(invalid data)──► log + exit      └──Main Menu (pause)──┘
 ```
 
-* `Inventory` (basket / Tool Shop / Upgrades), `Skills`, `Journal`, `Map` and `Paused` stop game time; `Workshop`
+* `Inventory` (basket / Tool Shop / Upgrades), `Skills`, `Journal`, `Map`, `Collection` and `Paused` stop game time;
+  `Finale` stops the game clock but keeps the world animating; `Workshop`
   (the workbench screen) keeps it running so a batch binds while you watch.
 * State-scoped entities despawn on exit. The 3D region scene is *not*
   state-scoped: it is built once per region and shown behind the title screen
@@ -324,6 +325,37 @@ profiling ever shows a need.
   shown as the HUD minimap and in the world map (M), which travels to any
   open region. The save stores the region you stand in.
 
+## 7g. Completion and the ending (Phase Z)
+
+* **Core (`game/progress.rs`):** after every achievement check (which runs
+  after harvests, finished batches, tool purchases and craft starts),
+  `check_completion` looks at `Game::completion()`. The first time all six
+  requirements hold it stores a `JourneySummary` (playtime, distance,
+  flowers, rare flowers, bouquets, coins, level, tools, regions, species,
+  recipes, achievements, upgrade and skill levels) in
+  `GameState::completed` and raises `GameCompleted` once. A started batch
+  counts as bound (its timer always finishes). `finale_seen` records that
+  the ending was watched; `finale_pending()` is "complete but not seen", so
+  a game closed mid-finale plays it again. `from_state` records older saves'
+  completion quietly and refuses a claimed completion that isn't real, or
+  an ending seen without one.
+* **Finale (`ui/finale.rs`, `PlayState::Finale`):** starts 1.5 s after
+  completion (from play, the workbench or the basket). A director drives the
+  camera (the player camera is paused in this state): celebration with
+  golden petals and the title, then for each region a fade, a region switch
+  (`ActiveRegion`; the scene rebuilds as when travelling) and a glide along
+  the footpath while `flowers::MemoryBloom` shows every picked flower as a
+  glowing, see-through bloom with a small light in its colour, then back
+  home and the journey summary. Esc skips the tour. While touring, the
+  `Touring` resource makes saves record the player's home region. HUD roots
+  (`ui::HudRoot`) and toasts are hidden; the hands are hidden.
+* **Free roam:** leaving the summary marks the finale seen. The HUD says
+  "Every flower gathered. Free roam"; the journal's Progress page links to
+  the summary (the finale state opened at its last step).
+* **Herbarium (`ui/collection.rs`, C):** every species card (colours,
+  rarity, picked of total, description; undiscovered ones only say where
+  they grow) and the bouquets bound.
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -365,6 +397,10 @@ the keyboard at the tool shelf and learning skills in the tree (Phase U),
 and opening every journal page, checking achievements and distance (Phase P),
 then travelling with the world map to every region, checking the save records
 the region, and walking back to the meadow through a gate (Phase F).
+Run 2 then finishes the game through the real rules, watches the ending
+(celebration, two tour stops, Esc to the summary), continues into free roam,
+opens the herbarium and the journal, and checks the save records the ending
+(Phase Z).
 Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 
