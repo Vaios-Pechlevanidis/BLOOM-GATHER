@@ -32,8 +32,8 @@ codesign --verify --deep --strict "$APP"
 
 if [ -n "${CI:-}" ]; then
   # GitHub's macOS runners have little free disk; the build's
-  # intermediates (gigabytes) are no longer needed once the app exists.
-  rm -rf "target/$TARGET/dist/deps" "target/$TARGET/dist/build" "target/$TARGET/dist/incremental"
+  # target directory (gigabytes) is no longer needed once the app exists.
+  rm -rf "target/$TARGET"
 fi
 
 DMG="$OUT/Bloom-and-Gather-$VERSION-macos-$ARCH.dmg"
