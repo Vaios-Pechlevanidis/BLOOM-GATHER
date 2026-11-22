@@ -198,9 +198,14 @@ fn react_to_events(
             }
             GameEvent::LevelUp { level } => {
                 sfx.write(PlaySfx::new(Sfx::LevelUp));
+                let points = data.progression.skill_points_per_level;
                 toasts.write(Toast::highlight(
                     format!("Level {level}!"),
-                    "Your gathering grows more practised.".into(),
+                    if points > 0 {
+                        format!("+{points} skill point. Press K to open the skill tree.")
+                    } else {
+                        "Your gathering grows more practised.".into()
+                    },
                 ));
             }
             GameEvent::RegionCompleted { region, coins } => {
@@ -243,15 +248,56 @@ fn react_to_events(
                 } else {
                     format!("{count} {}s are ready", r.name)
                 };
+                let price = session.bouquet_price(recipe);
                 let body = if first {
-                    format!(
-                        "Your first {}! It sells for {} coins.",
-                        r.name, r.sell_price
-                    )
+                    format!("Your first {}! It sells for {price} coins.", r.name)
                 } else {
-                    format!("Each sells for {} coins at the display.", r.sell_price)
+                    format!("Each sells for {price} coins at the display.")
                 };
                 toasts.write(Toast::highlight(title, body));
+            }
+            GameEvent::UpgradeBought { upgrade, level } => {
+                let u = &data.upgrades[upgrade];
+                sfx.write(PlaySfx::new(Sfx::Coins));
+                toasts.write(Toast::highlight(
+                    format!("{} level {level}", u.name),
+                    u.description.clone(),
+                ));
+            }
+            GameEvent::SkillLearned { skill, level } => {
+                let k = &data.skills[skill];
+                sfx.write(PlaySfx::new(Sfx::LevelUp));
+                let title = if k.max_level > 1 {
+                    format!("Skill learned: {} {level}", k.name)
+                } else {
+                    format!("Skill learned: {}", k.name)
+                };
+                toasts.write(Toast::highlight(title, k.description.clone()));
+            }
+            GameEvent::RegionUnlocked { region, coins, xp } => {
+                let r = &data.regions[region];
+                sfx.write(PlaySfx::new(Sfx::Discover));
+                let body = if coins > 0 || xp > 0 {
+                    format!("{} Unlock bonus: +{coins} coins, +{xp} XP", r.description)
+                } else {
+                    r.description.clone()
+                };
+                toasts.write(Toast::highlight(format!("{} is open", r.name), body));
+            }
+            GameEvent::FlowersSaved { species, count } => {
+                let name = &data.species[species].name;
+                toasts.write(Toast::info(if count == 1 {
+                    format!("Efficient Production saved a {name}")
+                } else {
+                    format!("Efficient Production saved {count} {name}")
+                }));
+            }
+            GameEvent::CollectionMilestone { species_found } => {
+                sfx.write(PlaySfx::new(Sfx::LevelUp));
+                toasts.write(Toast::highlight(
+                    format!("{species_found} species discovered!"),
+                    "Collection milestone: +1 skill point.".into(),
+                ));
             }
         }
     }

@@ -4,10 +4,12 @@
 //! directly (from Phase 2 every change goes through `bloom_core` commands).
 
 mod debug_overlay;
+mod effects;
 mod hud;
 mod inventory;
 mod main_menu;
 mod pause_menu;
+mod skills;
 pub mod theme;
 mod toasts;
 mod widgets;
@@ -30,6 +32,7 @@ impl Plugin for UiPlugin {
             inventory::InventoryPlugin,
             toasts::ToastsPlugin,
             workshop::WorkshopPlugin,
+            skills::SkillsPlugin,
         ));
     }
 }

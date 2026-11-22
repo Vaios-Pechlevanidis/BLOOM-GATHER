@@ -24,4 +24,6 @@ pub enum PlayState {
     Inventory,
     /// The workbench screen is open (crafting keeps running).
     Workshop,
+    /// The skill tree is open.
+    Skills,
 }

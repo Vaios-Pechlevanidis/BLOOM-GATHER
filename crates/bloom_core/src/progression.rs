@@ -13,6 +13,9 @@ pub struct ProgressionConfig {
     pub xp_first_craft: Xp,
     pub xp_region_complete: Xp,
     pub skill_points_per_level: u32,
+    /// Discovering this many species earns one skill point each.
+    #[serde(default)]
+    pub collection_milestones: Vec<u32>,
     pub level_curve: LevelCurve,
 }
 

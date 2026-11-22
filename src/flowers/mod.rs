@@ -6,6 +6,7 @@
 //! never spawned again — on reload, harvested indices are simply skipped.
 
 pub mod models;
+mod sparkles;
 
 use std::collections::HashMap;
 
@@ -20,17 +21,19 @@ pub struct FlowersPlugin;
 
 impl Plugin for FlowersPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SpawnedFlowers>().add_systems(
-            Update,
-            (
-                (ensure_assets, sync_flowers).chain(),
-                sway,
-                highlight,
-                start_harvest_animation.after(EventsForwarded),
-                animate_harvest,
-                animate_particles,
-            ),
-        );
+        app.init_resource::<SpawnedFlowers>()
+            .add_plugins(sparkles::SparklesPlugin)
+            .add_systems(
+                Update,
+                (
+                    (ensure_assets, sync_flowers).chain(),
+                    sway,
+                    highlight,
+                    start_harvest_animation.after(EventsForwarded),
+                    animate_harvest,
+                    animate_particles,
+                ),
+            );
     }
 }
 

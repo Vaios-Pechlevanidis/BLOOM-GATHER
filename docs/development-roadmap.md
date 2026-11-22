@@ -49,12 +49,12 @@ clouds and sky gradient, ambient audio, harvest sounds, region landmarks.
 First-person hand/scissors/basket/tool models and animations; tool selection;
 Radius, Sweep and Area harvesting in 3D with batched harvesting.
 
-## Phase E — Workshop, crafting & economy ✅ (current)
+## Phase E — Workshop, crafting & economy ✅
 Physical 3D workshop (workbench → crafting, storage → inventory, tool display
 → tool shop, bouquet display); recipes, validation, batch crafting with
 craft timer, keepsake reserve, bouquet models and selling.
 
-## Phase U — Upgrades & skill tree
+## Phase U — Upgrades & skill tree ✅ (current)
 Modifier pipeline, upgrade shop with before/after values, progression guard;
 five-branch skill tree UI, SP accounting, prerequisites, tool requirements.
 

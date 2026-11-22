@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase E (workshop, crafting & economy) done. This document describes the
+Status: Phase U (upgrades & skill tree) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -102,12 +102,12 @@ Rust's built-in `core` crate and breaks macro expansions.
 ## 4. Game states
 
 ```
-Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop}
+Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills}
   │                           ▲                           │
   └──(invalid data)──► log + exit      └──Main Menu (pause)──┘
 ```
 
-* `Inventory` (basket / Tool Shop) and `Paused` stop game time; `Workshop`
+* `Inventory` (basket / Tool Shop / Upgrades), `Skills` and `Paused` stop game time; `Workshop`
   (the workbench screen) keeps it running so a batch binds while you watch.
 * State-scoped entities despawn on exit. The 3D region scene is *not*
   state-scoped: it is built once per region and shown behind the title screen
@@ -243,6 +243,35 @@ profiling ever shows a need.
   the screen can't disagree with what binding will do; `rendering::bouquets`
   rebuilds the vase bouquets when the owned bouquets change.
 
+## 7d. Upgrades, skills and modifiers (Phase U)
+
+* **Content:** `GameData::upgrades` and `GameData::skills`
+  (`data/growth.rs`), each a list of per-level `Effect`s. Validation checks
+  references, value ranges, that a skill's prerequisite is listed earlier in
+  the same branch (no cycles), and that stacked reductions can't pass their
+  floors.
+* **Modifier pipeline:** `Game::modifiers()` folds every owned upgrade and
+  skill level into one `Modifiers` value. The rest of the core asks it at
+  the point of use: pick cooldown, `mode_params` (radius, capacity, area),
+  `reach`, `batch_capacity`, `plan_craft` time, crafting and discovery XP,
+  `tool_price`, `upgrade_price`, `bouquet_price`, region thresholds. There
+  is no cached copy to go stale.
+* **Skill points** are derived, never stored: earned (levels, region
+  rewards, collection milestones, Collection Bonuses) minus the cost of
+  learned skills.
+* **Guard:** `optional_spending_limit()` implements economy doc §5.2;
+  `upgrade_status` reports `SavingForTools` when it bites.
+* **Chance:** Double Harvest and Efficient Production roll a SplitMix64
+  whose state is saved in `GameState::rng`.
+* **Region unlocks** are recorded in `GameState::unlocked_regions` and
+  announced once (`RegionUnlocked`), paying the unlock bonus skill if
+  learned. New and loaded games record already-met unlocks silently.
+* **Presentation:** `ui::effects` renders "now -> next" lines by asking a
+  `preview_upgrade`/`preview_skill` copy of the game, so the shop can't
+  promise something the rules don't do. `ui::skills` is the K screen; the
+  Upgrades tab lives in `ui::inventory`; `flowers::sparkles` draws Flower
+  Recognition's glints; `player` scales walk/sprint speed.
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -279,7 +308,9 @@ profiling ever shows a need.
   flowers are still picked, absent from the world and in the basket, and the
   player resumes where they stood. Later phases extend it: tools and every
   harvesting mode (Phase D), walking into the workshop, binding bouquets at
-  the workbench and checking they persist (Phase E). Injected input is authoritative (real
+  the workbench and checking they persist (Phase E), buying an upgrade with
+the keyboard at the tool shelf and learning skills in the tree (Phase U).
+Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 
 ## 10. Performance monitoring

@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use super::{Game, GameError, GameEvent};
+use super::{Game, GameError, GameEvent, Modifiers};
 use crate::data::ToolEffect;
 use crate::economy::Coins;
 
@@ -123,7 +123,7 @@ impl Game {
                 }
             }
         }
-        capacity
+        capacity + self.modifiers().batch_capacity
     }
 
     pub fn bouquet_count(&self, recipe: usize) -> u32 {
@@ -250,7 +250,9 @@ impl Game {
             recipe,
             count,
             ingredients,
-            secs: def.craft_time_secs * count as f32,
+            secs: def.craft_time_secs
+                * count as f32
+                * Modifiers::time_factor(self.modifiers().craft_time),
         })
     }
 
@@ -299,6 +301,23 @@ impl Game {
             first: before == 0,
         });
         self.events.push(GameEvent::CraftStarted { recipe, count });
+        // Efficient Production: each bouquet may save one of its flowers
+        // (only ever flowers this craft used, so the world stays finite).
+        let chance = self.modifiers().flower_saver;
+        let saved = (0..count).filter(|_| self.roll(chance)).count() as u32;
+        if saved > 0 {
+            let (species, used) = plan.ingredients[0];
+            let saved = saved.min(used);
+            *self
+                .state
+                .inventory
+                .entry(data.species[species].id.clone())
+                .or_default() += saved;
+            self.events.push(GameEvent::FlowersSaved {
+                species,
+                count: saved,
+            });
+        }
         self.dirty = true;
         if plan.secs <= 0.0 {
             self.progress_craft(0.0);
@@ -320,6 +339,7 @@ impl Game {
         *self.state.bouquets.entry(job.recipe.clone()).or_default() += job.count;
         let progression = &self.data.progression;
         let mut xp = progression.craft_xp(self.data.recipes[recipe].tier) * job.count as u64;
+        xp = (xp as f64 * (1.0 + self.modifiers().craft_xp as f64)).round() as u64;
         if job.first {
             xp += progression.xp_first_craft;
         }
@@ -351,7 +371,7 @@ impl Game {
         } else {
             self.state.bouquets.insert(def.id.clone(), have - count);
         }
-        let coins = def.sell_price * count as u64;
+        let coins = self.bouquet_price(recipe) * count as u64;
         self.earn(coins);
         self.state.stats.bouquets_sold += count as u64;
         self.events.push(GameEvent::BouquetsSold {

@@ -19,8 +19,10 @@ use crate::progression::Xp;
 use crate::world::{FlowerField, RegionLayout};
 
 mod crafting;
+mod growth;
 
 pub use crafting::{CraftJob, CraftPlan, RecipeLock, RecipeStatus};
+pub use growth::{Modifiers, SkillLock, SkillStatus, UpgradeLock, UpgradeStatus};
 
 /// Everything that is saved. Keys are content ids (not indices) so saves
 /// survive content being reordered. Missing fields (saves from older
@@ -50,6 +52,15 @@ pub struct GameState {
     pub bouquets: BTreeMap<String, u32>,
     /// The batch being bound at the workbench, if any.
     pub craft_job: Option<CraftJob>,
+    /// Upgrade levels bought, per upgrade id.
+    pub upgrades: BTreeMap<String, u32>,
+    /// Skill levels learned, per skill id.
+    pub skills: BTreeMap<String, u32>,
+    /// Regions whose unlock conditions have been met (announced once).
+    pub unlocked_regions: BTreeSet<String>,
+    /// State of the gameplay RNG (chance-based skills), saved so reloading
+    /// can't re-roll a result.
+    pub rng: u64,
     pub stats: Stats,
     /// Where the player stood when the game was saved.
     pub player: Option<PlayerPose>,
@@ -118,6 +129,29 @@ pub enum GameEvent {
         count: u32,
         coins: Coins,
     },
+    UpgradeBought {
+        upgrade: usize,
+        level: u32,
+    },
+    SkillLearned {
+        skill: usize,
+        level: u32,
+    },
+    /// A region's unlock conditions are met; `coins`/`xp` = unlock bonus paid.
+    RegionUnlocked {
+        region: usize,
+        coins: Coins,
+        xp: Xp,
+    },
+    /// Efficient Production put flowers back in the basket.
+    FlowersSaved {
+        species: usize,
+        count: u32,
+    },
+    /// Discovering species reached a milestone (+1 skill point).
+    CollectionMilestone {
+        species_found: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,6 +208,20 @@ pub enum GameError {
     Reserved {
         sellable: u32,
     },
+    UnknownUpgrade,
+    UnknownSkill,
+    MaxLevel,
+    NeedsSkill {
+        skill: String,
+    },
+    NotEnoughSkillPoints {
+        needed: u32,
+        have: u32,
+    },
+    /// An optional purchase would put a required tool out of reach.
+    SavingForTools {
+        can_spend: Coins,
+    },
 }
 
 impl std::fmt::Display for GameError {
@@ -208,6 +256,19 @@ impl std::fmt::Display for GameError {
             }
             GameError::NoBouquets { have } => write!(f, "only {have} of those bouquets left"),
             GameError::NotEnoughFlowers { have } => write!(f, "only {have} in the basket"),
+            GameError::UnknownUpgrade => write!(f, "unknown upgrade"),
+            GameError::UnknownSkill => write!(f, "unknown skill"),
+            GameError::MaxLevel => write!(f, "already at its highest level"),
+            GameError::NeedsSkill { skill } => {
+                write!(f, "learn {} first", skill.replace('_', " "))
+            }
+            GameError::NotEnoughSkillPoints { needed, have } => {
+                write!(f, "needs {needed} skill points; you have {have}")
+            }
+            GameError::SavingForTools { can_spend } => write!(
+                f,
+                "keep your coins for the tools you still need (you can spend {can_spend} on extras)"
+            ),
             GameError::Reserved { sellable } => {
                 write!(
                     f,
@@ -255,6 +316,8 @@ pub enum ToolLock {
 #[derive(Debug, Clone, PartialEq)]
 pub struct HarvestOutcome {
     pub species: usize,
+    /// A neighbour picked as well (Double Harvest skill).
+    pub bonus_flower: Option<u32>,
     pub newly_discovered: bool,
     pub xp_gained: Xp,
     pub region_completed: bool,
@@ -289,6 +352,9 @@ pub struct Game {
     dirty: bool,
 }
 
+/// How far Double Harvest looks for a neighbour (metres).
+const DOUBLE_HARVEST_RADIUS: f32 = 1.6;
+
 /// Distance slack when validating reach: the player targets the edge of a
 /// flower's pick sphere, not its centre.
 const REACH_SLACK: f32 = 0.6;
@@ -297,9 +363,13 @@ impl Game {
     pub fn new(data: Arc<GameData>) -> Self {
         let state = GameState {
             coins: data.economy.starting_coins,
+            rng: growth::RNG_SEED,
             ..Default::default()
         };
-        Self::with_state(data, state)
+        let mut game = Self::with_state(data, state);
+        game.refresh_regions(false);
+        game.dirty = false;
+        game
     }
 
     fn with_state(data: Arc<GameData>, state: GameState) -> Self {
@@ -342,6 +412,29 @@ impl Game {
         for id in state.crafted.keys() {
             if data.recipe(id).is_none() {
                 return bad(format!("unknown recipe '{id}'"));
+            }
+        }
+        for (id, &level) in &state.upgrades {
+            match data.upgrade(id) {
+                None => return bad(format!("unknown upgrade '{id}'")),
+                Some(u) if level > u.max_level => {
+                    return bad(format!("upgrade '{id}' above its highest level"))
+                }
+                _ => {}
+            }
+        }
+        for (id, &level) in &state.skills {
+            match data.skill(id) {
+                None => return bad(format!("unknown skill '{id}'")),
+                Some(s) if level > s.max_level => {
+                    return bad(format!("skill '{id}' above its highest level"))
+                }
+                _ => {}
+            }
+        }
+        for id in &state.unlocked_regions {
+            if data.region(id).is_none() {
+                return bad(format!("unknown region '{id}'"));
             }
         }
 
@@ -405,8 +498,9 @@ impl Game {
                 return bad("the workbench job is malformed".into());
             }
         }
-        // Recipes the player now qualifies for (e.g. after a content
-        // update), without announcing them as fresh discoveries.
+        // Regions and recipes the player now qualifies for (e.g. older
+        // saves, content updates), without announcing them.
+        game.refresh_regions(false);
         game.refresh_recipes();
         game.events.clear();
         Ok(game)
@@ -476,9 +570,10 @@ impl Game {
     }
 
     pub fn is_region_unlocked(&self, region: usize) -> bool {
-        let unlock = self.data.regions[region].unlock;
-        self.level() >= unlock.level
-            && self.state.stats.flowers_harvested >= unlock.flowers_harvested as u64
+        self.state
+            .unlocked_regions
+            .contains(&self.data.regions[region].id)
+            || self.meets_region_unlock(region)
     }
 
     pub fn inventory_count(&self, species: usize) -> u32 {
@@ -505,7 +600,7 @@ impl Game {
                 }
             }
         }
-        secs
+        secs * Modifiers::time_factor(self.modifiers().pick_cooldown)
     }
 
     pub fn harvest_cooldown_remaining(&self) -> f32 {
@@ -521,7 +616,7 @@ impl Game {
 
     /// The flower the player is looking at, if any is within reach.
     pub fn look_at(&mut self, region: usize, eye: Vec3, dir: Vec3) -> Option<u32> {
-        let range = self.data.player.interact_range;
+        let range = self.reach();
         let bits = self.harvested(region);
         self.region(region)
             .field
@@ -544,7 +639,7 @@ impl Game {
         if self.is_harvested(region, flower) {
             return Err(GameError::AlreadyHarvested);
         }
-        let range = self.data.player.interact_range;
+        let range = self.reach();
         let (center, radius) = field.pick_sphere(flower);
         let distance = eye.distance(center) - radius;
         if distance > range + REACH_SLACK {
@@ -554,10 +649,31 @@ impl Game {
         // --- validated: apply ---
         let level_before = self.level();
         let (species, newly_discovered, mut xp) = self.apply_one(region, &field, flower);
+        // Double Harvest: sometimes the nearest neighbour comes along too.
+        let mut bonus_flower = None;
+        if self.roll(self.modifiers().double_harvest) {
+            let bits = self.harvested(region);
+            let here = field.position(flower);
+            let neighbour = field
+                .query_radius(here, DOUBLE_HARVEST_RADIUS, &bits)
+                .into_iter()
+                .min_by(|&a, &b| {
+                    field
+                        .position(a)
+                        .distance(here)
+                        .total_cmp(&field.position(b).distance(here))
+                });
+            if let Some(n) = neighbour {
+                let (_, _, gained) = self.apply_one(region, &field, n);
+                xp += gained;
+                bonus_flower = Some(n);
+            }
+        }
         let region_completed = self.finish_batch(region, level_before, &mut xp);
         self.harvest_cooldown = self.harvest_cooldown_secs();
         Ok(HarvestOutcome {
             species,
+            bonus_flower,
             newly_discovered,
             xp_gained: xp,
             region_completed,
@@ -582,6 +698,16 @@ impl Game {
     /// Reach and limits of a batch mode from the best owned tool, or `None`
     /// if no owned tool provides it. (`Single` is not a batch mode.)
     pub fn mode_params(&self, mode: HarvestMode) -> Option<ModeParams> {
+        let m = self.modifiers();
+        self.tool_mode_params(mode).map(|p| ModeParams {
+            radius: p.radius * (1.0 + m.gather_radius),
+            size: p.size * (1.0 + m.area_size),
+            max_flowers: (p.max_flowers as f32 * (1.0 + m.gather_capacity)).round() as u32,
+        })
+    }
+
+    /// Mode parameters from tools alone (before upgrades and skills).
+    fn tool_mode_params(&self, mode: HarvestMode) -> Option<ModeParams> {
         let mut best: Option<ModeParams> = None;
         for tool in self.state.tools.iter().filter_map(|t| self.data.tool(t)) {
             for effect in &tool.effects {
@@ -632,7 +758,7 @@ impl Game {
 
     /// How far away the ground can be targeted (basket, sweep, area).
     pub fn ground_reach(&self) -> f32 {
-        self.data.player.interact_range + self.data.harvesting.ground_reach_bonus
+        self.reach() + self.data.harvesting.ground_reach_bonus
     }
 
     /// Unpicked flowers a basket or sweep centred on `center` would gather,
@@ -819,7 +945,8 @@ impl Game {
         let mut xp = data.progression.xp_per_harvest;
         let newly = self.state.discovered.insert(species_id);
         if newly {
-            xp += data.progression.xp_per_discovery;
+            let bonus = 1.0 + self.modifiers().discovery_xp as f64;
+            xp += (data.progression.xp_per_discovery as f64 * bonus).round() as Xp;
         }
         self.events.push(GameEvent::FlowerHarvested {
             region,
@@ -828,6 +955,12 @@ impl Game {
         });
         if newly {
             self.events.push(GameEvent::SpeciesDiscovered { species });
+            let found = self.state.discovered.len() as u32;
+            if data.progression.collection_milestones.contains(&found) {
+                self.events.push(GameEvent::CollectionMilestone {
+                    species_found: found,
+                });
+            }
         }
         (species, newly, xp)
     }
@@ -854,6 +987,8 @@ impl Game {
     /// Add XP, announce level-ups and newly qualified recipes.
     fn award_xp(&mut self, level_before: u32, xp: Xp) {
         self.state.xp += xp;
+        // May pay an unlock bonus (coins and XP) before levels are counted.
+        self.refresh_regions(true);
         for level in (level_before + 1)..=self.level() {
             self.events.push(GameEvent::LevelUp { level });
         }
@@ -885,8 +1020,9 @@ impl Game {
         {
             return ToolStatus::Locked(ToolLock::NeedsTool(missing.clone()));
         }
-        if self.state.coins < def.price {
-            return ToolStatus::Locked(ToolLock::Coins(def.price));
+        let price = self.tool_price(tool);
+        if self.state.coins < price {
+            return ToolStatus::Locked(ToolLock::Coins(price));
         }
         ToolStatus::Buyable
     }
@@ -906,17 +1042,18 @@ impl Game {
                 have: self.state.coins,
             }),
             ToolStatus::Buyable => {
-                self.state.coins -= def.price;
+                let price = self.tool_price(tool);
+                self.state.coins -= price;
                 self.state.tools.insert(def.id.clone());
                 self.events.push(GameEvent::ToolBought { tool });
                 self.refresh_recipes();
                 self.dirty = true;
-                Ok(def.price)
+                Ok(price)
             }
         }
     }
 
-    fn earn(&mut self, coins: Coins) {
+    pub(super) fn earn(&mut self, coins: Coins) {
         self.state.coins += coins;
         self.state.stats.coins_earned += coins;
     }

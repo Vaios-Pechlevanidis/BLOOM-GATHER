@@ -1,6 +1,7 @@
 //! The basket (inventory) screen: every species with its count, rarity and
 //! collection status, sorting and filtering, and selling — plus the Tool Shop
-//! tab when opened at the workshop's tool shelf. Keys 1/2 switch tabs.
+//! and Upgrades tabs when opened at the workshop's tool shelf. Keys 1/2/3
+//! switch tabs.
 //!
 //! Selling goes through the session, which enforces the keepsake reserve:
 //! flowers still needed for a required bouquet are shown as "kept" and
@@ -9,6 +10,7 @@
 use bevy::prelude::*;
 use bloom_core::data::Rarity;
 
+use super::effects::change_lines;
 use super::theme::{self, font, palette, radius, space};
 use super::widgets::{spawn_button, ButtonVariant};
 use crate::audio::{PlaySfx, Sfx};
@@ -16,7 +18,7 @@ use crate::game::{AppState, PlayState, Session};
 use crate::input::Bindings;
 use crate::interaction::OpenScreen;
 use crate::rendering::color;
-use bloom_core::game::{ToolLock, ToolStatus};
+use bloom_core::game::{ToolLock, ToolStatus, UpgradeLock, UpgradeStatus};
 use bloom_core::world::InteractableKind;
 
 pub struct InventoryPlugin;
@@ -58,6 +60,7 @@ enum Tab {
     #[default]
     Basket,
     Shop,
+    Upgrades,
 }
 
 /// Remembered between openings.
@@ -70,6 +73,8 @@ struct View {
     filter: Filter,
     /// The grid must be rebuilt (contents, sort or filter changed).
     stale: bool,
+    /// Keyboard-selected tile in the shop or upgrades.
+    selected: usize,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -82,6 +87,7 @@ enum Action {
     Close,
     Tab(Tab),
     Buy(usize),
+    BuyUpgrade(usize),
 }
 
 /// Parts of the screen only shown on the Basket tab.
@@ -107,7 +113,7 @@ fn toggle(
         match state.get() {
             PlayState::Playing => next.set(PlayState::Inventory),
             PlayState::Inventory => next.set(PlayState::Playing),
-            PlayState::Workshop => next.set(PlayState::Playing),
+            PlayState::Workshop | PlayState::Skills => next.set(PlayState::Playing),
             PlayState::Paused => {}
         }
     }
@@ -140,7 +146,8 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>, mut open: ResMut
         ))
         .with_children(|root| {
             root.spawn(theme::card(Node {
-                width: Val::Px(860.0),
+                // Four 258 px tiles per row (keeps the upgrades on one screen).
+                width: Val::Px(1160.0),
                 max_width: Val::Percent(94.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(space::XL)),
@@ -179,6 +186,12 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>, mut open: ResMut
                             "2  Tool shop",
                             ButtonVariant::Compact,
                             Action::Tab(Tab::Shop),
+                        );
+                        spawn_button(
+                            tabs,
+                            "3  Upgrades",
+                            ButtonVariant::Compact,
+                            Action::Tab(Tab::Upgrades),
                         );
                     }
                 });
@@ -293,20 +306,70 @@ fn chip_row(parent: &mut ChildSpawnerCommands, label: &str, chips: &[(&str, Acti
         });
 }
 
-fn tab_keys(keys: Res<ButtonInput<KeyCode>>, bindings: Res<Bindings>, mut view: ResMut<View>) {
-    let [basket, shop, ..] = bindings.tool_slots;
+/// Keys 1/2/3 switch tabs; in the shop and upgrades, arrows choose a tile
+/// and Enter buys it.
+fn tab_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    bindings: Res<Bindings>,
+    session: Option<ResMut<Session>>,
+    mut view: ResMut<View>,
+    mut sfx: EventWriter<PlaySfx>,
+) {
+    let [basket, shop, upgrades, _] = bindings.tool_slots;
     let tab = if keys.just_pressed(basket) {
-        Tab::Basket
+        Some(Tab::Basket)
     } else if keys.just_pressed(shop) && view.at_shelf {
-        Tab::Shop
+        Some(Tab::Shop)
+    } else if keys.just_pressed(upgrades) && view.at_shelf {
+        Some(Tab::Upgrades)
     } else {
-        return;
+        None
     };
-    if view.tab != tab {
+    if let Some(tab) = tab.filter(|&t| t != view.tab) {
         view.tab = tab;
+        view.selected = 0;
+        view.stale = true;
+    }
+    let Some(mut session) = session else { return };
+    let tiles = match view.tab {
+        Tab::Basket => return,
+        Tab::Shop => session.data().tools.len(),
+        Tab::Upgrades => session.data().upgrades.len(),
+    };
+    let before = view.selected;
+    let step = |d: isize, v: &mut View| {
+        v.selected = (v.selected as isize + d).clamp(0, tiles as isize - 1) as usize;
+    };
+    if keys.just_pressed(KeyCode::ArrowRight) {
+        step(1, &mut view);
+    }
+    if keys.just_pressed(KeyCode::ArrowLeft) {
+        step(-1, &mut view);
+    }
+    if keys.just_pressed(KeyCode::ArrowDown) {
+        step(TILES_PER_ROW, &mut view);
+    }
+    if keys.just_pressed(KeyCode::ArrowUp) {
+        step(-TILES_PER_ROW, &mut view);
+    }
+    if view.selected != before {
+        view.stale = true;
+    }
+    if Bindings::just_pressed(&keys, &bindings.confirm) {
+        let bought = match view.tab {
+            Tab::Shop => session.buy_tool(view.selected).is_ok(),
+            Tab::Upgrades => session.buy_upgrade(view.selected).is_ok(),
+            Tab::Basket => false,
+        };
+        if !bought {
+            sfx.write(PlaySfx::new(Sfx::Deny));
+        }
         view.stale = true;
     }
 }
+
+/// Shop and upgrade tiles per row (for Up/Down).
+const TILES_PER_ROW: isize = 4;
 
 fn handle_buttons(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
@@ -350,12 +413,22 @@ fn handle_buttons(
                 continue;
             }
             Action::Tab(tab) => {
+                if view.tab != tab {
+                    view.selected = 0;
+                }
                 view.tab = tab;
                 sfx.write(PlaySfx::new(Sfx::Click));
             }
             Action::Buy(tool) => {
+                view.selected = tool;
                 // Success sound and toast come from the ToolBought event.
                 if session.buy_tool(tool).is_err() {
+                    sfx.write(PlaySfx::new(Sfx::Deny));
+                }
+            }
+            Action::BuyUpgrade(upgrade) => {
+                view.selected = upgrade;
+                if session.buy_upgrade(upgrade).is_err() {
                     sfx.write(PlaySfx::new(Sfx::Deny));
                 }
             }
@@ -391,12 +464,20 @@ fn rebuild_grid(
         .map(|s| session.inventory_count(s))
         .sum();
     for mut t in &mut summary {
-        t.0 = format!("{held} flowers   {} coins", session.state().coins);
+        t.0 = match view.tab {
+            Tab::Upgrades => format!(
+                "{} coins   {} free for extras",
+                session.state().coins,
+                session.optional_spending_limit()
+            ),
+            _ => format!("{held} flowers   {} coins", session.state().coins),
+        };
     }
     for mut t in &mut title {
         t.0 = match view.tab {
             Tab::Basket => "Your Basket".into(),
             Tab::Shop => "Tool Shop".into(),
+            Tab::Upgrades => "Upgrades".into(),
         };
     }
     for mut node in &mut basket_only {
@@ -406,9 +487,10 @@ fn rebuild_grid(
             Display::None
         };
     }
-    if view.tab == Tab::Shop {
-        shop_tiles(&mut commands, grid, &session);
-        return;
+    match view.tab {
+        Tab::Shop => return shop_tiles(&mut commands, grid, &session, view.selected),
+        Tab::Upgrades => return upgrade_tiles(&mut commands, grid, &session, view.selected),
+        Tab::Basket => {}
     }
 
     let mut order: Vec<usize> = (0..data.species.len())
@@ -526,7 +608,7 @@ fn rebuild_grid(
 
 /// One tile per tool: what it does, its price and level, and Buy / Owned /
 /// what is still missing.
-fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
+fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected: usize) {
     let data = session.data().clone();
     commands.entity(grid).with_children(|grid| {
         for (i, tool) in data.tools.iter().enumerate() {
@@ -539,7 +621,7 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
                     padding: UiRect::all(Val::Px(space::SM)),
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(if i == selected { 2.5 } else { 1.5 })),
                     ..default()
                 },
                 BackgroundColor(if owned {
@@ -547,7 +629,11 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
                 } else {
                     palette::PARCHMENT
                 }),
-                BorderColor(palette::BEIGE),
+                BorderColor(if i == selected {
+                    palette::INK
+                } else {
+                    palette::BEIGE
+                }),
                 BorderRadius::all(Val::Px(radius::MD)),
             ))
             .with_children(|tile| {
@@ -580,7 +666,11 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
                 })
                 .with_children(|row| {
                     row.spawn(theme::text(
-                        format!("Level {}   {} coins", tool.unlock_level, tool.price),
+                        format!(
+                            "Level {}   {} coins",
+                            tool.unlock_level,
+                            session.tool_price(i)
+                        ),
                         font::CAPTION,
                         palette::INK,
                     ));
@@ -608,5 +698,119 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session) {
                 });
             });
         }
+        grid.spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_children(|note| {
+            note.spawn(theme::text(
+                "Arrows choose, Enter buys. Upgrades are on tab 3.",
+                font::CAPTION,
+                palette::INK_SOFT,
+            ));
+        });
+    });
+}
+
+/// One tile per upgrade: its level, what the next level changes (before ->
+/// after), the price, and Buy / Maxed / why not.
+fn upgrade_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected: usize) {
+    let data = session.data().clone();
+    commands.entity(grid).with_children(|grid| {
+        for (i, u) in data.upgrades.iter().enumerate() {
+            let status = session.upgrade_status(i);
+            let level = session.upgrade_level(i);
+            let maxed = status == UpgradeStatus::Maxed;
+            let preview = (!maxed).then(|| session.preview_upgrade(i));
+            grid.spawn((
+                Node {
+                    width: Val::Px(258.0),
+                    min_height: Val::Px(120.0),
+                    padding: UiRect::all(Val::Px(space::SM)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(if i == selected { 2.5 } else { 1.5 })),
+                    ..default()
+                },
+                BackgroundColor(if maxed {
+                    palette::PASTEL_GREEN
+                } else {
+                    palette::PARCHMENT
+                }),
+                BorderColor(if i == selected {
+                    palette::INK
+                } else {
+                    palette::BEIGE
+                }),
+                BorderRadius::all(Val::Px(radius::MD)),
+            ))
+            .with_children(|tile| {
+                tile.spawn(Node {
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn(theme::text(u.name.clone(), font::BODY, palette::INK));
+                    row.spawn(theme::text(
+                        format!("{level} / {}", u.max_level),
+                        font::CAPTION,
+                        palette::INK_SOFT,
+                    ));
+                });
+                tile.spawn(theme::text(
+                    u.description.clone(),
+                    font::CAPTION,
+                    palette::INK_SOFT,
+                ));
+                for line in change_lines(session, preview.as_ref(), &u.effects) {
+                    tile.spawn(theme::text(line, font::CAPTION, palette::SAGE_DEEP));
+                }
+                tile.spawn(Node {
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    margin: UiRect::top(Val::Auto),
+                    ..default()
+                })
+                .with_children(|row| {
+                    let price = session
+                        .upgrade_price(i)
+                        .map_or(String::new(), |p| format!("{p} coins"));
+                    row.spawn(theme::text(price, font::CAPTION, palette::INK));
+                    match &status {
+                        UpgradeStatus::Maxed => {
+                            row.spawn(theme::text("Maxed", font::CAPTION, palette::SAGE_DEEP));
+                        }
+                        UpgradeStatus::Buyable { .. } => spawn_button(
+                            row,
+                            "Buy",
+                            ButtonVariant::Small,
+                            Action::BuyUpgrade(i),
+                        ),
+                        UpgradeStatus::Locked(lock) => {
+                            let why = match lock {
+                                UpgradeLock::NeedsTool(t) => format!(
+                                    "Needs {}",
+                                    data.tool(t).map_or(t.as_str(), |d| d.name.as_str())
+                                ),
+                                UpgradeLock::Coins { .. } => "Not enough coins".into(),
+                                UpgradeLock::SavingForTools { .. } => "Save for tools first".into(),
+                            };
+                            row.spawn(theme::text(why, font::CAPTION, palette::BROWN));
+                        }
+                    }
+                });
+            });
+        }
+        grid.spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_children(|note| {
+            note.spawn(theme::text(
+                "Coins you'll need for the tools you don't have yet are kept safe: extras can only use the rest. Arrows choose, Enter buys.",
+                font::CAPTION,
+                palette::INK_SOFT,
+            ));
+        });
     });
 }

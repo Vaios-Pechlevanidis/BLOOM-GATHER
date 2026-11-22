@@ -153,54 +153,75 @@ used by other recipes, and the UI says so. The reserve is released after the
 first craft. Combined with the world totals this guarantees every required
 bouquet stays craftable.
 
-## 7. Upgrades (Phase 5)
+## 7. Upgrades
 
-Leveled, coin-priced, `cost(level) = base × growth^level`. Effects are
-multiplicative and shown as before → after in the shop.
+Bought at the workshop's **tool shelf** (Upgrades tab). Levelled and
+coin-priced: `cost(level) = base × 1.6^level`, then discounts. Every tile
+shows what the next level changes as concrete numbers ("Single pick every:
+0.21 s -> 0.20 s"). Effects add up per kind across upgrades and skills.
 
-* Harvesting: Nimble Hands (cooldown −6 %/lvl, 5), Wider Reach (radius
-  +10 %/lvl, 5), Deep Basket (max per action +20 %/lvl, 5), Wide Sweep (area
-  size +10 %/lvl, 3).
-* Crafting: Quick Binding (craft time −10 %/lvl, 5), Bulk Orders (batch
-  capacity +5/lvl, 4), Careful Hands (5 % chance/lvl a bouquet is
-  "exquisite", selling +25 %, 4).
-* Economy: Market Stall (bouquet price +4 %/lvl, 5), Haggler (tool price
-  −3 %/lvl, 5), Pretty Packaging (wrapped/premium recipes +6 %/lvl, 3;
-  requires Wrapping Paper Set).
+| Upgrade | Per level | Levels | Needs |
+|---|---|---|---|
+| Nimble Hands | single-pick cooldown −6 % | 5 | — |
+| Wider Reach | basket and rake circle +10 % | 5 | Harvesting Basket |
+| Deep Basket | flowers per basket/rake/cart action +20 % | 5 | Harvesting Basket |
+| Wide Rakes | cart area +10 % | 3 | Advanced Harvesting Equipment |
+| Quick Binding | binding time −8 % | 5 | Binding Ribbon |
+| Bulk Orders | batch capacity +5 | 4 | Binding Ribbon |
+| Garden Boots | walking and running speed +4 % | 4 | — |
+| Market Stall | every bouquet's price +4 % | 5 | Binding Ribbon |
+| Haggler | tool prices −3 % | 5 | — |
+| Pretty Packaging | wrapped bouquets' price +6 % | 3 | Wrapping Paper Set |
 
-No upgrade raises the price of individual flowers.
+No upgrade raises the price of individual flowers. Garden Boots replaces the
+earlier "Careful Hands" idea (a random "exquisite" bouquet), which added a
+hidden second bouquet stock for little play value; walking speed matters in
+first person.
 
-## 8. Skill tree (Phase 6)
+**Progression guard:** an upgrade can't be bought if it would leave too
+little for the required tools still missing (economy doc §5.2). The shop
+shows how much is free for extras, and a blocked upgrade says "Save for tools
+first". Tools themselves are never blocked.
 
-Five branches, 21 skills, skill points (SP) from level-ups (1 per level from
-level 2), region completions (+1 each), collection milestones (8 and 16
-species: +1 each) and selected achievements.
+## 8. Skill tree
 
-* **Harvesting:** Quick Fingers (cooldown −5 %/lvl, 3) → Double Harvest (8 %
-  chance/lvl a Single pick also picks the nearest neighbour, 3) → Improved
-  Radius (+8 % radius/lvl, 3; requires Harvesting Basket) → Master Picker
-  (+25 % max per action; requires Pro Gardening Tools).
-* **Botany:** Botanical Knowledge (+15 % discovery XP) → Flower Recognition
-  (highlights undiscovered species on the field) → Rare Discoveries
-  (minimap markers for rare/very rare flowers) → Collection Bonuses (+1 SP per
-  region whose species are all discovered). *No Botany skill touches flower
-  price.*
-* **Floristry:** Basic Florist (+10 % crafting XP) → Efficient Binding (craft
-  time −10 %/lvl) → Artistic Arrangements (+5 % bouquet price; requires
-  Garden Scissors) → Premium Packaging (+8 % on wrapped recipes; requires
-  Wrapping Paper Set) → Master Florist (+10 batch capacity; requires
-  Workbench).
-* **Efficiency:** Better Deals (tool price −4 %) → Reduced Tool Costs
-  (upgrade price −4 %/lvl) → Improved Profits (bouquet price +3 %/lvl) →
-  Efficient Production (5 % chance a craft refunds one non-reserved flower
-  — capped so it never creates flowers beyond the finite world total: refunds
-  only return flowers consumed in that craft).
-* **Exploration:** New Meadows (region unlock harvest threshold −10 %) →
-  Advanced Exploration (camera pan speed/zoom range +) → Rare Flower Detection
-  (remaining-rare counter per region) → Region Unlock Bonuses (+50 coins and
-  +50 XP on each region unlock).
+Open with **K**. Five branches of chained skills (each needs the one above
+it); 21 skills, 44 skill points to learn everything. Skill points (SP):
+1 per level from level 2, +1 per completed region, +1 at 8 and 16 species
+discovered, +1 per fully discovered region with Collection Bonuses. A full
+playthrough earns about 41, so the player picks a focus. Skills are
+permanent. They never grant a tool, a harvesting mode or a recipe; some
+require a tool because they improve what it does.
 
-Skills never grant a tool or unlock a mode/recipe that requires a tool.
+* **Harvesting:** Quick Fingers (pick cooldown −5 %/lvl, 3) → Double
+  Harvest (8 %/lvl chance a single pick also takes the nearest unpicked
+  neighbour within 1.6 m, 3) → Improved Radius (basket/rake circle +8 %/lvl,
+  3; needs Harvesting Basket) → Master Picker (+25 % flowers per action, 2 SP;
+  needs Pro Gardening Tools).
+* **Botany:** Botanical Knowledge (+15 %/lvl discovery XP, 2) → Flower
+  Recognition (flowers of undiscovered species have a golden glint above
+  them) → Rare Flower Detection (the region card counts rare and very rare
+  flowers left) → Collection Bonuses (+1 SP per fully discovered region,
+  2 SP). *No Botany skill touches flower price.*
+* **Floristry:** Basic Florist (+10 %/lvl crafting XP, 2) → Efficient
+  Binding (binding time −10 %/lvl, 2) → Artistic Arrangements (+5 % bouquet
+  price; needs Garden Scissors) → Premium Packaging (+8 % on wrapped
+  bouquets; needs Wrapping Paper Set) → Master Florist (+10 batch capacity,
+  2 SP; needs Florist Workbench).
+* **Efficiency:** Better Deals (tool price −4 %/lvl, 2) → Reduced Upgrade
+  Costs (upgrade price −4 %/lvl, 3) → Improved Profits (bouquet price
+  +3 %/lvl, 3) → Efficient Production (5 %/lvl chance per bouquet that one
+  of its flowers is saved and returns to the basket, 2 SP per level). Only
+  flowers that craft used come back, so the world stays finite.
+* **Exploration:** New Meadows (regions open after 10 % fewer harvested
+  flowers) → Trailblazer (walk/run +5 %/lvl, 2) → Long Reach (+0.3 m/lvl
+  pick and aim reach, 2) → Region Unlock Bonuses (+50 coins and +50 XP
+  whenever a region opens, 2 SP).
+
+Chance-based skills use a deterministic RNG whose state is saved, so
+reloading never re-rolls a result. The 2D-era ideas "minimap markers" and
+"camera pan/zoom" became Flower Recognition's glints and Long Reach, which
+fit a first-person game.
 
 ## 9. Levels & XP
 

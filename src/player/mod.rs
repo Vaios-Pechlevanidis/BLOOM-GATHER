@@ -211,12 +211,18 @@ fn step_player(
     time: Res<Time>,
     content: Res<Content>,
     scene: Option<Res<RegionScene>>,
+    session: Option<Res<Session>>,
     player: Option<ResMut<Player>>,
     mut pending: ResMut<PendingInput>,
 ) {
     let (Some(scene), Some(mut player)) = (scene, player) else {
         return;
     };
+    // Garden Boots and Trailblazer make walking and running faster.
+    let speed = session.map_or(1.0, |s| s.move_speed_multiplier());
+    let mut cfg = content.player.clone();
+    cfg.walk_speed *= speed;
+    cfg.sprint_speed *= speed;
     let layout = &scene.layout;
     let env = Environment {
         terrain: &layout.terrain,
@@ -228,9 +234,7 @@ fn step_player(
         jump: std::mem::take(&mut pending.jump),
     };
     player.previous = player.body.position;
-    let events = player
-        .body
-        .step(&input, time.delta_secs(), &content.player, &env);
+    let events = player.body.step(&input, time.delta_secs(), &cfg, &env);
     if events.landed && events.landing_speed > 2.5 {
         let dip = ((events.landing_speed - 2.5) * 0.025).min(0.14);
         player.landing_dip = player.landing_dip.max(dip);

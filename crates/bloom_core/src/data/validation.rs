@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use super::{GameData, ToolEffect};
+use super::{Effect, GameData, ToolEffect};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationError(pub String);
@@ -38,6 +38,7 @@ impl GameData {
         self.validate_tools(&mut r);
         self.validate_recipes(&mut r);
         self.validate_global_balance(&mut r);
+        self.validate_growth(&mut r);
         if r.0.is_empty() {
             Ok(())
         } else {
@@ -134,6 +135,8 @@ impl GameData {
         unique(r, "tool", self.tools.iter().map(|t| t.id.as_str()));
         unique(r, "recipe", self.recipes.iter().map(|x| x.id.as_str()));
         unique(r, "region", self.regions.iter().map(|x| x.id.as_str()));
+        unique(r, "upgrade", self.upgrades.iter().map(|x| x.id.as_str()));
+        unique(r, "skill", self.skills.iter().map(|x| x.id.as_str()));
     }
 
     fn validate_species(&self, r: &mut Report) {
@@ -434,5 +437,122 @@ impl GameData {
                 )
             });
         }
+    }
+
+    /// Upgrades and the skill tree: references, sane per-level values, a
+    /// chain-shaped tree without cycles, and no level that would be wasted
+    /// against a floor.
+    fn validate_growth(&self, r: &mut Report) {
+        let effect_ok = |r: &mut Report, owner: &str, e: &Effect| {
+            if let Some(x) = e.amount() {
+                let max = if matches!(e, Effect::Reach(_)) {
+                    2.0
+                } else {
+                    1.0
+                };
+                r.check(x > 0.0 && x <= max, || {
+                    format!("{owner}: {} must be in (0, {max}] per level", e.kind())
+                });
+            }
+            match e {
+                Effect::BatchCapacity(n) => {
+                    r.check(*n > 0, || format!("{owner}: batch capacity must be > 0"))
+                }
+                Effect::BouquetPriceWithTool { tool, .. } => r
+                    .check(self.tool(tool).is_some(), || {
+                        format!("{owner}: unknown tool '{tool}'")
+                    }),
+                Effect::RegionUnlockBonus { coins, xp } => r.check(*coins > 0 || *xp > 0, || {
+                    format!("{owner}: region unlock bonus gives nothing")
+                }),
+                _ => {}
+            }
+        };
+
+        for u in &self.upgrades {
+            let id = format!("upgrade '{}'", u.id);
+            r.check(!u.name.trim().is_empty(), || format!("{id} has no name"));
+            r.check(u.base_price > 0, || format!("{id} must cost something"));
+            r.check(u.max_level >= 1, || {
+                format!("{id} needs at least one level")
+            });
+            r.check(!u.effects.is_empty(), || format!("{id} does nothing"));
+            if let Some(t) = &u.requires_tool {
+                r.check(self.tool(t).is_some(), || {
+                    format!("{id} requires unknown tool '{t}'")
+                });
+            }
+            for e in &u.effects {
+                effect_ok(r, &id, e);
+            }
+        }
+
+        for (i, s) in self.skills.iter().enumerate() {
+            let id = format!("skill '{}'", s.id);
+            r.check(!s.name.trim().is_empty(), || format!("{id} has no name"));
+            r.check(s.max_level >= 1, || {
+                format!("{id} needs at least one level")
+            });
+            r.check(s.cost >= 1, || {
+                format!("{id} must cost at least one skill point")
+            });
+            r.check(!s.effects.is_empty(), || format!("{id} does nothing"));
+            if let Some(t) = &s.requires_tool {
+                r.check(self.tool(t).is_some(), || {
+                    format!("{id} requires unknown tool '{t}'")
+                });
+            }
+            if let Some(req) = &s.requires_skill {
+                // Listed earlier in the same branch: no cycles, a readable tree.
+                match self.skills.iter().position(|x| &x.id == req) {
+                    None => r.check(false, || format!("{id} requires unknown skill '{req}'")),
+                    Some(j) => {
+                        r.check(j < i, || format!("{id} must come after '{req}'"));
+                        r.check(self.skills[j].branch == s.branch, || {
+                            format!("{id} requires '{req}' from another branch")
+                        });
+                    }
+                }
+            }
+            for e in &s.effects {
+                effect_ok(r, &id, e);
+            }
+        }
+
+        // Every level of a reduction must still do something: the combined
+        // maximum from all sources stays within its floor.
+        let mut totals: HashMap<&str, (f32, f32)> = HashMap::new();
+        let all = self
+            .upgrades
+            .iter()
+            .map(|u| (u.max_level, &u.effects))
+            .chain(self.skills.iter().map(|s| (s.max_level, &s.effects)));
+        for (levels, effects) in all {
+            for e in effects {
+                if let Some((x, floor)) = e.reduction() {
+                    let t = totals.entry(e.kind()).or_insert((0.0, floor));
+                    t.0 += x * levels as f32;
+                }
+            }
+        }
+        for (kind, (total, floor)) in totals {
+            r.check(total <= 1.0 - floor + 1e-4, || {
+                format!(
+                    "{kind} reductions add up to {:.0} % at most levels, beyond the {:.0} % floor",
+                    total * 100.0,
+                    (1.0 - floor) * 100.0
+                )
+            });
+        }
+
+        let m = &self.progression.collection_milestones;
+        r.check(m.windows(2).all(|w| w[0] < w[1]), || {
+            "collection_milestones must be increasing".into()
+        });
+        r.check(
+            m.iter()
+                .all(|&n| n >= 1 && n as usize <= self.species.len()),
+            || "collection_milestones must be between 1 and the number of species".into(),
+        );
     }
 }

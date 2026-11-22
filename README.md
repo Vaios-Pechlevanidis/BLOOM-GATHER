@@ -6,11 +6,12 @@ pick every flower, buy better tools, craft increasingly valuable bouquets, and f
 the game with a real ending. It runs fully offline as a native app, with no
 browser and no account.
 
-**Status:** Phases 1, A, B, C, D and E are complete: walk a lush, breezy Sunny
+**Status:** Phases 1, A, B, C, D, E and U are complete: walk a lush, breezy Sunny
 Meadow in first person, pick its 100 flowers by looking at them and pressing E
 (or with the basket, garden rake and flower cart), discover species, level up,
 buy tools at the workshop's tool shelf, bind bouquets at the workbench and sell
-them, and quit and continue later; picked flowers never come back. See [TODO.md](TODO.md) and
+them, buy upgrades and learn skills (K), and quit and continue later; picked
+flowers never come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
 
 ## Running
@@ -37,6 +38,8 @@ Controls:
 | Basket (inventory, selling) | Tab |
 | Use a workshop station (workbench, tool shelf, storage, bouquet display) | E while looking at it |
 | Workbench | Up/Down recipe, Left/Right quantity, Enter bind, 1 / 2 tabs, Esc close |
+| Tool shelf (Tool Shop, Upgrades) | 2 / 3 tabs, arrows choose, Enter buys |
+| Skill tree | K (arrows choose, Enter learns, K / Esc close) |
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
 | Pause / settings | Esc (sensitivity, field of view, sound volume, head movement, invert look) |
@@ -54,7 +57,7 @@ Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
 cargo test                      # all unit + integration tests
 cargo test -p bloom_core        # gameplay/content tests only (no Bevy, fast)
 cargo clippy --all-targets
-scripts/smoke.sh               # play the real game twice (pick, tools, workshop, save, restart, verify); screenshots
+scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, save, restart, verify); screenshots
 ```
 
 ## Project layout

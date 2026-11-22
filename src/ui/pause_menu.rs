@@ -226,7 +226,9 @@ fn toggle_with_key(
         next_state.set(match state.get() {
             PlayState::Playing => PlayState::Paused,
             // Esc closes the basket rather than pausing on top of it.
-            PlayState::Paused | PlayState::Inventory | PlayState::Workshop => PlayState::Playing,
+            PlayState::Paused | PlayState::Inventory | PlayState::Workshop | PlayState::Skills => {
+                PlayState::Playing
+            }
         });
     }
 }

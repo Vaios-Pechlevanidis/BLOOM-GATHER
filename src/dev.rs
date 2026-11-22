@@ -716,6 +716,106 @@ fn drive(
                     format!("{:?}", target.station),
                 );
                 smoke.shot(&mut commands, "14_bouquet_display");
+                stand_in_workshop(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    &content,
+                    Vec2::new(-1.6, -0.6),
+                    InteractableKind::ToolShelf,
+                );
+                0.5
+            }
+            // --- upgrades at the tool shelf, then the skill tree ---
+            60 => {
+                smoke.check(
+                    "looking at the tool shelf",
+                    target.station == Some(InteractableKind::ToolShelf),
+                    format!("{:?}", target.station),
+                );
+                smoke.tap(KeyCode::KeyE);
+                0.5
+            }
+            61 => {
+                smoke.expect("E opens the shelf", play_state, PlayState::Inventory);
+                smoke.tap(KeyCode::Digit3);
+                0.5
+            }
+            62 => {
+                smoke.shot(&mut commands, "15_upgrades");
+                if let Some(s) = session_mut.as_deref() {
+                    smoke.mark_count = s.state().coins;
+                }
+                smoke.tap(KeyCode::Enter);
+                0.4
+            }
+            63 => {
+                if let Some(s) = session_mut.as_deref() {
+                    let level = s.upgrade_level(0);
+                    let paid = smoke.mark_count - s.state().coins;
+                    smoke.check(
+                        "Enter buys the first upgrade",
+                        level == 1 && paid == s.data().upgrades[0].base_price,
+                        format!("level {level}, paid {paid}"),
+                    );
+                }
+                smoke.tap(KeyCode::Escape);
+                0.4
+            }
+            64 => {
+                smoke.expect("Esc closes the shelf", play_state, PlayState::Playing);
+                smoke.tap(KeyCode::KeyK);
+                0.5
+            }
+            65 => {
+                smoke.expect("K opens the skill tree", play_state, PlayState::Skills);
+                smoke.shot(&mut commands, "16_skill_tree");
+                smoke.tap(KeyCode::Enter);
+                0.3
+            }
+            66 => {
+                smoke.tap(KeyCode::ArrowRight);
+                0.3
+            }
+            67 => {
+                smoke.tap(KeyCode::Enter);
+                0.3
+            }
+            68 => {
+                smoke.tap(KeyCode::ArrowDown);
+                0.3
+            }
+            69 => {
+                smoke.tap(KeyCode::Enter);
+                0.4
+            }
+            70 => {
+                let learned: Vec<String> = session_mut
+                    .as_deref()
+                    .map(|s| s.state().skills.keys().cloned().collect())
+                    .unwrap_or_default();
+                smoke.check(
+                    "Enter learns skills, arrows move between them",
+                    learned == ["botanical_knowledge", "flower_recognition", "quick_fingers"],
+                    learned.join(","),
+                );
+                smoke.shot(&mut commands, "17_skills_learned");
+                smoke.tap(KeyCode::KeyK);
+                0.4
+            }
+            71 => {
+                smoke.expect("K closes the skill tree", play_state, PlayState::Playing);
+                aim_at_cluster(
+                    &mut smoke,
+                    player.as_deref_mut(),
+                    scene,
+                    session_mut.as_deref(),
+                    &content,
+                );
+                0.8
+            }
+            72 => {
+                smoke.shot(&mut commands, "18_new_species_sparkle");
                 smoke.tap(KeyCode::Escape);
                 smoke.step = 12; // → 13: pause and save
                 0.6
@@ -745,6 +845,13 @@ fn drive(
                 smoke.expect("back to the title", app_state, AppState::MainMenu);
                 smoke.check("title now offers Continue", saves.has_save, saves.has_save);
                 // Everything picked (by hand and with tools) and the tools owned.
+                let growth = session_mut.as_deref().map_or(String::new(), |se| {
+                    format!(
+                        "{}\n{}",
+                        levels_line(&se.state().upgrades),
+                        levels_line(&se.state().skills)
+                    )
+                });
                 let (picks, tools, bouquets, held): (Vec<String>, Vec<String>, Vec<String>, u32) =
                     match (session_mut.as_deref(), scene) {
                         (Some(se), Some(sc)) => (
@@ -765,7 +872,7 @@ fn drive(
                 let written = std::fs::write(
                     smoke.expected_path(),
                     format!(
-                        "{}\n{}\n{}\n{held}",
+                        "{}\n{}\n{}\n{held}\n{growth}",
                         picks.join(","),
                         tools.join(","),
                         bouquets.join(",")
@@ -815,6 +922,8 @@ fn verify_resumed(
         .next()
         .and_then(|l| l.parse().ok())
         .unwrap_or(u32::MAX);
+    let upgrades = lines.next().unwrap_or("").to_string();
+    let skills = lines.next().unwrap_or("").to_string();
     smoke.check(
         "run 1 recorded its picks",
         expected.len() > PICKS,
@@ -858,6 +967,18 @@ fn verify_resumed(
         .iter()
         .map(|(id, n)| format!("{id}={n}"))
         .collect();
+    let upgrades_now = levels_line(&session.state().upgrades);
+    smoke.check(
+        "upgrades restored",
+        upgrades_now == upgrades && !upgrades.is_empty(),
+        &upgrades,
+    );
+    let skills_now = levels_line(&session.state().skills);
+    smoke.check(
+        "skills restored",
+        skills_now == skills && !skills.is_empty(),
+        &skills,
+    );
     smoke.check(
         "bouquets restored",
         owned_bouquets.join(",") == bouquets && !bouquets.is_empty(),
@@ -883,6 +1004,15 @@ fn verify_resumed(
             format!("{d:.2} m"),
         );
     }
+}
+
+/// `id=level,...` for the expected-state file.
+fn levels_line(levels: &std::collections::BTreeMap<String, u32>) -> String {
+    levels
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Stand inside the workshop at `local` (workshop coordinates) and look at

@@ -7,10 +7,10 @@
 use bevy::prelude::*;
 
 use super::theme::{self, font, palette, radius, space};
-use crate::game::{ActiveRegion, AppState, Content, PlayState, Session};
+use crate::game::{ActiveRegion, AppState, Content, PlayState, RegionScene, Session};
 use crate::interaction::{station_text, LookTarget};
 use crate::tools::{mode_name, GroundAim, SelectedMode, MODE_ORDER};
-use bloom_core::data::HarvestMode;
+use bloom_core::data::{HarvestMode, Rarity};
 use bloom_core::world::InteractableKind;
 
 pub struct HudPlugin;
@@ -39,6 +39,10 @@ enum Stat {
     XpText,
     /// "Binding 3 Simple Bouquets: 40%" while the workbench works.
     Job,
+    /// Unspent skill points (hidden when there are none).
+    SkillPoints,
+    /// Rare and very rare flowers left (Rare Flower Detection skill).
+    Rare,
 }
 
 #[derive(Component)]
@@ -88,6 +92,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                 Stat::Collection,
                 theme::text("", font::CAPTION, palette::INK_SOFT),
             ));
+            card.spawn((
+                Stat::Rare,
+                theme::text("", font::CAPTION, palette::SAGE_DEEP),
+            ));
         });
 
     // Coins and level, top right.
@@ -136,6 +144,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ));
             card.spawn((
                 Stat::Job,
+                theme::text("", font::CAPTION, palette::SAGE_DEEP),
+            ));
+            card.spawn((
+                Stat::SkillPoints,
                 theme::text("", font::CAPTION, palette::SAGE_DEEP),
             ));
         });
@@ -252,7 +264,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ))
             .with_children(|hint| {
                 hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   Esc  pause",
+                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   Esc  pause",
                     font::CAPTION,
                     palette::INK_SOFT,
                 ));
@@ -272,6 +284,7 @@ fn show_crosshair<const VISIBLE: bool>(mut crosshairs: Query<&mut Visibility, Wi
 
 fn update_stats(
     session: Option<Res<Session>>,
+    scene: Option<Res<RegionScene>>,
     active: Res<ActiveRegion>,
     mut texts: Query<(&Stat, &mut Text)>,
     mut fill: Query<&mut Node, With<XpFill>>,
@@ -282,6 +295,17 @@ fn update_stats(
     let discovered = session.state().discovered.len();
     let level = session.level();
     let progress = session.level_progress();
+    let points = session.skill_points();
+    let rare = scene
+        .filter(|_| session.modifiers().rare_flower_counter)
+        .map(|scene| {
+            (0..scene.field.len() as u32)
+                .filter(|&i| {
+                    !session.is_harvested(scene.region, i)
+                        && data.species[scene.field.species(i)].rarity >= Rarity::Rare
+                })
+                .count()
+        });
     for (stat, mut text) in &mut texts {
         let value = match stat {
             Stat::Remaining => format!(
@@ -306,6 +330,12 @@ fn update_stats(
                 }
                 None => String::new(),
             },
+            Stat::SkillPoints => match points {
+                0 => String::new(),
+                1 => "1 skill point to spend (K)".into(),
+                n => format!("{n} skill points to spend (K)"),
+            },
+            Stat::Rare => rare.map_or(String::new(), |n| format!("{n} rare flowers left here")),
             Stat::XpText => match progress {
                 Some((into, needed)) => format!("{into} / {needed} XP"),
                 None => "Max level".to_string(),

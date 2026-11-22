@@ -529,7 +529,7 @@ fn rebuild(
                 d.spawn(theme::text(
                     format!(
                         "Sells for {} coins (its flowers alone: {raw})",
-                        r.sell_price
+                        session.bouquet_price(selected)
                     ),
                     font::BODY,
                     palette::SAGE_DEEP,
@@ -582,7 +582,7 @@ fn rebuild(
                                     format!(
                                         "Takes {:.1} s, sells for {} coins in all",
                                         plan.secs,
-                                        r.sell_price * bench.quantity as u64
+                                        session.bouquet_price(selected) * bench.quantity as u64
                                     ),
                                     font::CAPTION,
                                     palette::INK_SOFT,
@@ -660,7 +660,7 @@ fn rebuild(
                     if n == 0 {
                         continue;
                     }
-                    total += r.sell_price * n as u64;
+                    total += session.bouquet_price(i) * n as u64;
                     list.spawn((
                         Node {
                             padding: UiRect::all(Val::Px(space::SM)),
@@ -686,7 +686,7 @@ fn rebuild(
                         })
                         .with_children(|right| {
                             right.spawn(theme::text(
-                                format!("{} coins each", r.sell_price),
+                                format!("{} coins each", session.bouquet_price(i)),
                                 font::CAPTION,
                                 palette::INK_SOFT,
                             ));

@@ -5,6 +5,7 @@
 //! types below, indexed for fast lookup and validated by
 //! [`GameData::validate`] (see `validation.rs`).
 
+mod growth;
 mod validation;
 
 use std::collections::HashMap;
@@ -15,6 +16,9 @@ use serde::{Deserialize, Serialize};
 use crate::economy::{Coins, EconomyConfig};
 use crate::progression::ProgressionConfig;
 
+pub use growth::{
+    Effect, SkillBranch, SkillDef, UpgradeCategory, UpgradeDef, MIN_PRICE_FACTOR, MIN_TIME_FACTOR,
+};
 pub use validation::ValidationError;
 
 /// The content file compiled into the game binary.
@@ -401,6 +405,10 @@ pub struct GameData {
     pub tools: Vec<ToolDef>,
     pub recipes: Vec<RecipeDef>,
     pub regions: Vec<RegionDef>,
+    #[serde(default)]
+    pub upgrades: Vec<UpgradeDef>,
+    #[serde(default)]
+    pub skills: Vec<SkillDef>,
     #[serde(skip)]
     index: Index,
 }
@@ -411,6 +419,8 @@ struct Index {
     tools: HashMap<String, usize>,
     recipes: HashMap<String, usize>,
     regions: HashMap<String, usize>,
+    upgrades: HashMap<String, usize>,
+    skills: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -473,6 +483,8 @@ impl GameData {
             tools: build(&self.tools, |t| &t.id),
             recipes: build(&self.recipes, |r| &r.id),
             regions: build(&self.regions, |r| &r.id),
+            upgrades: build(&self.upgrades, |u| &u.id),
+            skills: build(&self.skills, |s| &s.id),
         };
     }
 
@@ -498,6 +510,22 @@ impl GameData {
 
     pub fn tool_index(&self, id: &str) -> Option<usize> {
         self.index.tools.get(id).copied()
+    }
+
+    pub fn upgrade(&self, id: &str) -> Option<&UpgradeDef> {
+        self.index.upgrades.get(id).map(|&i| &self.upgrades[i])
+    }
+
+    pub fn upgrade_index(&self, id: &str) -> Option<usize> {
+        self.index.upgrades.get(id).copied()
+    }
+
+    pub fn skill(&self, id: &str) -> Option<&SkillDef> {
+        self.index.skills.get(id).map(|&i| &self.skills[i])
+    }
+
+    pub fn skill_index(&self, id: &str) -> Option<usize> {
+        self.index.skills.get(id).copied()
     }
 
     pub fn region(&self, id: &str) -> Option<&RegionDef> {

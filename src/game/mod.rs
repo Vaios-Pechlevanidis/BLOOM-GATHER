@@ -27,7 +27,9 @@ impl Plugin for GamePlugin {
             .add_systems(OnEnter(PlayState::Paused), pause_time)
             .add_systems(OnExit(PlayState::Paused), resume_time)
             .add_systems(OnEnter(PlayState::Inventory), pause_time)
-            .add_systems(OnExit(PlayState::Inventory), resume_time);
+            .add_systems(OnExit(PlayState::Inventory), resume_time)
+            .add_systems(OnEnter(PlayState::Skills), pause_time)
+            .add_systems(OnExit(PlayState::Skills), resume_time);
     }
 }
 

@@ -110,17 +110,44 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
   checks the Bouquets tab and the display, and verifies bouquets and basket persist across a
   restart
 
+## Phase U: Upgrades & skill tree ✅
+
+- ✅ Content: 10 levelled upgrades and a 21-skill, five-branch tree in `game_data.ron`, built from
+  per-level effects (`data/growth.rs`); collection milestones (8, 16 species) in progression
+- ✅ Validation: references, value ranges, chain-shaped tree without cycles, stacked reductions
+  stay within their floors (no wasted levels), increasing milestones
+- ✅ Core modifier pipeline (`game/growth.rs`) applied to pick cooldown, gather radius/capacity,
+  cart area, reach, move speed, discovery/crafting XP, binding time, batch capacity, tool,
+  upgrade and bouquet prices, region thresholds
+- ✅ Progression guard (economy doc §5.2): upgrades can't eat coins needed for missing tools
+- ✅ Derived skill points (levels, regions, milestones, Collection Bonuses); learn with
+  prerequisites and tool requirements; skills never grant tools, modes or recipes
+- ✅ Chance skills (Double Harvest, Efficient Production) on a saved deterministic RNG
+- ✅ Region unlocks recorded and announced once; New Meadows and Region Unlock Bonuses
+- ✅ Upgrades tab at the tool shelf (before -> after values, guard explanation); shelf screen
+  keyboard buying (arrows + Enter)
+- ✅ Skill tree screen (K): branches, connectors, details with now -> next, Learn (Enter)
+- ✅ HUD: unspent skill points, rare flowers left (skill); toasts for upgrades, skills, region
+  unlocks, saved flowers, collection milestones; bonus bouquet prices everywhere
+- ✅ Flower Recognition: golden glints above flowers of undiscovered species
+- ✅ Tests: 17 new (prices, caps, tool needs, guard, SP sources, prerequisites, stacking and
+  floors, bouquet bonuses, discounts, crafting effects, deterministic Double Harvest, Efficient
+  Production accounting, early region unlock + bonus, save round trip, tamper checks, content
+  rules); 138 tests in all
+- ✅ Smoke test buys an upgrade and learns three skills with the keyboard, screenshots the glints,
+  and verifies upgrades and skills persist across a restart
+
 ## Later phases ⬜
 
-U Upgrades (next) & skill tree · P Progression & achievements · F Remaining regions ·
-Z Completion & ending · G Polish & release
+P Progression & achievements (next) · F Remaining regions · Z Completion & ending ·
+G Polish & release
 
 ## Temporary assets (replace before release)
 
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
 - Sound effects and ambience: synthesised in `src/audio.rs`
-- Landmarks, workshop cottage and furniture, bouquets, butterflies, bees, clouds: procedural meshes
+- Landmarks, workshop cottage and furniture, bouquets, glints, butterflies, bees, clouds: procedural meshes
 - First-person hand and tools: procedural meshes in `src/viewmodel.rs`
 - Terrain: vertex colours only (no textures, no grass yet)
 - Sky: flat clear colour + fog (no sky gradient or clouds yet)
@@ -139,6 +166,8 @@ Z Completion & ending · G Polish & release
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
 - Key rebinding UI arrives with the full settings screen (Phase G); bindings are
   already data in `Bindings`.
+- Toasts sit above open screens and can briefly cover the top of the skill tree when several
+  skills are learned in a row.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
 - Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
 - macOS: transitive dependency `block v0.1.6` emits a future-incompatibility warning.

@@ -23,7 +23,7 @@ inside the good-play income.
 | Sink | Total |
 |---|---|
 | Required tools (all 9) | 15,300 (73 % of guaranteed income) |
-| All upgrades to max (Phase 5 target) | ≈ 19,600 |
+| All upgrades to max | 19,633 (before discounts) |
 | Everything | ≈ 34,900 (between raw and crafted income) |
 
 So a player who never crafts can still buy every required tool, with about
@@ -91,15 +91,15 @@ central economic decision of the late game.
 Level and flowers harvested only go up, so a region can always be unlocked
 eventually.
 
-### 5.2 Progression guard on optional purchases (Phase 5)
+### 5.2 Progression guard on optional purchases (implemented in Phase U)
 An optional purchase (upgrade) of price `p` is allowed only if
 
 ```
 coins − p + G ≥ R
 G = base_value × (unharvested flowers in world + flowers in inventory)
-    + Σ sell value of bouquets in inventory
+    + Σ sell value (with bonuses) of bouquets owned or being bound
     + unclaimed region completion coins
-R = Σ current price of required tools not yet owned
+R = Σ current (discounted) price of required tools not yet owned
 ```
 
 `G` counts only income the player can always obtain. At the start
@@ -124,7 +124,7 @@ action would break feasibility, the excess is held back and the UI shows
 Individual flowers can always be sold (except the set-aside ones), so a player
 with flowers is never without a path to coins.
 
-## 6. Upgrade cost model (Phase 5)
+## 6. Upgrade cost model
 
 `cost(level) = round(base × growth^level)`, default `growth = 1.6`, where
 `level` is the current level (so the first purchase costs `base`).
@@ -134,22 +134,33 @@ Sum over n levels = `base × (growth^n − 1) / (growth − 1)`:
 | Upgrade | Base | Levels | Total |
 |---|---|---|---|
 | Nimble Hands | 80 | 5 | 1,265 |
-| Wider Reach | 150 | 5 | 2,372 |
-| Deep Basket | 150 | 5 | 2,372 |
-| Wide Sweep | 400 | 3 | 2,064 |
+| Wider Reach | 150 | 5 | 2,371 |
+| Deep Basket | 150 | 5 | 2,371 |
+| Wide Rakes | 400 | 3 | 2,064 |
 | Quick Binding | 100 | 5 | 1,581 |
 | Bulk Orders | 200 | 4 | 1,851 |
-| Careful Hands | 250 | 4 | 2,314 |
-| Market Stall | 150 | 5 | 2,372 |
+| Garden Boots | 250 | 4 | 2,314 |
+| Market Stall | 150 | 5 | 2,371 |
 | Haggler | 120 | 5 | 1,897 |
 | Pretty Packaging | 300 | 3 | 1,548 |
-| **Total** | | | **≈ 19,636** |
+| **Total** | | | **19,633** |
 
-Price modifiers (Haggler, Better Deals, Reduced Tool Costs) are additive
-percentages, applied once, floored at 50 % of base, then rounded to whole
-coins. Bouquet price modifiers (Market Stall, Artistic Arrangements, Improved
-Profits, Pretty Packaging, exquisite bonus) are additive with each other and
-multiply the recipe base price; they never apply to raw flowers.
+(Each level's price is rounded to whole coins, hence 2,371 rather than
+15.81 × 150.)
+
+Stacking rules, all in `bloom_core::game::growth`:
+
+* Effects of the same kind add up across upgrades and skills.
+* Price discounts (Haggler, Better Deals, Reduced Upgrade Costs) and the
+  region threshold reduction are floored at 50 % of base; time reductions
+  (pick cooldown, binding time) at 25 %. Validation rejects content whose
+  maximum levels could pass a floor, so no level is ever wasted: pick
+  cooldown tops out at −45 %, binding time at −60 %, tool prices at −23 %.
+* Bouquet bonuses (Market Stall, Artistic Arrangements, Improved Profits,
+  Pretty Packaging, Premium Packaging) add up and multiply the recipe's base
+  price (up to +34 % for every bouquet, +60 % for wrapped ones). They never
+  apply to raw flowers, so invariant 1 holds structurally: no effect kind
+  targets the flower price.
 
 ## 7. XP & skill points
 
@@ -158,8 +169,9 @@ multiply the recipe base price; they never apply to raw flowers.
   first crafts (8 × 50 = 400) and ≈ 600 bouquets (≈ 6,000 XP) a full
   playthrough reaches about level 30 (the cap).
 * SP: 1 per level from 2 (up to 29), +5 region completions, +2 collection
-  milestones, +a few from achievements ≈ 36–40 SP total, against a tree that
-  costs ≈ 45 SP to max — the player chooses a focus until late game.
+  milestones (8 and 16 species), +up to 5 from Collection Bonuses ≈ 41 SP
+  (achievements in Phase P may add a few), against a tree that costs 44 SP to
+  max — the player chooses a focus until late game.
 
 ## 8. Tuning knobs
 
