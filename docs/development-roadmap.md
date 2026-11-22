@@ -90,15 +90,17 @@ flowers (`scripts/bench.sh`, results in `docs/performance.md`); spatial
 grids for layout and placement, GPU wind sway for flowers, a distant
 stand-in model without shadows, flowers streamed around the camera.
 
-**G3 Packaging ✅ (current):** app icon in every format, `dist` profile,
+**G3 Packaging ✅:** app icon in every format, `dist` profile,
 macOS `.app` + `.dmg` (ad-hoc signed), Linux tarball + AppImage, Windows
 zip + Inno Setup installer, window icon on Windows/Linux, CI (fmt, clippy,
 tests on three systems) and a release workflow building every package
 (`docs/release.md`).
 
-Still to come, in this order unless decided otherwise:
-Painted glTF art replacing procedural meshes, day/night and weather,
-animation and lighting pass, sound design and music, full settings
-(key rebinding, graphics, audio), benchmarks at 1k–500k flowers and
-optimisation driven by them, Bevy upgrade, packaging (macOS .app/.dmg,
-Windows installer, Linux AppImage/tarball).
+**G4 Bevy upgrade ✅ (current):** 0.16 → 0.20 step by step (messages,
+despawn-on-exit, UI and rendering API changes, WESL wind shader, headless
+buttons with click messages), every step tested and smoke-tested.
+
+Still to come: painted art replacing the procedural models (needs real
+assets; a species can already be drawn from a picture, see
+`assets/flowers/README.md`), and code signing / notarization (needs an
+Apple Developer account and a Windows certificate).

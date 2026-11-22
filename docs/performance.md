@@ -64,7 +64,7 @@ at every size.
 2. **Triangles, not entities, were the main cost.** A flower is about 2,900
    triangles, drawn again in each of three shadow cascades. With shadows
    off the 10k field ran at 123 FPS instead of 24. Flowers beyond a
-   distance (12 / 22 / 32 m for Low / Medium / High) now use a ~50-triangle
+   distance (12 / 22 / 26 m for Low / Medium / High) now use a ~50-triangle
    stand-in built from the full model (stem, bloom ball in the petal
    colour, centre dot) and cast no shadow. The near set is refreshed a few
    times a second from the flower grid, so it costs nothing per flower.
@@ -79,6 +79,27 @@ at every size.
    (with a 15 m margin) as you move, a few times a second, from the grid.
    Every real region fits in that radius, so nothing changes there; a
    500,000-flower field keeps about 17,000 flower entities.
+
+## After the Bevy 0.20 upgrade (Phase G4)
+
+Same machine, release build, High quality, flower pictures for the daisy
+(Phase "flower pictures"). The machine was warm from many runs before, so
+single runs varied by up to 40 %:
+
+| Flowers | FPS (best of three) |
+|---|---|
+| 1,000 | 52 |
+| 10,000 | 33 |
+| 100,000 | 33 |
+| 500,000 | 34 |
+
+Large fields got faster (streaming and culling in newer Bevy), small ones
+sit just over the 60 Hz frame budget at 2560×1600: a frame that misses
+16.7 ms waits for the next refresh, so a little extra work halves the rate
+for those frames (the slowest 1 % are all near 33–40 ms). Bringing the
+High near distance for full flower models from 32 m back to 26 m gave
+about 5 FPS back in A/B runs. Medium and Low reach the 60 FPS limit at
+1,000 flowers.
 
 ## What is left
 

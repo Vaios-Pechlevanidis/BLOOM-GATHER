@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase G3 (packaging) done. This document describes the
+Status: Phase G4 (Bevy upgrade to 0.20) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -63,7 +63,7 @@ live in `bloom_core` and the *presentation* modules in the binary. Reasons:
 3. Benchmarks of harvesting/crafting/movement measure the logic alone.
 4. Save files serialize `bloom_core` types only.
 
-`bloom_core` uses `glam` 0.29, the same version Bevy 0.16 uses, so `Vec2` /
+`bloom_core` uses `glam` 0.33, the same version Bevy 0.20 uses, so `Vec2` /
 `Vec3` cross the boundary with no conversion.
 
 Modules are only created when the phase that needs them begins. The spec's
@@ -164,11 +164,11 @@ profiling ever shows a need.
 * **Lighting:** warm directional sun with 3 shadow cascades (110 m), soft
   ambient, linear distance fog in the sky colour.
 * **Wind:** `WindMaterial = ExtendedMaterial<StandardMaterial, Wind>` with a
-  custom vertex shader (`rendering/wind.wgsl`, embedded in the binary). The
+  custom vertex shader (`rendering/wind.wesl`, WESL, embedded in the binary). The
   sway weight of each vertex is stored in its vertex-colour alpha (unused by
   opaque materials): 0 at roots/trunks, 1 at blade tips and canopy tops. The
   phase comes from world position, so gusts travel across the field. Used by
-  grass and tree canopies; flowers sway per entity on the CPU (≤ 750).
+  grass, tree canopies and flowers.
 * **Grass:** decorative only. Tapered blades merged into 16 m chunk meshes
   (~135k blades in the Sunny Meadow, built in ~19 ms), no shadows, faded out
   beyond ~45 m with visibility ranges, leaving room around every flower.
@@ -466,16 +466,30 @@ Injected input is authoritative (real
 
 ## 11. Engine version
 
-Bevy **0.16** is pinned (latest is 0.20): stable, well-known APIs while the
-foundation is built. All engine-touching code is in `src/`, so an upgrade is
-contained there (tracked in TODO.md).
+Bevy **0.20** (upgraded from 0.16 in Phase G4, one version at a time, each
+step built, tested and smoke-tested). All engine-touching code is in `src/`;
+`bloom_core` only shares Bevy's `glam` version. Notes for the next upgrade:
+
+* Buffered events are `Message`s (`MessageReader` / `MessageWriter`).
+* State-scoped entities use `DespawnOnExit`.
+* UI: `BorderRadius` is a `Node` field, `BorderColor::all`, font sizes are
+  `FontSize::Px`.
+* Buttons are the headless `ui_widgets::Button` with `Hovered`; a click
+  triggers `Activate`, which `ui::widgets` turns into a `Clicked` message
+  that screens read (`Interaction` is deprecated).
+* Cameras take `Hdr` as a component; the cursor is a `CursorOptions`
+  component; the global ambient light is `GlobalAmbientLight`.
+* Custom shaders are WESL (`import bevy_pbr::render::...`, `@if(...)`,
+  `@group(constants::MATERIAL_BIND_GROUP)`, vertices via `decompress_vertex`).
+* The window icon uses the `WINIT_WINDOWS` thread-local.
 
 ## 12. Dependencies
 
 | Crate | Why |
 |-------|-----|
-| `bevy` 0.16 | engine: windowing, ECS, 3D rendering, UI, audio, input |
-| `glam` 0.29 | maths in `bloom_core` (Bevy's own maths types) |
+| `bevy` 0.20 | engine: windowing, ECS, 3D rendering, UI, audio, input |
+| `glam` 0.33 | maths in `bloom_core` (Bevy's own maths types) |
+| `winit` 0.30 | the window icon on Windows and Linux (Bevy's own version) |
 | `serde`, `ron` | content files and save files |
 
 Nothing else until a phase needs it.

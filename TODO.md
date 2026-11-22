@@ -55,7 +55,7 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 
 ## Phase C: Sunny Meadow complete ✅
 
-- ✅ Wind shader (`src/rendering/wind.wgsl`): extended StandardMaterial whose vertex shader sways
+- ✅ Wind shader (`src/rendering/wind.wesl`, WGSL until G4): extended StandardMaterial whose vertex shader sways
   vertices by their vertex-colour alpha; world-space phase so gusts roll across the field
 - ✅ Decorative grass: ~135k tapered blades in 16 m chunks, swaying, distance-faded
   (visibility ranges), no shadows; keeps clear of path, props, landmarks and every flower
@@ -247,7 +247,7 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Spatial grids for trees, rocks and footpath segments: placement at 100k 751 → 75 ms, save
   restore 799 → 129 ms (answers unchanged; the meadow fingerprint test still holds)
 - ✅ Flowers sway on the GPU (wind shader) and are one entity each (plus a glow child at night)
-- ✅ Level of detail: flowers beyond 12 / 22 / 32 m (by quality) use a ~50-triangle stand-in
+- ✅ Level of detail: flowers beyond 12 / 22 / 26 m (by quality) use a ~50-triangle stand-in
   without shadows (the full model is ~2,900 triangles); refreshed from the flower grid
 - ✅ Flowers stream in and out around the camera (90 / 120 / 160 m); real regions fit entirely
 - ✅ Result at High: 10k flowers 24 → 49 FPS, 100k 9.5 → 29, 500k 4.7 → 26 (Medium: 50 FPS at
@@ -270,9 +270,28 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
   and Linux scripts and the workflows run on GitHub and have not run yet
 - ⬜ Code signing and notarization need an Apple Developer account and a Windows certificate
 
+## Phase G4: Bevy upgrade ✅
+
+- ✅ Bevy 0.16 → 0.17 → 0.18 → 0.19 → 0.20, one version at a time, each built, tested and
+  smoke-tested; `bloom_core` follows Bevy's glam (0.29 → 0.30 → 0.32 → 0.33), core unchanged
+- ✅ Events → messages, `DespawnOnExit`, new module paths (camera, light, mesh, post_process),
+  `Hdr` and `CursorOptions` components, `BorderColor::all`, `BorderRadius` as a `Node` field
+  (39 places), `GlobalAmbientLight`, `FontSize`, `TextLayout::justify` / `no_wrap`,
+  `shadow_maps_enabled`, `.or_else` run conditions
+- ✅ Wind shader rewritten in WESL (`wind.wesl`: imports, `@if`, material bind group constant,
+  compressed vertices)
+- ✅ Buttons: headless `ui_widgets::Button` with `Hovered`/`Pressed`; clicks become `Clicked`
+  messages for every screen (no deprecated `Interaction`); the smoke test now also clicks a
+  real button ("Resume")
+- ✅ Window icon via the `WINIT_WINDOWS` thread-local
+- ✅ High quality keeps full flower models to 26 m (was 32): under 0.20 the 32 m setting pushed
+  High just over the 60 Hz budget at 2560x1600 on an M2
+- ✅ 176 tests, clippy clean, both smoke runs pass on 0.20; the macOS package rebuilt and run
+
 ## Later phases ⬜
 
-G4 Bevy upgrade · art pass (painted models need real 3D assets)
+Art pass (painted models need real 3D assets; flower pictures can already replace a species'
+model, see `assets/flowers/README.md`)
 
 ## Temporary assets (replace before release)
 
@@ -299,7 +318,6 @@ G4 Bevy upgrade · art pass (painted models need real 3D assets)
   `save.unreadable-*` and starts fresh. Before 1.0, layout changes can do this again; after
   1.0, seeds and placement are frozen (content version + migration).
 - Grass and tree shadows: shadows use the un-swayed shape (prepass shader not overridden).
-- Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
 - Travelling rebuilds the whole region behind a short fade (30-90 ms per region measured in the
   smoke test); no preloading of the neighbour yet.

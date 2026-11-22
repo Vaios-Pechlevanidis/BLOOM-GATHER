@@ -189,6 +189,7 @@ fn show_panel(panels: &mut Query<(&Panel, &mut Node)>, which: Panel) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_buttons(
     mut commands: Commands,
     mut clicks: MessageReader<Clicked>,

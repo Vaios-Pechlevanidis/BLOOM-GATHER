@@ -394,7 +394,8 @@ fn near_distance(q: crate::game::Quality) -> f32 {
     match q {
         crate::game::Quality::Low => 12.0,
         crate::game::Quality::Medium => 22.0,
-        crate::game::Quality::High => 32.0,
+        // 26 m keeps headroom under 60 Hz at 2560x1600 on an M2 (Bevy 0.20).
+        crate::game::Quality::High => 26.0,
     }
 }
 
