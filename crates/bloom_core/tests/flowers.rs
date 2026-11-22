@@ -164,3 +164,33 @@ fn looking_at_the_sky_picks_nothing() {
     let eye = Vec3::new(layout.spawn.x, 2.0, layout.spawn.y);
     assert!(field.pick(eye, Vec3::Y, 3.0, &harvested).is_none());
 }
+
+/// FNV-1a over every flower's position (to the centimetre) and species.
+fn fingerprint(field: &FlowerField) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |v: u64| {
+        for b in v.to_le_bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for i in 0..field.len() as u32 {
+        let p = field.position(i);
+        eat((p.x * 100.0).round() as i64 as u64);
+        eat((p.y * 100.0).round() as i64 as u64);
+        eat(field.species(i) as u64);
+    }
+    h
+}
+
+/// Saves store harvested flowers by index, so the Sunny Meadow (the only
+/// region played before Phase F) must keep exactly the same flowers in the
+/// same places. Gates, water and other region features may not move them.
+#[test]
+fn sunny_meadow_flowers_never_move() {
+    let d = data();
+    let (_, field) = region_field(&d, 0);
+    assert_eq!(fingerprint(&field), MEADOW_FINGERPRINT);
+}
+
+const MEADOW_FINGERPRINT: u64 = 0x1a2db27ab753e6a9;

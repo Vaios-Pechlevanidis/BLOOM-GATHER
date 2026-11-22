@@ -28,4 +28,6 @@ pub enum PlayState {
     Skills,
     /// The journal (achievements, statistics, progress) is open.
     Journal,
+    /// The world map is open.
+    Map,
 }

@@ -2,11 +2,13 @@
 //! harvestable flower field.
 
 pub mod collision;
+pub mod features;
 pub mod flowers;
 pub mod layout;
 pub mod terrain;
 
 pub use collision::{BodySlab, BoxCollider, CircleCollider, ColliderSet};
+pub use features::{Bridge, Gate, GateSide, Water, WaterKind};
 pub use flowers::{FlowerField, PlacementError};
 pub use layout::{
     Interactable, InteractableKind, Landmark, LandmarkKind, RegionLayout, RockProp, TreeProp,

@@ -10,7 +10,7 @@ use bloom_core::world::LandmarkKind;
 
 use super::meshes::{hash3, lin, mix, MeshBuilder};
 use super::scene::SceneEntity;
-use crate::game::RegionScene;
+use crate::game::{Content, RegionScene};
 
 pub struct LandmarksPlugin;
 
@@ -26,6 +26,7 @@ impl Plugin for LandmarksPlugin {
 fn spawn_landmarks(
     mut commands: Commands,
     scene: Res<RegionScene>,
+    content: Res<Content>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -39,12 +40,25 @@ fn spawn_landmarks(
     let well = meshes.add(well());
     let sign = meshes.add(signpost());
     let cottage = meshes.add(workshop());
+    let lantern = meshes.add(lantern_post());
+    let night = content.regions[scene.region].scenery.atmosphere.night;
+    let glass = meshes.add(Cuboid::new(0.2, 0.3, 0.2));
+    let lamp = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.9, 0.7),
+        emissive: if night {
+            LinearRgba::rgb(4.0, 2.7, 1.2)
+        } else {
+            LinearRgba::rgb(0.4, 0.3, 0.15)
+        },
+        ..default()
+    });
     for l in &scene.layout.landmarks {
         let mesh = match l.kind {
             LandmarkKind::Bench => bench.clone(),
             LandmarkKind::Well => well.clone(),
             LandmarkKind::Signpost => sign.clone(),
             LandmarkKind::Workshop => cottage.clone(),
+            LandmarkKind::Lantern => lantern.clone(),
         };
         let mut e = commands.spawn((
             SceneEntity,
@@ -53,6 +67,28 @@ fn spawn_landmarks(
             Transform::from_xyz(l.position.x, l.base, l.position.y)
                 .with_rotation(Quat::from_rotation_y(l.yaw)),
         ));
+        if l.kind == LandmarkKind::Lantern {
+            e.with_children(|post| {
+                post.spawn((
+                    Mesh3d(glass.clone()),
+                    MeshMaterial3d(lamp.clone()),
+                    Transform::from_xyz(0.0, 2.05, 0.32),
+                    bevy::pbr::NotShadowCaster,
+                ));
+                if night {
+                    post.spawn((
+                        PointLight {
+                            color: Color::srgb(1.0, 0.8, 0.52),
+                            intensity: 45_000.0,
+                            range: 9.0,
+                            shadows_enabled: false,
+                            ..default()
+                        },
+                        Transform::from_xyz(0.0, 2.0, 0.4),
+                    ));
+                }
+            });
+        }
         if l.kind == LandmarkKind::Workshop {
             // A warm lamp under the roof so the interior isn't left in shadow.
             e.with_children(|w| {
@@ -392,7 +428,65 @@ pub const DISPLAY_SLOTS: [Vec2; 3] = [
     Vec2::new(2.88, 1.45),
 ];
 
-fn wood(light: bool) -> impl Fn(Vec3) -> LinearRgba + Copy {
+/// An iron lantern post; the glowing glass box hangs from its arm at
+/// (0, 2.05, 0.32), facing the path (+Z).
+fn lantern_post() -> Mesh {
+    let mut b = MeshBuilder::default();
+    let iron = |p: Vec3| {
+        mix(
+            lin(Color::srgb_u8(36, 38, 46)),
+            lin(Color::srgb_u8(74, 78, 92)),
+            0.5 + hash3(p * 6.0) * 0.3,
+        )
+    };
+    let none = Quat::IDENTITY;
+    cuboid(
+        &mut b,
+        Vec3::new(0.28, 0.12, 0.28),
+        Vec3::new(0.0, 0.06, 0.0),
+        none,
+        iron,
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.09, 2.45, 0.09),
+        Vec3::new(0.0, 1.22, 0.0),
+        none,
+        iron,
+    );
+    // Arm reaching over towards the path, with the lantern's cap and base.
+    cuboid(
+        &mut b,
+        Vec3::new(0.05, 0.05, 0.4),
+        Vec3::new(0.0, 2.4, 0.18),
+        none,
+        iron,
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.03, 0.12, 0.03),
+        Vec3::new(0.0, 2.3, 0.32),
+        none,
+        iron,
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.3, 0.06, 0.3),
+        Vec3::new(0.0, 2.23, 0.32),
+        none,
+        iron,
+    );
+    cuboid(
+        &mut b,
+        Vec3::new(0.26, 0.05, 0.26),
+        Vec3::new(0.0, 1.88, 0.32),
+        none,
+        iron,
+    );
+    b.build()
+}
+
+pub(super) fn wood(light: bool) -> impl Fn(Vec3) -> LinearRgba + Copy {
     let dark = lin(Color::srgb_u8(128, 96, 70));
     let pale = lin(Color::srgb_u8(178, 140, 104));
     move |p: Vec3| {
@@ -405,7 +499,7 @@ fn wood(light: bool) -> impl Fn(Vec3) -> LinearRgba + Copy {
     }
 }
 
-fn cuboid(
+pub(super) fn cuboid(
     b: &mut MeshBuilder,
     size: Vec3,
     at: Vec3,

@@ -115,6 +115,7 @@ fn spawn_grass(
     let field = &scene.field;
     let region = &content.regions[scene.region];
     let palette = region.palette;
+    let grass_density = region.scenery.grass_density();
     let none_picked = BitSet::new(field.len() as u32);
 
     let dark = lin(color(palette.ground_dark)) * 0.82;
@@ -158,8 +159,8 @@ fn spawn_grass(
                         z + rng.range_f32(0.0, SPACING),
                     );
                     x += SPACING;
-                    let density = 0.55 + 0.45 * patches(p);
-                    if rng.next_f32() > density {
+                    let density = (0.55 + 0.45 * patches(p)) * grass_density;
+                    if rng.next_f32() > density || layout.water_level_at(p).is_some() {
                         continue;
                     }
                     let path = layout.distance_to_path(p);

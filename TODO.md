@@ -161,9 +161,45 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Smoke test opens the journal on all three pages and verifies achievements and distance
   persist across a restart
 
+## Phase F: Remaining regions ✅
+
+- ✅ Data-driven region scenery (`data/scenery.rs`, `scenery:` in `game_data.ron`): entrance gate
+  style, ambience, light and air (sun, ambient, sky zenith, fog, night) and features (flower rows,
+  stream, pond, lanterns, mushrooms, glow plants, light shafts, petals, fireflies, blossom trees,
+  tree heights, grass density); validation keeps water wadeable and values in range
+- ✅ Layout (`world/features.rs`): gates where the path meets the north/south fence (trigger,
+  arrival spot), stream carved into a level valley floor, pond, wooden bridges with walkable
+  arched decks and railings wherever the path crosses water, lantern posts along the path;
+  flowers stay out of water, lavender grows in rows
+- ✅ Sunny Meadow unchanged: new features use their own random streams, a fingerprint test locks
+  every meadow flower's position, so existing saves stay valid
+- ✅ Core travel (`game/travel.rs`): region chain, gate destinations, arrival sides, unlock
+  requirements, `enter_region` (refused while locked), `visited_regions` saved and checked
+- ✅ Journeys (`travel.rs`): walk into an open gate or pick a region on the map; fade out, rebuild
+  the region (scene, flowers, grass, sky, critters, scenery, ambience), arrive at the matching
+  gate, fade in; movement frozen meanwhile; gate banner says where it leads or what it needs
+- ✅ Gates per region (farm gate, stone arch with blossom, forest arch, lantern arch), barred
+  while locked and opened the moment the region unlocks; fence gaps only where a gate leads on
+- ✅ Region looks: golden light and tilled rows (lavender); stream, bridge, blossom trees, falling
+  and floating petals (valley); tall trees, light shafts, toadstools, glowing ferns, fireflies,
+  closer fog (forest); night sky with stars and moon, moonlight, lit lanterns, pond with lily
+  pads, glow plants, fireflies, no butterflies (garden)
+- ✅ Per-region ambience: meadow, valley stream, forest, night crickets (synthesised loops)
+- ✅ Minimap (HUD corner) and world map (M): region cards with state and flowers left, a drawn map
+  of every visited region with unpicked flowers, travel with Enter or the button; time paused
+- ✅ HUD region name follows travel; welcome toast on a first visit; "Regions visited" in the
+  journal; the save remembers the region you stand in
+- ✅ Tests: 11 new (gates on the fence, walking every region gate to gate with the real controller,
+  stream + bridge crossing on the deck, shallow water with walkable banks and no flowers, wading
+  out of any water, lavender rows, lanterns, tall forest, gate chain, locked regions, first visit
+  + save + tamper check) plus the meadow fingerprint; 158 tests in all
+- ✅ Smoke test opens the map, travels to all four new regions (screenshots), checks the save
+  records the region, walks back to the meadow through a gate, and verifies visited regions
+  persist across a restart
+
 ## Later phases ⬜
 
-F Remaining regions (next) · Z Completion & ending · G Polish & release
+Z Completion & ending (next) · G Polish & release
 
 ## Temporary assets (replace before release)
 
@@ -171,9 +207,11 @@ F Remaining regions (next) · Z Completion & ending · G Polish & release
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
 - Sound effects and ambience: synthesised in `src/audio.rs`
 - Landmarks, workshop cottage and furniture, bouquets, glints, butterflies, bees, clouds: procedural meshes
+- Gates, bridges, lanterns, water surfaces, mushrooms, glow plants, light shafts, petals, fireflies,
+  stars and moon: procedural meshes
 - First-person hand and tools: procedural meshes in `src/viewmodel.rs`
-- Terrain: vertex colours only (no textures, no grass yet)
-- Sky: flat clear colour + fog (no sky gradient or clouds yet)
+- Terrain: vertex colours only (no textures)
+- Water: flat translucent surfaces (no waves or reflections)
 - UI font: Bevy's built-in monospace (lacks glyphs such as `·` and `°`; keep UI strings ASCII)
 
 ## Known issues / decisions to revisit
@@ -191,4 +229,7 @@ F Remaining regions (next) · Z Completion & ending · G Polish & release
   already data in `Bindings`.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
 - Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
+- Travelling rebuilds the whole region behind a short fade (30-90 ms per region measured in the
+  smoke test); no preloading of the neighbour yet.
+- The workshop exists only in the Sunny Meadow; the world map is the quick way back to it.
 - macOS: transitive dependency `block v0.1.6` emits a future-incompatibility warning.

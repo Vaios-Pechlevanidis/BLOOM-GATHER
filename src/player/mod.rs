@@ -17,6 +17,7 @@ use bloom_core::player::{wish_direction, CharacterBody, Environment, MoveInput};
 use crate::game::{AppState, Content, PlayState, RegionScene, Session, Settings};
 use crate::input::Bindings;
 use crate::rendering::{MainCamera, SceneSet};
+use crate::travel::Journey;
 
 pub struct PlayerPlugin;
 
@@ -31,12 +32,16 @@ impl Plugin for PlayerPlugin {
             .add_systems(OnExit(PlayState::Playing), release_cursor)
             .add_systems(
                 FixedUpdate,
-                step_player.run_if(in_state(PlayState::Playing)),
+                step_player
+                    .run_if(in_state(PlayState::Playing))
+                    .run_if(not(resource_exists::<Journey>)),
             )
             .add_systems(
                 Update,
                 (
-                    (gather_input, mouse_look).run_if(in_state(PlayState::Playing)),
+                    (gather_input, mouse_look)
+                        .run_if(in_state(PlayState::Playing))
+                        .run_if(not(resource_exists::<Journey>)),
                     pause_on_focus_loss.run_if(in_state(PlayState::Playing)),
                     update_camera
                         .in_set(CameraUpdated)
@@ -68,6 +73,16 @@ pub struct Player {
 }
 
 impl Player {
+    /// Put the player somewhere new (after travelling), standing still.
+    pub fn teleport(&mut self, body: CharacterBody, yaw: f32) {
+        self.body = body;
+        self.previous = body.position;
+        self.yaw = yaw;
+        self.pitch = -0.08;
+        self.landing_dip = 0.0;
+        self.bob_weight = 0.0;
+    }
+
     /// A small downward nudge of the view (landing, picking a flower).
     pub fn nudge(&mut self, amount: f32) {
         self.landing_dip = self.landing_dip.max(amount);

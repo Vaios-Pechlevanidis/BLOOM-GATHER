@@ -7,6 +7,7 @@
 
 mod achievements;
 mod growth;
+mod scenery;
 mod validation;
 
 use std::collections::HashMap;
@@ -20,6 +21,9 @@ use crate::progression::ProgressionConfig;
 pub use achievements::{AchievementCategory, AchievementDef, AchievementReward, Condition};
 pub use growth::{
     Effect, SkillBranch, SkillDef, UpgradeCategory, UpgradeDef, MIN_PRICE_FACTOR, MIN_TIME_FACTOR,
+};
+pub use scenery::{
+    Ambience, Atmosphere, EntranceKind, FlowerRows, PondDef, RegionFeatures, Scenery, StreamDef,
 };
 pub use validation::ValidationError;
 
@@ -285,6 +289,9 @@ pub struct RegionDef {
     /// The region has the florist's workshop (crafting, tool shop, storage).
     #[serde(default)]
     pub workshop: bool,
+    /// Light, entrance gate, sound and special features.
+    #[serde(default)]
+    pub scenery: Scenery,
 }
 
 /// Shape of a region's rolling terrain (see `world::terrain`).
@@ -543,6 +550,10 @@ impl GameData {
 
     pub fn achievement_index(&self, id: &str) -> Option<usize> {
         self.index.achievements.get(id).copied()
+    }
+
+    pub fn region_index(&self, id: &str) -> Option<usize> {
+        self.index.regions.get(id).copied()
     }
 
     pub fn region(&self, id: &str) -> Option<&RegionDef> {

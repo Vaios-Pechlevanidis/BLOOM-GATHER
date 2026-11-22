@@ -56,11 +56,13 @@ const BEES: usize = 7;
 fn spawn_critters(
     mut commands: Commands,
     scene: Res<RegionScene>,
+    content: Res<crate::game::Content>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let field = &scene.field;
-    if field.is_empty() {
+    // Butterflies and bees sleep at night (fireflies come out instead).
+    if field.is_empty() || content.regions[scene.region].scenery.atmosphere.night {
         return;
     }
     let mut rng = SplitMix64::new(0xB077_E2F1 ^ scene.region as u64);

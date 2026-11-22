@@ -244,6 +244,38 @@ gate — so level is never a blocker; crafting just gets you there faster.
 Each shows total / harvested / remaining / species discovered / completion %.
 Completion grants coins, XP and 1 SP, and is permanent.
 
+**Getting around.** Every region's footpath runs from its south fence to its
+north fence. Where it meets the north fence a gate leads on to the next
+region; a gate in the south fence leads back. Each entrance has its own look:
+a farm gate into the Lavender Fields, a stone arch hung with blossom into
+Blossom Valley, two leaning trees into the Enchanted Forest and a lantern
+arch into the Moonlight Garden. A locked gate is barred, and walking up to it
+says what it still needs ("opens at level 7 and 220 flowers picked (140 so
+far)"). The world map (M) shows the five regions in order with their state
+and flowers left, a map of every region already visited (unpicked flowers in
+their colours), and travels to any open region in a moment. The workshop
+stays in the Sunny Meadow; the map is the quick way back. A minimap in the
+corner shows the current region and where you are and face.
+
+**What makes each region different** (all data in `game_data.ron`):
+
+* *Lavender Fields:* lavender and friends grow in long rows over tilled
+  soil, under a low golden sun.
+* *Blossom Valley:* a stream winds through the valley floor with a wooden
+  footbridge where the path crosses (the water is shallow, so wading is
+  fine too); most trees are in full blossom and petals drift down and float
+  on the water.
+* *Enchanted Forest:* over a hundred tall old trees, shafts of light, toadstools
+  and softly glowing ferns and fungi at their roots, fireflies; closer fog.
+* *Moonlight Garden:* night: stars and a moon, lantern posts along the path,
+  a pond with lily pads, glowing plants and many fireflies; the night
+  flowers' own glow matters here.
+
+Each region also has its own ambience: meadow birdsong, birds over a
+babbling stream, deep woodland, and crickets at night. None of the
+decoration (mushrooms, glowing plants, petals, fireflies) can be picked or
+counts towards anything.
+
 ## 11. Achievements and the journal
 
 Nineteen optional achievements in five categories, each with a small reward

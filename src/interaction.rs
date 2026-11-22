@@ -290,7 +290,25 @@ fn react_to_events(
                 } else {
                     r.description.clone()
                 };
-                toasts.write(Toast::highlight(format!("{} is open", r.name), body));
+                toasts.write(Toast::highlight(
+                    format!("{} is open", r.name),
+                    format!("{body} Follow the path to its gate, or travel with the map (M)."),
+                ));
+            }
+            GameEvent::RegionEntered {
+                region,
+                first_visit,
+            } => {
+                let r = &data.regions[region];
+                if first_visit {
+                    sfx.write(PlaySfx::new(Sfx::Discover));
+                    toasts.write(Toast::highlight(
+                        format!("Welcome to {}", r.name),
+                        format!("{} {} flowers bloom here.", r.description, r.flower_total),
+                    ));
+                } else {
+                    toasts.write(Toast::info(r.name.clone()));
+                }
             }
             GameEvent::FlowersSaved { species, count } => {
                 let name = &data.species[species].name;

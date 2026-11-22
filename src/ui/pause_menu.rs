@@ -230,7 +230,8 @@ fn toggle_with_key(
             | PlayState::Inventory
             | PlayState::Workshop
             | PlayState::Skills
-            | PlayState::Journal => PlayState::Playing,
+            | PlayState::Journal
+            | PlayState::Map => PlayState::Playing,
         });
     }
 }

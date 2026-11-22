@@ -13,6 +13,9 @@ use std::f32::consts::TAU;
 use glam::{Vec2, Vec3};
 
 use super::collision::{BoxCollider, CircleCollider, ColliderSet};
+use super::features::{
+    self, Bridge, Gate, GateSide, Water, GATE_ARRIVAL_DEPTH, GATE_HALF_WIDTH, GATE_TRIGGER_DEPTH,
+};
 use super::terrain::{FlattenArea, Terrain};
 use crate::data::{RegionDef, WorldConfig};
 use crate::rng::SplitMix64;
@@ -51,6 +54,8 @@ pub enum LandmarkKind {
     Signpost,
     /// The florist's cottage workshop (walk-in).
     Workshop,
+    /// A lantern post beside the footpath.
+    Lantern,
 }
 
 /// Things in the world the player can use with E.
@@ -115,6 +120,11 @@ pub struct RegionLayout {
     pub rocks: Vec<RockProp>,
     /// Scenery trees outside the fence. Unreachable, so no colliders.
     pub backdrop_trees: Vec<TreeProp>,
+    /// Gates where the footpath meets the north and south fence. Which of
+    /// them lead anywhere depends on the region's neighbours.
+    pub gates: [Gate; 2],
+    pub water: Vec<Water>,
+    pub bridges: Vec<Bridge>,
     pub colliders: ColliderSet,
 }
 
@@ -139,10 +149,18 @@ impl RegionLayout {
         let bounds_max = half_size - Vec2::splat(margin);
         let mut rng = SplitMix64::new(region.seed ^ 0x1A70_0075);
 
+        let features = &region.scenery.features;
+
         // Spawn near the south edge (+Z), looking north into the region.
         let spawn = Vec2::new(0.0, bounds_max.y - 6.0);
         let path = footpath(&mut rng, spawn, bounds_min, bounds_max);
 
+        // A stream is laid out first so landmarks can keep their feet dry.
+        let mut water: Vec<Water> = features
+            .stream
+            .iter()
+            .map(|s| features::stream_line(s, half_size, region.seed))
+            .collect();
         let mut landmarks = place_landmarks(
             &mut rng,
             &path,
@@ -150,6 +168,7 @@ impl RegionLayout {
             bounds_min,
             bounds_max,
             region.workshop,
+            &|p| wet(&water, p, 4.0),
         );
         let mut flatten = vec![FlattenArea {
             center: spawn,
@@ -161,7 +180,7 @@ impl RegionLayout {
             inner_radius: l.footprint,
             outer_radius: l.footprint + 2.5,
         }));
-        let terrain = Terrain::generate(
+        let mut terrain = Terrain::generate(
             half_size,
             OUTSKIRTS,
             world.terrain_cell,
@@ -169,9 +188,51 @@ impl RegionLayout {
             region.seed,
             &flatten,
         );
+        for w in &mut water {
+            features::carve(&mut terrain, w, bounds_min, bounds_max);
+        }
+        if let Some(pond) = &features.pond {
+            let mut prng = SplitMix64::new(region.seed ^ 0x90DD_0E5E);
+            let clear = pond.radius + 2.0;
+            for _ in 0..400 {
+                let q = Vec2::new(
+                    prng.range_f32(bounds_min.x + clear + 6.0, bounds_max.x - clear - 6.0),
+                    prng.range_f32(bounds_min.y + clear + 8.0, bounds_max.y - clear - 8.0),
+                );
+                let dry_path = path
+                    .windows(2)
+                    .all(|w| distance_to_segment(q, w[0], w[1]) > clear + 4.0);
+                if dry_path
+                    && q.distance(spawn) > clear + 12.0
+                    && landmarks
+                        .iter()
+                        .all(|l| q.distance(l.position) > clear + l.footprint + 4.0)
+                    && !wet(&water, q, clear + 6.0)
+                {
+                    let mut w = features::pond_at(pond, q);
+                    features::carve(&mut terrain, &mut w, bounds_min, bounds_max);
+                    water.push(w);
+                    break;
+                }
+            }
+        }
         for l in &mut landmarks {
             l.base = terrain.height_at(l.position);
         }
+        let gate = |side: GateSide| {
+            let (x, z, yaw) = match side {
+                GateSide::North => (path[path.len() - 1].x, bounds_min.y, 0.0),
+                GateSide::South => (path[0].x, bounds_max.y, std::f32::consts::PI),
+            };
+            let position = Vec2::new(x, z);
+            Gate {
+                side,
+                position,
+                base: terrain.height_at(position),
+                yaw,
+            }
+        };
+        let gates = [gate(GateSide::North), gate(GateSide::South)];
 
         let mut layout = Self {
             terrain,
@@ -187,14 +248,123 @@ impl RegionLayout {
             trees: Vec::new(),
             rocks: Vec::new(),
             backdrop_trees: Vec::new(),
+            gates,
+            water,
+            bridges: Vec::new(),
             colliders: ColliderSet::default(),
         };
+        layout.bridges = layout
+            .water
+            .iter()
+            .flat_map(|w| features::bridges_over(w, &layout.path, &layout.terrain))
+            .collect();
+        let (min_h, max_h) = features.tree_height.unwrap_or((4.5, 7.5));
         layout.place_interactables();
-        layout.place_trees(&mut rng, region.props.trees);
+        layout.place_trees(&mut rng, region.props.trees, min_h, max_h);
         layout.place_rocks(&mut rng, region.props.rocks);
         layout.place_backdrop(&mut rng);
+        layout.place_lanterns(features.lanterns);
         layout.build_colliders();
         layout
+    }
+
+    /// Within `margin` of water (banks included).
+    pub fn in_water(&self, p: Vec2, margin: f32) -> bool {
+        wet(&self.water, p, margin)
+    }
+
+    /// Height of the water surface at `p`, if `p` is over water.
+    pub fn water_level_at(&self, p: Vec2) -> Option<f32> {
+        self.water
+            .iter()
+            .find(|w| {
+                self.terrain.height_at(p) < w.level && w.centre_distance(p) < w.outer_radius()
+            })
+            .map(|w| w.level)
+    }
+
+    pub fn gate(&self, side: GateSide) -> &Gate {
+        &self.gates[match side {
+            GateSide::North => 0,
+            GateSide::South => 1,
+        }]
+    }
+
+    /// The gate whose opening `p` stands in (walking into it goes through).
+    pub fn gate_at(&self, p: Vec2) -> Option<GateSide> {
+        self.gates
+            .iter()
+            .find(|g| {
+                (p.x - g.position.x).abs() < GATE_HALF_WIDTH - 0.2
+                    && (p.y - g.position.y).abs() < GATE_TRIGGER_DEPTH
+            })
+            .map(|g| g.side)
+    }
+
+    /// Distance from `p` to the nearest gate opening's centre.
+    pub fn gate_distance(&self, side: GateSide, p: Vec2) -> f32 {
+        self.gate(side).position.distance(p)
+    }
+
+    /// Where the player stands, and faces, after coming through a gate.
+    pub fn arrival(&self, side: GateSide) -> (Vec2, f32) {
+        match side {
+            GateSide::South => (self.spawn, self.spawn_yaw),
+            GateSide::North => {
+                let g = self.gate(GateSide::North);
+                (
+                    Vec2::new(g.position.x, g.position.y + GATE_ARRIVAL_DEPTH),
+                    std::f32::consts::PI,
+                )
+            }
+        }
+    }
+
+    /// Lantern posts at even steps along the path, alternating sides.
+    fn place_lanterns(&mut self, count: u32) {
+        if count == 0 {
+            return;
+        }
+        let mut lengths = vec![0.0];
+        for w in self.path.windows(2) {
+            lengths.push(lengths.last().unwrap() + w[0].distance(w[1]));
+        }
+        let total = *lengths.last().unwrap();
+        let (start, end) = (8.0, total - 6.0);
+        let step = (end - start) / count.max(1) as f32;
+        for k in 0..count {
+            let s = start + step * (k as f32 + 0.5);
+            let i = lengths
+                .partition_point(|&l| l < s)
+                .clamp(1, self.path.len() - 1);
+            let (a, b) = (self.path[i - 1], self.path[i]);
+            let t =
+                ((s - lengths[i - 1]) / (lengths[i] - lengths[i - 1]).max(1e-4)).clamp(0.0, 1.0);
+            let on = a.lerp(b, t);
+            let tangent = (b - a).normalize_or(Vec2::NEG_Y);
+            let normal = Vec2::new(-tangent.y, tangent.x);
+            let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+            let p = on + normal * side * (self.path_half_width + 0.85);
+            if p.distance(self.spawn) < 5.0
+                || !self.in_bounds(p, 1.0)
+                || self.near_landmark(p, 1.0)
+                || self.in_water(p, 0.5)
+                || self
+                    .bridges
+                    .iter()
+                    .any(|b| b.center.distance(p) < b.half_length + 1.5)
+            {
+                continue;
+            }
+            let facing = (on - p).normalize();
+            self.landmarks.push(Landmark {
+                kind: LandmarkKind::Lantern,
+                position: p,
+                base: self.terrain.height_at(p),
+                yaw: facing.x.atan2(facing.y),
+                footprint: 0.45,
+            });
+        }
     }
 
     /// Distance from `p` to the footpath centre line.
@@ -274,7 +444,7 @@ impl RegionLayout {
             .any(|l| l.position.distance(p) < l.footprint + margin)
     }
 
-    fn place_trees(&mut self, rng: &mut SplitMix64, count: u32) {
+    fn place_trees(&mut self, rng: &mut SplitMix64, count: u32, min_h: f32, max_h: f32) {
         let mut attempts = count * 60;
         while self.trees.len() < count as usize && attempts > 0 {
             attempts -= 1;
@@ -282,6 +452,7 @@ impl RegionLayout {
             if p.distance(self.spawn) < SPAWN_CLEARANCE
                 || self.near_landmark(p, 3.0)
                 || self.distance_to_path(p) < TREE_PATH_CLEARANCE
+                || self.in_water(p, 1.5)
                 || self
                     .trees
                     .iter()
@@ -289,7 +460,7 @@ impl RegionLayout {
             {
                 continue;
             }
-            let tree = self.make_tree(rng, p, 4.5, 7.5);
+            let tree = self.make_tree(rng, p, min_h, max_h);
             self.trees.push(tree);
         }
     }
@@ -328,10 +499,11 @@ impl RegionLayout {
             if rng.next_f32() < depth / (OUTSKIRTS * 1.6) {
                 continue; // thin out further away
             }
-            if self
-                .backdrop_trees
-                .iter()
-                .any(|t| t.position.distance(p) < 4.0)
+            if self.in_water(p, 1.5)
+                || self
+                    .backdrop_trees
+                    .iter()
+                    .any(|t| t.position.distance(p) < 4.0)
             {
                 continue;
             }
@@ -348,6 +520,7 @@ impl RegionLayout {
             if p.distance(self.spawn) < 6.0
                 || self.near_landmark(p, 1.2)
                 || self.distance_to_path(p) < ROCK_PATH_CLEARANCE
+                || self.in_water(p, 0.3)
                 || self.trees.iter().any(|t| t.position.distance(p) < 3.0)
                 || self
                     .rocks
@@ -413,7 +586,13 @@ impl RegionLayout {
                     bottom: l.base - 1.0,
                     top: l.base + 2.3,
                 }),
+                LandmarkKind::Lantern => set
+                    .circles
+                    .push(features::lantern_collider(l.position, l.base)),
             }
+        }
+        for b in &self.bridges {
+            set.boxes.extend(b.colliders());
         }
         // Invisible walls just outside the walkable rectangle. The visible
         // fence follows the same line.
@@ -499,6 +678,7 @@ fn place_landmarks(
     min: Vec2,
     max: Vec2,
     with_workshop: bool,
+    wet: &dyn Fn(Vec2) -> bool,
 ) -> Vec<Landmark> {
     let along = |i: usize| {
         let i = i.clamp(1, path.len() - 2);
@@ -506,7 +686,13 @@ fn place_landmarks(
         (path[i], Vec2::new(-tangent.y, tangent.x))
     };
     let side = if rng.next_f32() < 0.5 { 1.0 } else { -1.0 };
-    let (p, normal) = along(path.len() / 3);
+    // A third of the way along, or the nearest dry spot to it.
+    let third = path.len() / 3;
+    let (p, normal) = (0..path.len())
+        .flat_map(|k| [third + k, third.saturating_sub(k)])
+        .map(along)
+        .find(|&(p, n)| !wet(p + n * side * 2.4))
+        .unwrap_or_else(|| along(third));
     let bench_pos = p + normal * side * 2.4;
     let facing = (p - bench_pos).normalize();
     let bench = Landmark {
@@ -571,6 +757,7 @@ fn place_landmarks(
         );
         let clear_of_workshop = workshop.is_none_or(|w| q.distance(w.position) > 10.0);
         if path_distance(q) > 6.0
+            && !wet(q)
             && q.distance(spawn) > 14.0
             && q.distance(bench.position) > 10.0
             && clear_of_workshop
@@ -610,7 +797,13 @@ fn footpath(rng: &mut SplitMix64, spawn: Vec2, min: Vec2, max: Vec2) -> Vec<Vec2
     points
 }
 
-fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f32 {
+fn wet(water: &[Water], p: Vec2, margin: f32) -> bool {
+    water
+        .iter()
+        .any(|w| w.centre_distance(p) < w.outer_radius() + margin)
+}
+
+pub(crate) fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f32 {
     let ab = b - a;
     let t = ((p - a).dot(ab) / ab.length_squared().max(f32::EPSILON)).clamp(0.0, 1.0);
     p.distance(a + ab * t)

@@ -9,6 +9,7 @@ mod hud;
 mod inventory;
 mod journal;
 mod main_menu;
+mod map;
 mod pause_menu;
 mod skills;
 pub mod theme;
@@ -35,6 +36,7 @@ impl Plugin for UiPlugin {
             workshop::WorkshopPlugin,
             skills::SkillsPlugin,
             journal::JournalPlugin,
+            map::MapPlugin,
         ));
     }
 }

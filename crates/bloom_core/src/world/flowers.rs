@@ -56,6 +56,7 @@ const TREE_CLEARANCE: f32 = 0.9;
 const ROCK_CLEARANCE: f32 = 0.4;
 const LANDMARK_CLEARANCE: f32 = 0.6;
 const SPAWN_CLEARANCE: f32 = 2.5;
+const WATER_CLEARANCE: f32 = 0.6;
 const BOUNDS_INSET: f32 = 1.0;
 /// Flowers don't grow on slopes steeper than ~32°.
 const MIN_GROUND_NORMAL_Y: f32 = 0.85;
@@ -80,6 +81,10 @@ impl FlowerField {
             grid: Grid::new(layout.bounds_min, layout.bounds_max, spacing.max(2.0)),
         };
 
+        let rows = region.scenery.features.rows.map(|r| {
+            let a = r.angle_deg.to_radians();
+            (Vec2::new(-a.sin(), a.cos()), r.spacing)
+        });
         for entry in &region.flowers {
             let species_idx = data
                 .species_index(&entry.species)
@@ -116,6 +121,17 @@ impl FlowerField {
                     center + Vec2::new(angle.cos(), angle.sin()) * r
                 } else {
                     field.random_point(&mut rng, layout, BOUNDS_INSET)
+                };
+                // Row fields: snap across the rows so flowers line up in
+                // long parallel bands (a little jitter keeps them natural).
+                let p = match rows {
+                    Some((across, row_spacing)) => {
+                        let v = p.dot(across);
+                        let snapped =
+                            (v / row_spacing).round() * row_spacing + rng.range_f32(-0.15, 0.15);
+                        p + across * (snapped - v)
+                    }
+                    None => p,
                 };
                 if !field.can_place(p, layout, spacing) {
                     continue;
@@ -154,6 +170,7 @@ impl FlowerField {
                 .iter()
                 .all(|r| r.position.distance(p) >= r.radius + ROCK_CLEARANCE)
             && !layout.near_landmark(p, LANDMARK_CLEARANCE)
+            && !layout.in_water(p, WATER_CLEARANCE)
             && !self.grid.any_within(p, spacing, &self.positions)
     }
 

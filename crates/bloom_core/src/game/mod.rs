@@ -21,10 +21,12 @@ use crate::world::{FlowerField, RegionLayout};
 mod crafting;
 mod growth;
 mod progress;
+mod travel;
 
 pub use crafting::{CraftJob, CraftPlan, RecipeLock, RecipeStatus};
 pub use growth::{Modifiers, SkillLock, SkillStatus, UpgradeLock, UpgradeStatus};
 pub use progress::Completion;
+pub use travel::RegionRequirements;
 
 /// Everything that is saved. Keys are content ids (not indices) so saves
 /// survive content being reordered. Missing fields (saves from older
@@ -62,6 +64,8 @@ pub struct GameState {
     pub unlocked_regions: BTreeSet<String>,
     /// Achievements unlocked (each pays its reward once).
     pub achievements: BTreeSet<String>,
+    /// Regions the player has walked into at least once.
+    pub visited_regions: BTreeSet<String>,
     /// State of the gameplay RNG (chance-based skills), saved so reloading
     /// can't re-roll a result.
     pub rng: u64,
@@ -162,6 +166,11 @@ pub enum GameEvent {
     },
     AchievementUnlocked {
         achievement: usize,
+    },
+    /// The player stepped into a region (through a gate or from the map).
+    RegionEntered {
+        region: usize,
+        first_visit: bool,
     },
 }
 
@@ -378,6 +387,8 @@ impl Game {
             ..Default::default()
         };
         let mut game = Self::with_state(data, state);
+        let home = game.data.regions[0].id.clone();
+        game.state.visited_regions.insert(home);
         game.refresh_regions(false);
         game.dirty = false;
         game
@@ -443,7 +454,7 @@ impl Game {
                 _ => {}
             }
         }
-        for id in &state.unlocked_regions {
+        for id in state.unlocked_regions.iter().chain(&state.visited_regions) {
             if data.region(id).is_none() {
                 return bad(format!("unknown region '{id}'"));
             }
@@ -517,6 +528,14 @@ impl Game {
         // Regions and recipes the player now qualifies for (e.g. older
         // saves, content updates), without announcing them.
         game.refresh_regions(false);
+        for id in &game.state.visited_regions {
+            let open = data
+                .region_index(id)
+                .is_some_and(|r| game.is_region_unlocked(r));
+            if !open {
+                return bad(format!("visited region '{id}' isn't open yet"));
+            }
+        }
         game.refresh_recipes();
         // Older saves: catch up achievements already earned (rewards paid,
         // not announced).

@@ -11,7 +11,7 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
-use bloom_core::data::RegionPalette;
+use bloom_core::data::{FlowerRows, RegionPalette};
 use bloom_core::world::RegionLayout;
 
 use super::color;
@@ -105,6 +105,7 @@ pub fn hash3(p: Vec3) -> f32 {
 pub fn terrain_chunks(
     layout: &RegionLayout,
     palette: &RegionPalette,
+    rows: Option<FlowerRows>,
     chunk_size: f32,
 ) -> Vec<Mesh> {
     let terrain = &layout.terrain;
@@ -117,6 +118,13 @@ pub fn terrain_chunks(
     let path = lin(color(palette.path));
     let path_edge = mix(path, dark, 0.35);
     let half_w = layout.path_half_width;
+    // Tilled soil between flower rows, and a muddy stream or pond bed.
+    let soil = mix(path, lin(Color::srgb_u8(120, 96, 76)), 0.6);
+    let bed = mix(dark, lin(Color::srgb_u8(96, 86, 66)), 0.55);
+    let across = rows.map(|r| {
+        let a = r.angle_deg.to_radians();
+        (Vec2::new(-a.sin(), a.cos()), r.spacing)
+    });
 
     // Colour every sample once, then cut chunks out of the shared grid.
     let mut colors = Vec::with_capacity(nx * nz);
@@ -134,6 +142,20 @@ pub fn terrain_chunks(
             } else {
                 mix(mid, light, (tone - 0.5) * 2.0)
             };
+            if let Some((dir, spacing)) = across {
+                if layout.in_bounds(p, 0.5) {
+                    let v = p.dot(dir) / spacing;
+                    let f = (v - v.round()).abs(); // 0 on a row, 0.5 between
+                    c = mix(c, soil, smoothstep(0.22, 0.42, f) * 0.5);
+                }
+            }
+            for w in &layout.water {
+                let d = w.centre_distance(p);
+                if d < w.outer_radius() {
+                    let wet = 1.0 - smoothstep(w.half_width * 0.5, w.outer_radius(), d);
+                    c = mix(c, bed, wet);
+                }
+            }
             let d = layout.distance_to_path(p);
             if d < half_w + 0.8 {
                 let worn = 1.0 - smoothstep(half_w - 0.35, half_w + 0.6, d + (v - 0.5) * 0.5);
@@ -208,8 +230,9 @@ fn terrain_chunk(
 
 pub const TREE_MODEL_HEIGHT: f32 = 6.0;
 
-/// Three tree silhouettes: round oak, tall poplar, blossom tree.
-pub fn tree_variants(palette: &RegionPalette) -> [Mesh; 3] {
+/// Four tree silhouettes: round oak, tall poplar, a green tree dotted with
+/// blooms, and a tree in full blossom (canopy in the accent colour).
+pub fn tree_variants(palette: &RegionPalette) -> [Mesh; 4] {
     let bark_dark = lin(Color::srgb_u8(104, 80, 62));
     let bark_light = lin(Color::srgb_u8(146, 114, 86));
     let leaf_dark = lin(color(palette.ground_dark)) * 0.72;
@@ -294,7 +317,34 @@ pub fn tree_variants(palette: &RegionPalette) -> [Mesh; 3] {
         );
     }
 
-    [oak.build(), poplar.build(), blossom_tree.build()]
+    // Full blossom: the round crown, all in soft pinks.
+    let petal_dark = mix(blossom, lin(Color::srgb_u8(170, 110, 130)), 0.35);
+    let mut cherry = MeshBuilder::default();
+    let (m, t) = trunk(2.9);
+    cherry.add(&m, t, bark);
+    for (pos, r) in [
+        (Vec3::new(0.0, 3.7, 0.0), 1.6),
+        (Vec3::new(1.1, 3.3, 0.3), 1.1),
+        (Vec3::new(-1.0, 3.4, -0.3), 1.1),
+        (Vec3::new(0.2, 4.6, -0.2), 1.0),
+        (Vec3::new(-0.2, 3.3, 1.0), 0.9),
+    ] {
+        cherry.add(&blob(r), Transform::from_translation(pos), move |p| {
+            let t = (p.y / r) * 0.5 + 0.5 + hash3(p * 3.0) * 0.15;
+            if t < 0.5 {
+                mix(petal_dark, blossom, t * 2.0)
+            } else {
+                mix(blossom, blossom_light, (t - 0.5) * 1.6)
+            }
+        });
+    }
+
+    [
+        oak.build(),
+        poplar.build(),
+        blossom_tree.build(),
+        cherry.build(),
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +393,8 @@ pub fn rock_variants(palette: &RegionPalette) -> [Mesh; 3] {
 // Fence along the walkable boundary
 // ---------------------------------------------------------------------------
 
-pub fn fence(layout: &RegionLayout) -> Mesh {
+/// The boundary fence, open at `gaps` (gate centres on the fence line).
+pub fn fence(layout: &RegionLayout, gaps: &[Vec2]) -> Mesh {
     let wood_dark = lin(Color::srgb_u8(132, 102, 76));
     let wood_light = lin(Color::srgb_u8(176, 142, 108));
     let post = Mesh::from(Cuboid::new(0.14, 1.15, 0.14));
@@ -362,33 +413,59 @@ pub fn fence(layout: &RegionLayout) -> Mesh {
     let paint = move |p: Vec3| mix(wood_dark, wood_light, 0.5 + hash3(p * 7.0) * 0.4);
 
     let mut builder = MeshBuilder::default();
+    let half_gap = bloom_core::world::features::GATE_HALF_WIDTH + 0.1;
     for i in 0..4 {
         let (a, b) = (corners[i], corners[(i + 1) % 4]);
-        let steps = ((b - a).length() / spacing).ceil() as usize;
-        let mut prev: Option<Vec3> = None;
-        for s in 0..=steps {
-            let p = a.lerp(b, s as f32 / steps as f32);
-            let lean = Quat::from_rotation_z(hash3(p.extend(1.0)) * 0.04);
-            let top = Vec3::new(p.x, ground(p) + 0.55, p.y);
-            builder.add(
-                &post,
-                Transform::from_translation(top).with_rotation(lean),
-                paint,
-            );
-            if let Some(prev_top) = prev {
-                for h in [0.15, -0.25] {
-                    let from = prev_top + Vec3::Y * h;
-                    let to = top + Vec3::Y * h;
-                    let mid = (from + to) / 2.0;
-                    let dir = to - from;
-                    let rot = Quat::from_rotation_arc(Vec3::X, dir.normalize());
-                    let t = Transform::from_translation(mid)
-                        .with_rotation(rot)
-                        .with_scale(Vec3::new(dir.length(), 1.0, 1.0));
-                    builder.add(&rail, t, paint);
-                }
+        let len = (b - a).length();
+        let dir = (b - a) / len;
+        // Cut the edge into runs around any gate opening on it.
+        let mut cuts: Vec<(f32, f32)> = gaps
+            .iter()
+            .filter_map(|g| {
+                let along = (*g - a).dot(dir);
+                let off = (*g - a).perp_dot(dir).abs();
+                (off < 1.0 && along > 0.0 && along < len)
+                    .then_some((along - half_gap, along + half_gap))
+            })
+            .collect();
+        cuts.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut runs = Vec::new();
+        let mut start = 0.0;
+        for (lo, hi) in cuts {
+            runs.push((start, lo.max(start)));
+            start = hi;
+        }
+        runs.push((start, len));
+        for (r0, r1) in runs {
+            if r1 - r0 < 0.3 {
+                continue;
             }
-            prev = Some(top);
+            let steps = ((r1 - r0) / spacing).ceil().max(1.0) as usize;
+            let mut prev: Option<Vec3> = None;
+            for s in 0..=steps {
+                let p = a + dir * (r0 + (r1 - r0) * s as f32 / steps as f32);
+                let lean = Quat::from_rotation_z(hash3(p.extend(1.0)) * 0.04);
+                let top = Vec3::new(p.x, ground(p) + 0.55, p.y);
+                builder.add(
+                    &post,
+                    Transform::from_translation(top).with_rotation(lean),
+                    paint,
+                );
+                if let Some(prev_top) = prev {
+                    for h in [0.15, -0.25] {
+                        let from = prev_top + Vec3::Y * h;
+                        let to = top + Vec3::Y * h;
+                        let mid = (from + to) / 2.0;
+                        let d = to - from;
+                        let rot = Quat::from_rotation_arc(Vec3::X, d.normalize());
+                        let t = Transform::from_translation(mid)
+                            .with_rotation(rot)
+                            .with_scale(Vec3::new(d.length(), 1.0, 1.0));
+                        builder.add(&rail, t, paint);
+                    }
+                }
+                prev = Some(top);
+            }
         }
     }
     builder.build()

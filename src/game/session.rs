@@ -10,7 +10,7 @@ use bloom_core::game::{GameEvent, PlayerPose};
 use bloom_core::persistence::{LoadSource, SaveStore};
 use bloom_core::Game;
 
-use super::{AppState, Content, PlayState};
+use super::{ActiveRegion, AppState, Content, PlayState};
 use crate::player::Player;
 
 pub struct SessionPlugin;
@@ -99,6 +99,7 @@ fn ensure_session(
     content: Res<Content>,
     session: Option<Res<Session>>,
     mut saves: ResMut<Saves>,
+    mut active: ResMut<ActiveRegion>,
 ) {
     if session.is_some() {
         return;
@@ -135,10 +136,22 @@ fn ensure_session(
         }
     };
     saves.has_save = game.state().stats.flowers_harvested > 0 || saves.store.exists();
+    // Resume in the region the player was in (if it is still open).
+    active.0 = game
+        .state()
+        .player
+        .as_ref()
+        .and_then(|pose| data_region(&game, &pose.region))
+        .filter(|&r| game.is_region_unlocked(r))
+        .unwrap_or(0);
     commands.insert_resource(Session {
         game,
         generation: 0,
     });
+}
+
+fn data_region(game: &Game, id: &str) -> Option<usize> {
+    game.data().region_index(id)
 }
 
 /// Move an unreadable save aside so starting fresh never destroys it.
@@ -163,6 +176,7 @@ pub fn start_new_game(
     session: &Session,
     saves: &mut Saves,
 ) {
+    commands.insert_resource(ActiveRegion(0));
     if let Err(err) = saves.store.clear() {
         error!("Could not remove the old save: {err}");
     }
@@ -179,9 +193,14 @@ fn tick_session(time: Res<Time>, mut session: ResMut<Session>) {
     session.tick(time.delta_secs());
 }
 
-fn write_save(session: &mut Session, saves: &mut Saves, player: Option<&Player>) {
+fn write_save(
+    session: &mut Session,
+    saves: &mut Saves,
+    player: Option<&Player>,
+    active: ActiveRegion,
+) {
     if let Some(p) = player {
-        let region = session.data().regions[0].id.clone();
+        let region = session.data().regions[active.0].id.clone();
         let pos = p.body.position;
         session.set_player_pose(PlayerPose {
             region,
@@ -206,6 +225,7 @@ fn autosave(
     session: Option<ResMut<Session>>,
     mut saves: ResMut<Saves>,
     player: Option<Res<Player>>,
+    active: Res<ActiveRegion>,
 ) {
     let Some(mut session) = session else { return };
     if !session.is_dirty() {
@@ -214,7 +234,7 @@ fn autosave(
     let now = time.elapsed_secs_f64();
     let since = *saves.dirty_since.get_or_insert(now);
     if now - since >= AUTOSAVE_DELAY_SECS {
-        write_save(&mut session, &mut saves, player.as_deref());
+        write_save(&mut session, &mut saves, player.as_deref(), *active);
     }
 }
 
@@ -224,10 +244,11 @@ fn save_now(
     session: Option<ResMut<Session>>,
     mut saves: ResMut<Saves>,
     player: Option<Res<Player>>,
+    active: Res<ActiveRegion>,
 ) {
     let Some(mut session) = session else { return };
     if session.is_dirty() || (player.is_some() && session.state().stats.flowers_harvested > 0) {
-        write_save(&mut session, &mut saves, player.as_deref());
+        write_save(&mut session, &mut saves, player.as_deref(), *active);
     }
 }
 
@@ -236,13 +257,14 @@ fn save_on_exit(
     session: Option<ResMut<Session>>,
     saves: ResMut<Saves>,
     player: Option<Res<Player>>,
+    active: Res<ActiveRegion>,
 ) {
     if let Some(exit) = exits.read().next() {
         let code = match exit {
             AppExit::Success => 0,
             AppExit::Error(code) => code.get() as i32,
         };
-        save_now(session, saves, player);
+        save_now(session, saves, player, active);
         // Shutdown has occasionally hung (first launch after a build; see
         // TODO.md). The save is already safely on disk, so never let quitting
         // leave a frozen window behind: force the exit if it stalls.

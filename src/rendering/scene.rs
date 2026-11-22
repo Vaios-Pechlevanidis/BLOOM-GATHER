@@ -19,7 +19,15 @@ impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(OnEnter(AppState::MainMenu), SceneSet.after(SessionSet))
             .add_systems(OnEnter(AppState::MainMenu), ensure_scene.in_set(SceneSet))
-            .add_systems(OnEnter(AppState::InGame), ensure_scene.in_set(SceneSet));
+            .add_systems(OnEnter(AppState::InGame), ensure_scene.in_set(SceneSet))
+            // Travelling switches the active region: rebuild.
+            .add_systems(
+                Update,
+                ensure_scene
+                    .in_set(SceneSet)
+                    .run_if(in_state(AppState::InGame))
+                    .run_if(resource_changed::<ActiveRegion>),
+            );
     }
 }
 
@@ -27,6 +35,20 @@ impl Plugin for ScenePlugin {
 /// after it.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SceneSet;
+
+/// Fence-line centres of the gates that lead somewhere from `region`.
+pub fn open_gates(
+    game: &bloom_core::Game,
+    region: usize,
+    layout: &bloom_core::world::RegionLayout,
+) -> Vec<Vec2> {
+    use bloom_core::world::GateSide;
+    [GateSide::North, GateSide::South]
+        .into_iter()
+        .filter(|&side| game.gate_destination(region, side).is_some())
+        .map(|side| layout.gate(side).position)
+        .collect()
+}
 
 /// Marks entities belonging to the current region scene.
 #[derive(Component)]
@@ -70,35 +92,43 @@ fn ensure_scene(
     });
 
     // --- Atmosphere -------------------------------------------------------
+    let air = region.scenery.atmosphere;
     clear_color.0 = sky;
     *ambient = AmbientLight {
-        color: Color::srgb(0.86, 0.9, 1.0),
-        brightness: 420.0,
+        color: color(air.ambient_color),
+        brightness: air.ambient_brightness,
         ..default()
     };
     let extent = layout.half_size.max_element() * 2.0;
     for camera in &cameras {
         commands.entity(camera).insert(DistanceFog {
             color: sky,
-            directional_light_color: Color::srgba(1.0, 0.93, 0.78, 0.35),
+            directional_light_color: if air.night {
+                Color::srgba(0.7, 0.78, 1.0, 0.15)
+            } else {
+                Color::srgba(1.0, 0.93, 0.78, 0.35)
+            },
             directional_light_exponent: 24.0,
             falloff: FogFalloff::Linear {
-                start: extent * 0.3,
-                end: extent * 1.05,
+                start: extent * air.fog_start,
+                end: extent * air.fog_end,
             },
         });
     }
-    // Late-afternoon sun from the south-west, so the player (facing north
-    // at spawn) sees sunlit flowers and soft shadows falling away.
+    // The sun (or moon) shines from the south-west, so the player (facing
+    // north at the start) sees lit flowers and shadows falling away.
+    let elevation = air.sun_elevation_deg.to_radians();
+    let across = Vec2::new(-30.0, 28.0).normalize() * elevation.cos();
+    let sun_at = Vec3::new(across.x, elevation.sin(), across.y) * 60.0;
     commands.spawn((
         SceneEntity,
         DirectionalLight {
-            color: Color::srgb(1.0, 0.95, 0.84),
-            illuminance: 3_600.0,
+            color: color(air.sun_color),
+            illuminance: air.sun_illuminance,
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(-30.0, 46.0, 28.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(sun_at).looking_at(Vec3::ZERO, Vec3::Y),
         // Lights the world and the first-person hands/tools layer.
         bevy::render::view::RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
         CascadeShadowConfigBuilder {
@@ -111,7 +141,12 @@ fn ensure_scene(
     ));
 
     // --- Terrain ----------------------------------------------------------
-    let chunks = meshes::terrain_chunks(&layout, &palette, content.world.chunk_size);
+    let chunks = meshes::terrain_chunks(
+        &layout,
+        &palette,
+        region.scenery.features.rows,
+        content.world.chunk_size,
+    );
     let chunk_count = chunks.len();
     for mesh in chunks {
         commands.spawn((
@@ -137,10 +172,21 @@ fn ensure_scene(
         },
         Wind::new(0.09, 1.1, 0.15),
     ));
+    let blossom_share = region.scenery.features.blossom_trees;
+    // Tall old forests have no flowering trees.
+    let ancient = region.scenery.features.tree_height.is_some();
     for tree in layout.trees.iter().chain(&layout.backdrop_trees) {
+        let roll = meshes::hash3(Vec3::new(tree.position.x, 3.7, tree.position.y)).abs();
+        let variant = if blossom_share > 0.0 && roll < blossom_share {
+            3
+        } else if ancient && tree.variant % 3 == 2 {
+            0
+        } else {
+            tree.variant as usize % 3
+        };
         commands.spawn((
             SceneEntity,
-            Mesh3d(tree_meshes[tree.variant as usize % 3].clone()),
+            Mesh3d(tree_meshes[variant].clone()),
             MeshMaterial3d(tree_material.clone()),
             Transform::from_xyz(tree.position.x, tree.base - 0.15, tree.position.y)
                 .with_rotation(Quat::from_rotation_y(tree.yaw))
@@ -162,7 +208,10 @@ fn ensure_scene(
     }
     commands.spawn((
         SceneEntity,
-        Mesh3d(meshes.add(meshes::fence(&layout))),
+        Mesh3d(meshes.add(meshes::fence(
+            &layout,
+            &open_gates(&session, active.0, &layout),
+        ))),
         MeshMaterial3d(painted),
     ));
 

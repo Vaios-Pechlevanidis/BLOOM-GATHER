@@ -58,14 +58,17 @@ craft timer, keepsake reserve, bouquet models and selling.
 Modifier pipeline, upgrade shop with before/after values, progression guard;
 five-branch skill tree UI, SP accounting, prerequisites, tool requirements.
 
-## Phase P — Progression & achievements ✅ (current)
+## Phase P — Progression & achievements ✅
 Level-up rewards & UI, milestones, achievements and toasts, statistics.
 
-## Phase F — Remaining regions
-Lavender Fields, Blossom Valley (streams, bridges, petals), Enchanted Forest
-(canopy light, mushrooms, glow plants), Moonlight Garden (night, lanterns,
-water). Walkable transitions (gates, bridges, forest entrance), minimap and
-world map (M), region unlocks and completion.
+## Phase F — Remaining regions ✅ (current)
+Lavender Fields (flower rows, golden light), Blossom Valley (stream, bridge,
+blossom trees, falling petals), Enchanted Forest (tall trees, light shafts,
+mushrooms, glow plants, fireflies), Moonlight Garden (night sky, lanterns,
+pond, fireflies). Walkable gates between neighbouring regions (farm gate,
+stone arch, forest arch, lantern arch; barred while locked), minimap and
+world map (M) with travel, per-region light and ambience, region the player
+stands in saved.
 
 ## Phase Z — Completion & ending
 Completion checker (each condition tested), finale sequence, journey summary,

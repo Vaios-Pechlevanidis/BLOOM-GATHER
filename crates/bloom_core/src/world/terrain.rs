@@ -101,6 +101,18 @@ impl Terrain {
         terrain
     }
 
+    /// Reshape every sample: `f(position, height) -> new height`. Used to
+    /// carve water into generated terrain.
+    pub fn reshape(&mut self, mut f: impl FnMut(Vec2, f32) -> f32) {
+        for iz in 0..self.nz {
+            for ix in 0..self.nx {
+                let p = self.sample_pos(ix, iz);
+                let i = iz * self.nx + ix;
+                self.heights[i] = f(p, self.heights[i]);
+            }
+        }
+    }
+
     fn sample_counts(width: f32, depth: f32, cell: f32) -> (usize, usize) {
         let nx = (width / cell).ceil() as usize + 1;
         let nz = (depth / cell).ceil() as usize + 1;
@@ -198,7 +210,7 @@ fn natural_height(p: Vec2, half: Vec2, params: &TerrainParams, seed: u64) -> f32
     hills + berm
 }
 
-fn smoothstep(t: f32) -> f32 {
+pub(crate) fn smoothstep(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }

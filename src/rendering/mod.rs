@@ -11,6 +11,7 @@ mod grass;
 mod landmarks;
 pub mod meshes;
 mod scene;
+mod scenery;
 mod sky;
 mod wind;
 
@@ -33,6 +34,7 @@ impl Plugin for RenderingPlugin {
             landmarks::LandmarksPlugin,
             critters::CrittersPlugin,
             bouquets::BouquetsPlugin,
+            scenery::SceneryPlugin,
         ));
     }
 }

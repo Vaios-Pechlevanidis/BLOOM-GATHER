@@ -216,7 +216,12 @@
          palette: (sky: (240, 234, 244), ground: (160, 180, 140), ground_dark: (134, 150, 120),
                    ground_light: (188, 200, 170), path: (222, 208, 186), accent: (176, 156, 210)),
          terrain: (amplitude: 3.0, feature_size: 40.0, octaves: 3, border_rise: 3.5, border_width: 14.0),
-         props: (trees: 10, rocks: 16)),
+         props: (trees: 10, rocks: 16),
+         // Long rows of lavender over gentle hills, under a warm golden sun.
+         scenery: (entrance: FarmGate,
+                   atmosphere: (sun_color: (255, 232, 196), sun_illuminance: 3900.0, sun_elevation_deg: 34.0,
+                                ambient_color: (236, 226, 255), ambient_brightness: 400.0),
+                   features: (rows: Some((spacing: 3.2, angle_deg: 8.0)), grass_density: Some(0.75)))),
         (id: "blossom_valley", name: "Blossom Valley", flower_total: 350, width: 170.0, depth: 120.0, seed: 7003,
          description: "A sheltered valley of flowering trees and drifting pink petals.",
          flowers: [
@@ -228,7 +233,13 @@
          palette: (sky: (250, 238, 236), ground: (176, 200, 150), ground_dark: (150, 176, 128),
                    ground_light: (210, 226, 186), path: (232, 214, 196), accent: (240, 190, 200)),
          terrain: (amplitude: 3.5, feature_size: 36.0, octaves: 4, border_rise: 5.0, border_width: 16.0),
-         props: (trees: 30, rocks: 20)),
+         props: (trees: 30, rocks: 20),
+         // A stream through the valley floor, a bridge, trees in blossom.
+         scenery: (entrance: StoneArch, ambience: Valley,
+                   atmosphere: (sun_color: (255, 238, 226), sun_illuminance: 3600.0, sun_elevation_deg: 50.0,
+                                ambient_color: (255, 230, 236), ambient_brightness: 430.0),
+                   features: (stream: Some((width: 3.4, depth: 0.7)), petals: true, blossom_trees: 0.75,
+                              grass_density: Some(0.7)))),
         (id: "enchanted_forest", name: "Enchanted Forest", flower_total: 500, width: 200.0, depth: 140.0, seed: 7004,
          description: "Mossy glades under ancient trees, lit by shafts of golden light.",
          flowers: [
@@ -241,7 +252,14 @@
          palette: (sky: (218, 226, 206), ground: (110, 140, 104), ground_dark: (84, 110, 84),
                    ground_light: (140, 168, 124), path: (170, 150, 120), accent: (200, 176, 120)),
          terrain: (amplitude: 2.5, feature_size: 26.0, octaves: 5, border_rise: 4.0, border_width: 16.0),
-         props: (trees: 110, rocks: 40)),
+         props: (trees: 110, rocks: 40),
+         // Tall old trees, shafts of light, mushrooms and glowing ferns.
+         scenery: (entrance: ForestArch, ambience: Forest,
+                   atmosphere: (sun_color: (255, 236, 190), sun_illuminance: 2600.0, sun_elevation_deg: 62.0,
+                                ambient_color: (200, 226, 190), ambient_brightness: 300.0,
+                                zenith: Some((150, 186, 170)), fog_start: 0.12, fog_end: 0.7),
+                   features: (tree_height: Some((9.0, 15.0)), light_shafts: 16, mushrooms: 140,
+                              glow_plants: 70, fireflies: 24, grass_density: Some(0.35)))),
         (id: "moonlight_garden", name: "Moonlight Garden", flower_total: 750, width: 230.0, depth: 160.0, seed: 7005,
          description: "A hushed night garden where the flowers glow softly under the stars.",
          flowers: [
@@ -254,7 +272,14 @@
          palette: (sky: (40, 46, 70), ground: (70, 84, 104), ground_dark: (52, 62, 84),
                    ground_light: (96, 112, 136), path: (110, 118, 140), accent: (200, 214, 250)),
          terrain: (amplitude: 1.6, feature_size: 40.0, octaves: 3, border_rise: 3.0, border_width: 18.0),
-         props: (trees: 20, rocks: 26)),
+         props: (trees: 20, rocks: 26),
+         // Night: moonlight, lanterns along the path, a still pond.
+         scenery: (entrance: LanternArch, ambience: Night,
+                   atmosphere: (sun_color: (176, 196, 255), sun_illuminance: 1100.0, sun_elevation_deg: 38.0,
+                                ambient_color: (130, 150, 215), ambient_brightness: 260.0,
+                                zenith: Some((10, 12, 30)), fog_start: 0.25, fog_end: 1.0, night: true),
+                   features: (pond: Some((radius: 9.0, depth: 0.8)), lanterns: 18, glow_plants: 60,
+                              fireflies: 70, grass_density: Some(0.4)))),
     ],
 
     // Coin-priced, levelled upgrades sold at the workshop's tool shelf.

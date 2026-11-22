@@ -434,6 +434,17 @@ fn statistics(body: &mut ChildSpawnerCommands, session: &Session) {
         );
         stat_row(
             col,
+            "Regions visited",
+            format!(
+                "{} / {}",
+                (0..data.regions.len())
+                    .filter(|&r| session.has_visited(r))
+                    .count(),
+                data.regions.len()
+            ),
+        );
+        stat_row(
+            col,
             "Achievements",
             format!("{} / {}", s.achievements.len(), data.achievements.len()),
         );

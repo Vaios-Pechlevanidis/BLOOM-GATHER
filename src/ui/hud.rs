@@ -32,6 +32,8 @@ struct Crosshair;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Stat {
+    /// The region you are in (changes when you travel).
+    RegionName,
     Remaining,
     Collection,
     Coins,
@@ -83,7 +85,10 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             }),
         ))
         .with_children(|card| {
-            card.spawn(theme::text(region.name.clone(), font::TITLE, palette::INK));
+            card.spawn((
+                Stat::RegionName,
+                theme::text(region.name.clone(), font::TITLE, palette::INK),
+            ));
             card.spawn((
                 Stat::Remaining,
                 theme::text("", font::CAPTION, palette::INK_SOFT),
@@ -264,7 +269,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
             ))
             .with_children(|hint| {
                 hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   Esc  pause",
+                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   M  map   Esc  pause",
                     font::CAPTION,
                     palette::INK_SOFT,
                 ));
@@ -308,6 +313,7 @@ fn update_stats(
         });
     for (stat, mut text) in &mut texts {
         let value = match stat {
+            Stat::RegionName => region.name.clone(),
             Stat::Remaining => format!(
                 "{} of {} flowers still blooming",
                 session.remaining_in_region(active.0),

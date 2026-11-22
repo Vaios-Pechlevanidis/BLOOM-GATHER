@@ -31,7 +31,9 @@ impl Plugin for GamePlugin {
             .add_systems(OnEnter(PlayState::Skills), pause_time)
             .add_systems(OnExit(PlayState::Skills), resume_time)
             .add_systems(OnEnter(PlayState::Journal), pause_time)
-            .add_systems(OnExit(PlayState::Journal), resume_time);
+            .add_systems(OnExit(PlayState::Journal), resume_time)
+            .add_systems(OnEnter(PlayState::Map), pause_time)
+            .add_systems(OnExit(PlayState::Map), resume_time);
     }
 }
 

@@ -201,6 +201,8 @@ impl GameData {
                 || format!("region '{id}' has invalid terrain parameters"),
             );
 
+            self.validate_scenery(r, region);
+
             let mut seen = HashSet::new();
             for f in &region.flowers {
                 r.check(self.species(&f.species).is_some(), || {
@@ -252,6 +254,55 @@ impl GameData {
             }
             flowers_before += counted as u64;
         }
+    }
+
+    fn validate_scenery(&self, r: &mut Report, region: &super::RegionDef) {
+        let id = &region.id;
+        let a = &region.scenery.atmosphere;
+        r.check(
+            a.sun_illuminance > 0.0
+                && a.ambient_brightness >= 0.0
+                && (5.0..=90.0).contains(&a.sun_elevation_deg),
+            || format!("region '{id}' has invalid light settings"),
+        );
+        r.check(0.0 <= a.fog_start && a.fog_start < a.fog_end, || {
+            format!("region '{id}': fog must start before it ends")
+        });
+        let f = &region.scenery.features;
+        let half = region.width.min(region.depth) / 2.0;
+        if let Some(rows) = f.rows {
+            r.check(
+                rows.spacing >= self.world.min_flower_spacing && rows.angle_deg.is_finite(),
+                || format!("region '{id}': flower rows must be at least min_flower_spacing apart"),
+            );
+        }
+        // Water must stay shallow enough to wade through (never a trap) and
+        // leave room for flowers.
+        let wade = self.player.height * 0.6;
+        if let Some(s) = f.stream {
+            r.check(
+                (1.0..=half / 4.0).contains(&s.width) && s.depth > 0.1 && s.depth <= wade,
+                || format!("region '{id}': the stream must be 1 m to a quarter of the region wide and at most {wade:.2} m deep"),
+            );
+        }
+        if let Some(p) = f.pond {
+            r.check(
+                (2.0..=half / 3.0).contains(&p.radius) && p.depth > 0.1 && p.depth <= wade,
+                || format!("region '{id}': the pond must be 2 m to a third of the region's half size across and at most {wade:.2} m deep"),
+            );
+        }
+        r.check((0.0..=1.0).contains(&f.blossom_trees), || {
+            format!("region '{id}': blossom_trees is a share between 0 and 1")
+        });
+        if let Some((lo, hi)) = f.tree_height {
+            r.check(0.5 <= lo && lo <= hi && hi <= 25.0, || {
+                format!("region '{id}': tree heights must be 0.5..=25 m, smallest first")
+            });
+        }
+        r.check(
+            f.grass_density.is_none_or(|g| (0.0..=2.0).contains(&g)),
+            || format!("region '{id}': grass_density must be between 0 and 2"),
+        );
     }
 
     fn validate_tools(&self, r: &mut Report) {

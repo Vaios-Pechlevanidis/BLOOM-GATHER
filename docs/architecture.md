@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase P (progression & achievements) done. This document describes the
+Status: Phase F (remaining regions) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -25,7 +25,7 @@ bloom-and-gather/
 │   └── bloom_core/            engine-independent simulation (lib)
 │       ├── src/
 │       │   ├── data/          content definitions, loading, validation
-│       │   ├── world/         terrain, region layout, static collision, flower field
+│       │   ├── world/         terrain, region layout, gates, water & bridges, collision, flower field
 │       │   ├── game.rs        authoritative game state + commands (harvest, sell…)
 │       │   ├── persistence.rs versioned, checksummed, atomic save files
 │       │   ├── bitset.rs      harvested-flower bitsets (set-only)
@@ -40,12 +40,15 @@ bloom-and-gather/
 │   ├── input/                 action bindings
 │   ├── player/                input → controller (fixed step), mouse look, camera
 │   ├── interaction.rs         look-at raycast, E to pick, event feedback
+│   ├── travel.rs              gates, journeys between regions (fade, rebuild, arrival)
 │   ├── tools.rs               tool selection, ground aiming, basket/rake/cart actions
 │   ├── viewmodel.rs           first-person hands & tools (second camera, layer 1)
 │   ├── flowers/               3D flower models, spawning, wind, highlight, pick FX
-│   ├── audio.rs               synthesised sound effects
+│   ├── audio.rs               synthesised sound effects, per-region ambience
 │   ├── rendering/             camera, region scene, wind shader, grass, sky,
-│   │                          landmarks, butterflies & bees, procedural meshes
+│   │                          landmarks, butterflies & bees, region scenery
+│   │                          (gates, water, bridges, mushrooms, glow plants,
+│   │                          light shafts, petals, fireflies), procedural meshes
 │   ├── ui/                    theme tokens, widgets, menus, HUD, debug overlay
 │   └── dev.rs                 debug-only automated smoke test (scripts/smoke.sh)
 └── docs/
@@ -102,12 +105,12 @@ Rust's built-in `core` crate and breaks macro expansions.
 ## 4. Game states
 
 ```
-Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills | Journal}
+Boot ──(data validated)──► MainMenu ──Begin/Enter──► InGame{Playing ⇄ Paused | Inventory | Workshop | Skills | Journal | Map}
   │                           ▲                           │
   └──(invalid data)──► log + exit      └──Main Menu (pause)──┘
 ```
 
-* `Inventory` (basket / Tool Shop / Upgrades), `Skills`, `Journal` and `Paused` stop game time; `Workshop`
+* `Inventory` (basket / Tool Shop / Upgrades), `Skills`, `Journal`, `Map` and `Paused` stop game time; `Workshop`
   (the workbench screen) keeps it running so a batch binds while you watch.
 * State-scoped entities despawn on exit. The 3D region scene is *not*
   state-scoped: it is built once per region and shown behind the title screen
@@ -289,6 +292,38 @@ profiling ever shows a need.
 * **Presentation:** `ui::journal` (J). Toasts move to the bottom edge and show
   titles only while any screen is open.
 
+## 7f. Regions and travel (Phase F)
+
+* **Content:** each `RegionDef` has a `scenery` block (`data/scenery.rs`):
+  the entrance gate style, ambience, light (`Atmosphere`: sun colour,
+  strength and height, ambient light, sky zenith, fog, night) and features
+  (flower rows, stream, pond, lanterns, mushrooms, glow plants, light
+  shafts, petals, fireflies, blossom share, tree heights, grass density).
+  Everything defaults to "nothing special"; validation keeps water shallow
+  enough to wade (never a trap) and values in range.
+* **Layout (`world/features.rs`):** gates where the footpath meets the north
+  and south fence (trigger zone, arrival spot), a stream laid out before
+  landmarks (so they keep dry) and carved into a level valley floor, a pond
+  chosen clear of the path and landmarks, wooden bridges wherever the path
+  crosses water (deck slabs as box colliders in steps far below the step
+  height, railings), lantern posts along the path. Every new feature uses
+  its own random stream and only applies where content asks for it, so the
+  Sunny Meadow's flowers keep their exact positions (fingerprint test) and
+  older saves stay valid. Flowers keep clear of water; lavender snaps to
+  rows.
+* **Core (`game/travel.rs`):** the regions form a chain; `gate_destination`,
+  `arrival_side`, `region_requirements`, `enter_region` (refused while
+  locked; first visit announced through `RegionEntered`) and the saved
+  `visited_regions` (checked against unlocked regions on load).
+* **Presentation:** `travel.rs` runs journeys: fade out → `enter_region` →
+  switch `ActiveRegion` (the scene, flowers, grass, sky, critters, scenery and
+  ambience rebuild on the change) → place the player at the gate they came
+  through → fade in; movement is frozen meanwhile. A banner near a gate says
+  where it leads or what it still needs. `ui::map` draws each region into a
+  small image (ground, path, water, trees, gates, workshop, unpicked flowers),
+  shown as the HUD minimap and in the world map (M), which travels to any
+  open region. The save stores the region you stand in.
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -327,7 +362,9 @@ profiling ever shows a need.
   harvesting mode (Phase D), walking into the workshop, binding bouquets at
   the workbench and checking they persist (Phase E), buying an upgrade with
 the keyboard at the tool shelf and learning skills in the tree (Phase U),
-and opening every journal page, checking achievements and distance (Phase P).
+and opening every journal page, checking achievements and distance (Phase P),
+then travelling with the world map to every region, checking the save records
+the region, and walking back to the meadow through a gate (Phase F).
 Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 

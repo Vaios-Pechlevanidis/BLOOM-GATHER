@@ -10,7 +10,7 @@ use bloom_core::rng::SplitMix64;
 
 use super::camera::MainCamera;
 use super::color;
-use super::meshes::{lin, mix, MeshBuilder};
+use super::meshes::{hash3, lin, mix, MeshBuilder};
 use super::scene::SceneEntity;
 use crate::game::{Content, RegionScene};
 
@@ -56,7 +56,10 @@ fn spawn_sky(
 ) {
     let region = &content.regions[scene.region];
     let horizon = lin(color(region.palette.sky));
-    let zenith = zenith_for(horizon);
+    let air = region.scenery.atmosphere;
+    let zenith = air
+        .zenith
+        .map_or_else(|| zenith_for(horizon), |z| lin(color(z)));
 
     let mut dome = Sphere::new(1.0).mesh().uv(48, 24);
     let ys: Vec<f32> = match dome.attribute(Mesh::ATTRIBUTE_POSITION) {
@@ -89,6 +92,17 @@ fn spawn_sky(
         Transform::from_scale(Vec3::splat(DOME_RADIUS)),
         NotShadowCaster,
     ));
+
+    if air.night {
+        spawn_night_sky(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            region.seed,
+            air.sun_elevation_deg,
+        );
+        return;
+    }
 
     // A few cloud shapes, each a cluster of soft puffs: white on top, a
     // gentle blue-grey underneath.
@@ -134,6 +148,103 @@ fn spawn_sky(
             NotShadowCaster,
         ));
     }
+}
+
+/// Stars scattered over the dome and a pale moon where the moonlight comes
+/// from (south-west, like the sun in daytime regions).
+fn spawn_night_sky(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    seed: u64,
+    moon_elevation_deg: f32,
+) {
+    let material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        unlit: true,
+        fog_enabled: false,
+        cull_mode: None,
+        ..default()
+    });
+    let mut rng = SplitMix64::new(seed ^ 0x57A2);
+    let star = Mesh::from(Rectangle::new(1.0, 1.0));
+    let mut b = MeshBuilder::default();
+    for _ in 0..900 {
+        // Uniform over the upper hemisphere, thinning towards the horizon.
+        let y = rng.range_f32(0.05, 1.0).sqrt();
+        let a = rng.range_f32(0.0, std::f32::consts::TAU);
+        let r = (1.0 - y * y).sqrt();
+        let dir = Vec3::new(a.cos() * r, y, a.sin() * r);
+        let size = rng.range_f32(0.0012, 0.0032);
+        let bright = rng.range_f32(0.55, 1.0);
+        let tint = if rng.next_f32() < 0.2 {
+            LinearRgba::rgb(0.8, 0.86, 1.0)
+        } else {
+            LinearRgba::rgb(1.0, 0.97, 0.9)
+        } * bright;
+        let t = Transform::from_translation(dir * 0.97)
+            .looking_at(Vec3::ZERO, Vec3::Y)
+            .with_scale(Vec3::splat(size));
+        b.add(&star, t, move |_| tint);
+    }
+    commands.spawn((
+        SceneEntity,
+        SkyDome,
+        Mesh3d(meshes.add(b.build())),
+        MeshMaterial3d(material.clone()),
+        Transform::from_scale(Vec3::splat(DOME_RADIUS)),
+        NotShadowCaster,
+    ));
+    // The moon, with a faint halo around it.
+    let e = moon_elevation_deg.to_radians();
+    let across = Vec2::new(-30.0, 28.0).normalize() * e.cos();
+    let dir = Vec3::new(across.x, e.sin(), across.y).normalize();
+    let mut m = MeshBuilder::default();
+    let disc = Mesh::from(Circle::new(1.0).mesh().resolution(40));
+    let face = LinearRgba::rgb(1.0, 0.98, 0.9);
+    m.add(
+        &disc,
+        Transform::from_translation(dir * 0.95)
+            .looking_at(Vec3::ZERO, Vec3::Y)
+            .with_scale(Vec3::splat(0.035)),
+        move |p| {
+            mix(
+                face,
+                LinearRgba::rgb(0.82, 0.84, 0.86),
+                (hash3(p * 6.0) * 0.5 + 0.5) * 0.35,
+            )
+        },
+    );
+    commands.spawn((
+        SceneEntity,
+        SkyDome,
+        Mesh3d(meshes.add(m.build())),
+        MeshMaterial3d(material),
+        Transform::from_scale(Vec3::splat(DOME_RADIUS)),
+        NotShadowCaster,
+    ));
+    let halo = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.7, 0.78, 1.0, 0.12),
+        unlit: true,
+        fog_enabled: false,
+        alpha_mode: AlphaMode::Add,
+        cull_mode: None,
+        ..default()
+    });
+    commands.spawn((
+        SceneEntity,
+        SkyDome,
+        Transform::from_scale(Vec3::splat(DOME_RADIUS)),
+        Visibility::default(),
+        Children::spawn_one((
+            Mesh3d(meshes.add(Circle::new(1.0).mesh().resolution(40))),
+            MeshMaterial3d(halo),
+            Transform::from_translation(dir * 0.955)
+                .looking_at(Vec3::ZERO, Vec3::Y)
+                .with_scale(Vec3::splat(0.09)),
+            NotShadowCaster,
+        )),
+    ));
 }
 
 fn follow_camera(

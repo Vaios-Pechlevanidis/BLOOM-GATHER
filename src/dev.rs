@@ -866,6 +866,188 @@ fn drive(
             }
             76 => {
                 smoke.expect("J closes the journal", play_state, PlayState::Playing);
+                // Open every region for the test via a restored state (the
+                // game has no cheat API), then open the world map.
+                if let Some(session) = session_mut.as_deref_mut() {
+                    let mut state = session.state().clone();
+                    state.unlocked_regions = content.regions.iter().map(|r| r.id.clone()).collect();
+                    match bloom_core::Game::from_state(session.data().clone(), state) {
+                        Ok(game) => session.game = game,
+                        Err(e) => smoke.check("restored test state", false, e),
+                    }
+                }
+                smoke.tap(KeyCode::KeyM);
+                0.6
+            }
+            // --- the world map and travelling between regions ---
+            77 => {
+                smoke.expect("M opens the world map", play_state, PlayState::Map);
+                smoke.check("cursor free on the map", !locked, locked);
+                smoke.shot(&mut commands, "22_world_map");
+                smoke.tap(KeyCode::ArrowRight);
+                0.25
+            }
+            78..=80 => {
+                smoke.tap(KeyCode::ArrowRight);
+                if smoke.step == 80 {
+                    0.5
+                } else {
+                    0.25
+                }
+            }
+            81 => {
+                smoke.shot(&mut commands, "23_map_moonlight_selected");
+                smoke.tap(KeyCode::Enter);
+                3.5
+            }
+            82 => {
+                let moon = content.region_index("moonlight_garden").unwrap_or(0);
+                arrived(
+                    &mut smoke,
+                    scene,
+                    play_state,
+                    body,
+                    moon,
+                    "Enter on the map travels to the Moonlight Garden",
+                );
+                smoke.shot(&mut commands, "24_moonlight_garden");
+                smoke.tap(KeyCode::Escape);
+                0.6
+            }
+            83 => {
+                smoke.expect("Esc pauses (and saves)", play_state, PlayState::Paused);
+                let raw =
+                    std::fs::read_to_string(saves.store.dir().join("save.ron")).unwrap_or_default();
+                let region = decode(&raw)
+                    .ok()
+                    .and_then(|s| s.player)
+                    .map(|p| p.region)
+                    .unwrap_or_default();
+                smoke.check(
+                    "the save remembers the region you are in",
+                    region == "moonlight_garden",
+                    &region,
+                );
+                smoke.tap(KeyCode::Escape);
+                0.4
+            }
+            84 => {
+                smoke.tap(KeyCode::KeyM);
+                0.5
+            }
+            85 => {
+                smoke.expect("M opens the map again", play_state, PlayState::Map);
+                smoke.tap(KeyCode::ArrowLeft);
+                0.3
+            }
+            86 => {
+                smoke.tap(KeyCode::Enter);
+                3.5
+            }
+            87 => {
+                let forest = content.region_index("enchanted_forest").unwrap_or(0);
+                arrived(
+                    &mut smoke,
+                    scene,
+                    play_state,
+                    body,
+                    forest,
+                    "travelled to the Enchanted Forest",
+                );
+                smoke.shot(&mut commands, "25_enchanted_forest");
+                smoke.tap(KeyCode::KeyM);
+                0.5
+            }
+            88 => {
+                smoke.tap(KeyCode::ArrowLeft);
+                0.3
+            }
+            89 => {
+                smoke.tap(KeyCode::Enter);
+                3.5
+            }
+            90 => {
+                let valley = content.region_index("blossom_valley").unwrap_or(0);
+                arrived(
+                    &mut smoke,
+                    scene,
+                    play_state,
+                    body,
+                    valley,
+                    "travelled to Blossom Valley",
+                );
+                // Look at the bridge over the stream.
+                if let (Some(p), Some(sc)) = (player.as_deref_mut(), scene) {
+                    let ok = view_bridge(p, sc, &content);
+                    smoke.check("the valley has a bridge", ok, ok);
+                }
+                0.8
+            }
+            91 => {
+                smoke.shot(&mut commands, "26_blossom_valley_bridge");
+                smoke.tap(KeyCode::KeyM);
+                0.5
+            }
+            92 => {
+                smoke.tap(KeyCode::ArrowLeft);
+                0.3
+            }
+            93 => {
+                smoke.tap(KeyCode::Enter);
+                3.0
+            }
+            94 => {
+                let lavender = content.region_index("lavender_fields").unwrap_or(0);
+                arrived(
+                    &mut smoke,
+                    scene,
+                    play_state,
+                    body,
+                    lavender,
+                    "travelled to the Lavender Fields",
+                );
+                smoke.shot(&mut commands, "27_lavender_fields");
+                0.4
+            }
+            95 => {
+                // Walk back to the meadow on foot through the south gate.
+                if let (Some(p), Some(sc)) = (player.as_deref_mut(), scene) {
+                    face_gate(p, sc, bloom_core::world::GateSide::South);
+                }
+                0.6
+            }
+            96 => {
+                smoke.shot(&mut commands, "28_gate_to_the_meadow");
+                smoke.hold(KeyCode::KeyW, 2.0);
+                3.5
+            }
+            97 => {
+                arrived(
+                    &mut smoke,
+                    scene,
+                    play_state,
+                    body,
+                    0,
+                    "walking through the gate leads back to the meadow",
+                );
+                if let (Some(b), Some(sc)) = (body, scene) {
+                    let (at, _) = sc.layout.arrival(bloom_core::world::GateSide::North);
+                    let d = b.ground_position().distance(at);
+                    smoke.check(
+                        "arrived just inside the meadow's north gate",
+                        d < 3.0,
+                        format!("{d:.2} m"),
+                    );
+                }
+                if let Some(s) = session_mut.as_deref() {
+                    let visited = s.state().visited_regions.len();
+                    smoke.check(
+                        "every region visited",
+                        visited == content.regions.len(),
+                        visited,
+                    );
+                }
+                smoke.shot(&mut commands, "29_back_in_the_meadow");
                 smoke.tap(KeyCode::Escape);
                 smoke.step = 12; // → 13: pause and save
                 0.6
@@ -897,11 +1079,17 @@ fn drive(
                 // Everything picked (by hand and with tools) and the tools owned.
                 let growth = session_mut.as_deref().map_or(String::new(), |se| {
                     format!(
-                        "{}\n{}\n{}",
+                        "{}\n{}\n{}\n{}",
                         levels_line(&se.state().upgrades),
                         levels_line(&se.state().skills),
                         se.state()
                             .achievements
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(","),
+                        se.state()
+                            .visited_regions
                             .iter()
                             .cloned()
                             .collect::<Vec<_>>()
@@ -981,6 +1169,7 @@ fn verify_resumed(
     let upgrades = lines.next().unwrap_or("").to_string();
     let skills = lines.next().unwrap_or("").to_string();
     let achievements = lines.next().unwrap_or("").to_string();
+    let visited = lines.next().unwrap_or("").to_string();
     smoke.check(
         "run 1 recorded its picks",
         expected.len() > PICKS,
@@ -1042,6 +1231,12 @@ fn verify_resumed(
         achievements_now.join(",") == achievements && !achievements.is_empty(),
         &achievements,
     );
+    let visited_now: Vec<String> = session.state().visited_regions.iter().cloned().collect();
+    smoke.check(
+        "visited regions restored",
+        visited_now.join(",") == visited && visited_now.len() == session.data().regions.len(),
+        &visited,
+    );
     let walked = session.state().stats.distance_walked_m;
     smoke.check(
         "distance walked restored",
@@ -1073,6 +1268,68 @@ fn verify_resumed(
             format!("{d:.2} m"),
         );
     }
+}
+
+/// After a journey: in the right region, playing, standing on the ground.
+fn arrived(
+    smoke: &mut Smoke,
+    scene: Option<&RegionScene>,
+    play_state: Option<&State<PlayState>>,
+    body: Option<CharacterBody>,
+    region: usize,
+    label: &str,
+) {
+    let here = scene.map(|s| s.region);
+    smoke.check(label, here == Some(region), format!("in region {here:?}"));
+    smoke.expect("playing after travelling", play_state, PlayState::Playing);
+    if let (Some(b), Some(sc)) = (body, scene) {
+        smoke.check(
+            "standing inside the new region",
+            b.grounded && sc.layout.in_bounds(b.ground_position(), 0.0),
+            b.position,
+        );
+    }
+}
+
+/// Stand on the path a little way before the first bridge, looking along it.
+fn view_bridge(player: &mut Player, scene: &RegionScene, content: &Content) -> bool {
+    let layout = &scene.layout;
+    let Some(bridge) = layout.bridges.first() else {
+        return false;
+    };
+    let env = Environment {
+        terrain: &layout.terrain,
+        colliders: &layout.colliders,
+    };
+    let at = bridge.point(0.0) - bridge.dir * 7.0;
+    let body = CharacterBody::standing_at(at, &env);
+    player.body = body;
+    player.previous = body.position;
+    let target = bridge.point(0.5);
+    let d = Vec3::new(target.x, bridge.deck_height(0.5), target.y) - body.eye(&content.player);
+    player.yaw = (-d.x).atan2(-d.z);
+    player.pitch = (d.y / d.length()).asin().min(0.0) - 0.05;
+    true
+}
+
+/// Stand on the path four metres in front of a gate, facing it.
+fn face_gate(player: &mut Player, scene: &RegionScene, side: bloom_core::world::GateSide) {
+    let layout = &scene.layout;
+    let gate = layout.gate(side);
+    let inward = match side {
+        bloom_core::world::GateSide::North => Vec2::Y,
+        bloom_core::world::GateSide::South => Vec2::NEG_Y,
+    };
+    let env = Environment {
+        terrain: &layout.terrain,
+        colliders: &layout.colliders,
+    };
+    let body = CharacterBody::standing_at(gate.position + inward * 4.0, &env);
+    player.body = body;
+    player.previous = body.position;
+    let d = -inward;
+    player.yaw = (-d.x).atan2(-d.y);
+    player.pitch = -0.05;
 }
 
 /// `id=level,...` for the expected-state file.

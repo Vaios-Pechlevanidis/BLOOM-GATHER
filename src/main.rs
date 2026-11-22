@@ -18,6 +18,7 @@ mod interaction;
 mod player;
 mod rendering;
 mod tools;
+mod travel;
 mod ui;
 mod viewmodel;
 
