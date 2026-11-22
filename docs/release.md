@@ -30,10 +30,30 @@ packaging needs no Python.
   needs a real window and GPU, so it stays a local check
   (`scripts/smoke.sh`).
 * **Release** (`release.yml`), by hand (Actions > Release > Run workflow)
-  or on a version tag (`git tag v0.2.0 && git push --tags`): builds the
-  macOS (Apple Silicon and Intel), Windows and Linux packages and keeps
-  them as workflow artifacts. For a tag it also creates a **draft** GitHub
-  release with the packages attached; publishing it is a manual step.
+  or on a version tag (`git tag v0.2.0 && git push origin v0.2.0`): builds
+  the macOS (Apple Silicon and Intel), Windows and Linux packages and keeps
+  them as workflow artifacts. For a tag it also **publishes** a GitHub
+  release with the packages attached and marks it as the latest, so the
+  download links and the install scripts pick it up at once.
+
+## Installing from GitHub
+
+Players install with one line (see the README's "Download & install"):
+
+* `scripts/install.sh` (macOS, Linux): asks the GitHub API for the latest
+  release, picks the `.dmg` for the Mac's processor or the `.AppImage`,
+  downloads it with curl and installs it. macOS: copies the app to
+  `/Applications` (`~/Applications` if that isn't writable) and clears the
+  quarantine flag; a curl download carries none anyway, so Gatekeeper does
+  not ask. Linux: `~/.local/bin/bloom-and-gather`, the icon and a desktop
+  entry. Then it starts the game.
+* `scripts/install.ps1` (Windows): downloads the `-setup.exe` and runs it
+  silently for the current user, then starts the game.
+
+Options: `BLOOM_NO_LAUNCH=1` (install only), `BLOOM_INSTALL_DIR`,
+`BLOOM_REPO=owner/name` (a fork's releases), and for `install.sh`
+`BLOOM_PACKAGE=<file>` to install a local `.dmg` / `.AppImage` (used for
+testing before a release exists).
 
 ## Signing
 
@@ -55,6 +75,8 @@ the player once:
 
 macOS (Apple Silicon): the `.dmg` was built locally, mounted, and the game
 inside it started from `/` as Finder would start it, and ran the in-game
-benchmark to the end. The Windows and Linux scripts and both workflows
-run on GitHub's machines; they were checked for syntax but have not run
-yet.
+benchmark to the end. `scripts/install.sh` installed that `.dmg` into a
+test folder (`BLOOM_PACKAGE`): the app's signature verified, it carried no
+quarantine flag, and the installed game ran the benchmark. The Windows and
+Linux packaging and install scripts and the release workflow run on
+GitHub's machines and other systems; they have not run yet.

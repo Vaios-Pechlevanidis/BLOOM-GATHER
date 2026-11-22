@@ -1,6 +1,7 @@
 # Build the packages for every platform. Runs by hand (Actions > Release >
 # Run workflow) or when a version tag like v0.2.0 is pushed; a tag also
-# creates a GitHub release with the packages attached.
+# publishes a GitHub release with the packages attached (the download page
+# and scripts/install.sh / install.ps1 use the latest one).
 name: Release
 
 on:
@@ -18,10 +19,10 @@ jobs:
       matrix:
         include:
           - name: macos-arm64
-            os: macos-14
+            os: macos-latest
             target: aarch64-apple-darwin
           - name: macos-x86_64
-            os: macos-14
+            os: macos-latest
             target: x86_64-apple-darwin
           - name: windows
             os: windows-latest
@@ -84,4 +85,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          draft: true
+          # Published at once, so the download links and the install
+          # scripts (which use the latest release) work right away.
+          draft: false
+          make_latest: true
+          generate_release_notes: true

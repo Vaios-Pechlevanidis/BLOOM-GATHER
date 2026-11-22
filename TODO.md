@@ -265,7 +265,13 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Windows: `scripts/package-windows.ps1` builds a zip and an Inno Setup installer (per-user by
   default, Start menu and optional desktop shortcut)
 - ✅ GitHub Actions: CI (fmt, clippy, tests on Linux, macOS, Windows) and a release workflow
-  that builds every package and, for a `v*` tag, drafts a GitHub release with them
+  that builds every package and, for a `v*` tag, publishes a GitHub release with them
+  (macOS jobs on `macos-latest`; `macos-14` is no longer offered)
+- ✅ Install from GitHub with one line: `scripts/install.sh` (macOS, Linux) and
+  `scripts/install.ps1` (Windows) download the latest release, install it and start the game;
+  README "Download & install" section with the manual downloads and first-launch notes
+- ⬜ First release: push a `v0.1.0` tag, check the workflow run, then test the install
+  scripts against the real release
 - ✅ Tested here: the macOS `.dmg` built, mounted, and the game in it ran from `/`; the Windows
   and Linux scripts and the workflows run on GitHub and have not run yet
 - ⬜ Code signing and notarization need an Apple Developer account and a Windows certificate

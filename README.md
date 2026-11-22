@@ -21,7 +21,54 @@ you can keep wandering (free roam). Picked
 flowers never come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
 
-## Running
+## Download & install
+
+Ready-made packages for macOS, Windows and Linux are on the
+[latest release](https://github.com/Vaios-Pechlevanidis/BLOOM-GATHER/releases/latest).
+The quickest way is one line in a terminal, which downloads the latest
+release, installs it and starts the game (run it again to update):
+
+**macOS** (Apple Silicon and Intel) and **Linux** (x86_64):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/main/scripts/install.sh | bash
+```
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/main/scripts/install.ps1 | iex
+```
+
+Where it goes: macOS puts `Bloom & Gather.app` in `/Applications` (or
+`~/Applications`); Linux puts the AppImage at `~/.local/bin/bloom-and-gather`
+with a menu entry; Windows installs for the current user (no administrator
+rights) with a Start menu entry, uninstalled via Settings > Apps.
+
+Or download by hand from the release page:
+
+| System | File |
+|---|---|
+| macOS, Apple Silicon | `Bloom-and-Gather-<version>-macos-aarch64.dmg` |
+| macOS, Intel | `Bloom-and-Gather-<version>-macos-x86_64.dmg` |
+| Windows | `Bloom-and-Gather-<version>-windows-x86_64-setup.exe` (or the `.zip`) |
+| Linux | `Bloom-and-Gather-<version>-x86_64.AppImage` (or the `.tar.gz`) |
+
+The packages are not signed with a developer certificate yet, so a
+download from the browser asks once on first launch:
+
+* **macOS:** open the `.dmg`, drag the app to Applications, then
+  right-click it > Open (or System Settings > Privacy & Security > Open
+  Anyway). The install script avoids this.
+* **Windows:** if SmartScreen says "Windows protected your PC", choose
+  More info > Run anyway.
+* **Linux:** make the AppImage executable (`chmod +x`). It needs FUSE 2
+  (`libfuse2` on Ubuntu/Debian); without it, use the `.tar.gz`.
+
+Saves and settings stay in your user data folder, so updating or
+reinstalling keeps your progress.
+
+## Running from source
 
 Requirements: a recent stable Rust toolchain (`rustup`). On Linux, Bevy also
 needs the usual system packages (`libasound2-dev`, `libudev-dev`, and X11 or
