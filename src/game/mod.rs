@@ -11,7 +11,7 @@ mod states;
 
 pub use content::{ActiveRegion, Content, RegionScene, Touring};
 pub use session::{start_new_game, EventsForwarded, GameEventMsg, Saves, Session, SessionSet};
-pub use settings::Settings;
+pub use settings::{Quality, Settings};
 pub use states::{AppState, PlayState};
 
 use bevy::prelude::*;

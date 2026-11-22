@@ -119,7 +119,7 @@ fn grows_in(game: &Game, species: &FlowerSpecies) -> String {
     }
 }
 
-fn spawn_screen(mut commands: Commands, session: Res<Session>) {
+fn spawn_screen(mut commands: Commands, session: Res<Session>, bindings: Res<Bindings>) {
     let game = &session.game;
     let data = game.data();
     let found = game.state().discovered.len();
@@ -195,7 +195,15 @@ fn spawn_screen(mut commands: Commands, session: Res<Session>) {
                     ..default()
                 })
                 .with_children(|f| {
-                    spawn_button(f, "Close (C)", ButtonVariant::Compact, Close);
+                    spawn_button(
+                        f,
+                        &format!(
+                            "Close ({})",
+                            bindings.label(crate::input::Action::Collection)
+                        ),
+                        ButtonVariant::Compact,
+                        Close,
+                    );
                 });
             });
         });

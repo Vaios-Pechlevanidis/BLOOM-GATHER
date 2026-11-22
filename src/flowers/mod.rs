@@ -235,12 +235,17 @@ fn sync_flowers(
 
 /// Gentle wind: each flower leans and recovers, with gusts rolling across
 /// the field (phase from position).
-fn sway(time: Res<Time>, mut flowers: Query<(&FlowerEntity, &mut Transform), Without<Harvesting>>) {
+fn sway(
+    time: Res<Time>,
+    weather: Res<crate::rendering::Weather>,
+    mut flowers: Query<(&FlowerEntity, &mut Transform), Without<Harvesting>>,
+) {
     let t = time.elapsed_secs();
+    let w = weather.wind;
     for (flower, mut transform) in &mut flowers {
         let gust = (t * 0.45 + flower.phase * 0.25).sin() * 0.5 + 0.5;
-        let lean_x = (t * 1.7 + flower.phase).sin() * (0.025 + 0.05 * gust);
-        let lean_z = (t * 1.3 + flower.phase * 1.3).cos() * 0.03;
+        let lean_x = (t * 1.7 + flower.phase).sin() * (0.025 + 0.05 * gust) * w;
+        let lean_z = (t * 1.3 + flower.phase * 1.3).cos() * 0.03 * w;
         transform.rotation = Quat::from_rotation_z(lean_z)
             * Quat::from_rotation_x(lean_x)
             * Quat::from_rotation_y(flower.yaw);

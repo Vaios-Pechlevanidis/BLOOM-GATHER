@@ -257,9 +257,13 @@ fn follow_camera(
     }
 }
 
-fn drift_clouds(time: Res<Time>, mut clouds: Query<(&Cloud, &mut Transform)>) {
+fn drift_clouds(
+    time: Res<Time>,
+    weather: Res<super::Weather>,
+    mut clouds: Query<(&Cloud, &mut Transform)>,
+) {
     for (cloud, mut t) in &mut clouds {
-        t.translation.x += cloud.speed * time.delta_secs();
+        t.translation.x += cloud.speed * weather.wind * time.delta_secs();
         if t.translation.x > CLOUD_WRAP {
             t.translation.x -= CLOUD_WRAP * 2.0;
         }

@@ -18,16 +18,13 @@ use super::color;
 use super::meshes::{lin, mix};
 use super::scene::SceneEntity;
 use super::wind::{wind_material, Wind, WindMaterial};
-use crate::game::{Content, RegionScene};
+use crate::game::{Content, Quality, RegionScene, Settings};
 
 pub struct GrassPlugin;
 
 impl Plugin for GrassPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            spawn_grass.run_if(resource_exists_and_changed::<RegionScene>),
-        );
+        app.add_systems(Update, spawn_grass.run_if(resource_exists::<RegionScene>));
     }
 }
 
@@ -103,19 +100,41 @@ fn patches(p: Vec2) -> f32 {
         + 0.5
 }
 
+/// A chunk of grass (rebuilt when the region or the graphics quality
+/// changes).
+#[derive(Component)]
+struct GrassChunk;
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_grass(
     mut commands: Commands,
     scene: Res<RegionScene>,
+    settings: Res<Settings>,
+    mut built: Local<Option<(usize, Quality)>>,
+    old: Query<Entity, With<GrassChunk>>,
     content: Res<Content>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
 ) {
+    let quality = settings.quality;
+    if !scene.is_changed() && *built == Some((scene.region, quality)) {
+        return;
+    }
+    *built = Some((scene.region, quality));
+    // A new region's scene already cleared the old one; a quality change
+    // only replaces the grass.
+    if !scene.is_changed() {
+        for e in &old {
+            commands.entity(e).despawn();
+        }
+    }
     let started = std::time::Instant::now();
     let layout = &scene.layout;
     let field = &scene.field;
     let region = &content.regions[scene.region];
     let palette = region.palette;
-    let grass_density = region.scenery.grass_density();
+    let grass_density = region.scenery.grass_density() * quality.grass_density();
+    let (fade_from, fade_to) = quality.grass_distance();
     let none_picked = BitSet::new(field.len() as u32);
 
     let dark = lin(color(palette.ground_dark)) * 0.82;
@@ -223,12 +242,13 @@ fn spawn_grass(
             if let Some(mesh) = b.into_mesh() {
                 commands.spawn((
                     SceneEntity,
+                    GrassChunk,
                     Mesh3d(meshes.add(mesh)),
                     MeshMaterial3d(material.clone()),
                     NotShadowCaster,
                     VisibilityRange {
                         start_margin: 0.0..0.0,
-                        end_margin: 38.0..55.0,
+                        end_margin: fade_from..fade_to,
                         use_aabb: true,
                     },
                 ));

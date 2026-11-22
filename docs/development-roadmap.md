@@ -70,14 +70,22 @@ stone arch, forest arch, lantern arch; barred while locked), minimap and
 world map (M) with travel, per-region light and ambience, region the player
 stands in saved.
 
-## Phase Z — Completion & ending ✅ (current)
+## Phase Z — Completion & ending ✅
 Completion checker (each requirement tested; recorded once with a journey
 summary), finale (celebration, tour of all five regions with the picked
 flowers blooming in memory, skippable), journey summary, herbarium (C),
 free roam, summary reachable from the journal, ending resumes after a
 crash.
 
-## Phase G — Polish & release
+## Phase G — Polish & release (in parts)
+
+**G1 Settings & feel ✅ (current):** settings screen (controls, video,
+audio, keys) with key rebinding, graphics quality levels, fullscreen,
+VSync, interface size, separate volumes; calm synthesised music (day and
+night), footsteps by surface, landing and travel sounds; a breeze that
+rises and falls; soft bloom on bright things.
+
+Still to come, in this order unless decided otherwise:
 Painted glTF art replacing procedural meshes, day/night and weather,
 animation and lighting pass, sound design and music, full settings
 (key rebinding, graphics, audio), benchmarks at 1k–500k flowers and

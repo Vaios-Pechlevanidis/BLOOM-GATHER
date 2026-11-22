@@ -301,6 +301,7 @@ fn start_journey(
         sfx.write(PlaySfx::new(Sfx::Deny));
         return;
     }
+    sfx.write(PlaySfx::new(Sfx::Whoosh));
     commands.insert_resource(Journey {
         to: request.region,
         arrive: request.arrive,

@@ -67,8 +67,8 @@ fn journey(skip: Skip) -> Game {
         }
     }
     g.tick(1_000.0);
-    for t in 0..d.tools.len() {
-        let cart = d.tools[t].id == "advanced_harvesting_equipment";
+    for (t, tool) in d.tools.iter().enumerate() {
+        let cart = tool.id == "advanced_harvesting_equipment";
         if !g.owns_tool(t) && !(skip == Skip::OneTool && cart) {
             g.buy_tool(t).unwrap();
         }

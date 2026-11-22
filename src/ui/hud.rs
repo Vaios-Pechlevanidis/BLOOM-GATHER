@@ -8,6 +8,7 @@ use bevy::prelude::*;
 
 use super::theme::{self, font, palette, radius, space};
 use crate::game::{ActiveRegion, AppState, Content, PlayState, RegionScene, Session};
+use crate::input::Bindings;
 use crate::interaction::{station_text, LookTarget};
 use crate::tools::{mode_name, GroundAim, SelectedMode, MODE_ORDER};
 use bloom_core::data::{HarvestMode, Rarity};
@@ -22,13 +23,46 @@ impl Plugin for HudPlugin {
             .add_systems(OnExit(PlayState::Playing), show_crosshair::<false>)
             .add_systems(
                 Update,
-                (update_stats, update_prompt, update_toolbar).run_if(in_state(AppState::InGame)),
+                (update_stats, update_prompt, update_toolbar, update_hint)
+                    .run_if(in_state(AppState::InGame)),
             );
     }
 }
 
 #[derive(Component)]
 struct Crosshair;
+
+/// The controls line at the bottom (follows the key bindings).
+#[derive(Component)]
+struct ControlsHint;
+
+fn controls_hint(b: &Bindings) -> String {
+    use crate::input::Action as A;
+    let moves: String = [A::Forward, A::Left, A::Back, A::Right]
+        .iter()
+        .map(|&a| b.label(a))
+        .collect();
+    format!(
+        "{moves}  move   {}  sprint   {}  jump   {}  use   1-4  tools   {}  basket   {}  skills   {}  journal   {}  map   {}  collection   Esc  pause",
+        b.label(A::Sprint).trim_start_matches("Left ").trim_start_matches("Right "),
+        b.label(A::Jump),
+        b.label(A::Interact),
+        b.label(A::Basket),
+        b.label(A::Skills),
+        b.label(A::Journal),
+        b.label(A::Map),
+        b.label(A::Collection),
+    )
+}
+
+fn update_hint(bindings: Res<Bindings>, mut hints: Query<&mut Text, With<ControlsHint>>) {
+    let text = controls_hint(&bindings);
+    for mut t in &mut hints {
+        if t.0 != text {
+            t.0 = text.clone();
+        }
+    }
+}
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Stat {
@@ -273,10 +307,9 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
                 BorderRadius::all(Val::Px(radius::PILL)),
             ))
             .with_children(|hint| {
-                hint.spawn(theme::text(
-                    "WASD  move   Shift  sprint   Space  jump   E  use   1-4  tools   Tab  basket   K  skills   J  journal   M  map   C  collection   Esc  pause",
-                    font::CAPTION,
-                    palette::INK_SOFT,
+                hint.spawn((
+                    ControlsHint,
+                    theme::text("", font::CAPTION, palette::INK_SOFT),
                 ));
             });
         });
@@ -298,8 +331,10 @@ fn update_stats(
     active: Res<ActiveRegion>,
     mut texts: Query<(&Stat, &mut Text)>,
     mut fill: Query<&mut Node, With<XpFill>>,
+    bindings: Res<Bindings>,
 ) {
     let Some(session) = session else { return };
+    let skills_key = bindings.label(crate::input::Action::Skills);
     let data = session.data();
     let region = &data.regions[active.0];
     let discovered = session.state().discovered.len();
@@ -346,8 +381,8 @@ fn update_stats(
             },
             Stat::SkillPoints => match points {
                 0 => String::new(),
-                1 => "1 skill point to spend (K)".into(),
-                n => format!("{n} skill points to spend (K)"),
+                1 => format!("1 skill point to spend ({skills_key})"),
+                n => format!("{n} skill points to spend ({skills_key})"),
             },
             Stat::Rare => rare.map_or(String::new(), |n| format!("{n} rare flowers left here")),
             Stat::XpText => match progress {

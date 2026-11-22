@@ -171,9 +171,12 @@ fn react_to_events(
     player: Option<ResMut<Player>>,
     mut sfx: EventWriter<PlaySfx>,
     mut toasts: EventWriter<Toast>,
+    bindings: Res<Bindings>,
 ) {
     let Some(session) = session else { return };
     let data = session.data().clone();
+    let skills_key = bindings.label(crate::input::Action::Skills);
+    let map_key = bindings.label(crate::input::Action::Map);
     let mut player = player;
     for GameEventMsg(event) in events.read() {
         match *event {
@@ -200,7 +203,7 @@ fn react_to_events(
                 sfx.write(PlaySfx::new(Sfx::LevelUp));
                 toasts.write(Toast::highlight(
                     format!("Level {level}!"),
-                    level_up_text(&session, level),
+                    level_up_text(&session, level, skills_key),
                 ));
             }
             GameEvent::AchievementUnlocked { achievement } => {
@@ -292,7 +295,9 @@ fn react_to_events(
                 };
                 toasts.write(Toast::highlight(
                     format!("{} is open", r.name),
-                    format!("{body} Follow the path to its gate, or travel with the map (M)."),
+                    format!(
+                        "{body} Follow the path to its gate, or travel with the map ({map_key})."
+                    ),
                 ));
             }
             // The ending plays from the finale module.
@@ -332,13 +337,13 @@ fn react_to_events(
 }
 
 /// What a new level brings: skill points and anything that opens at it.
-fn level_up_text(game: &bloom_core::Game, level: u32) -> String {
+fn level_up_text(game: &bloom_core::Game, level: u32, skills_key: &str) -> String {
     let data = game.data();
     let mut parts = Vec::new();
     let points = data.progression.skill_points_per_level;
     if points > 0 {
         parts.push(format!(
-            "+{points} skill point{} (K)",
+            "+{points} skill point{} ({skills_key})",
             if points == 1 { "" } else { "s" }
         ));
     }

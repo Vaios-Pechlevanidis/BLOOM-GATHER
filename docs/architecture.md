@@ -1,6 +1,6 @@
 # Bloom & Gather — Architecture
 
-Status: Phase Z (completion & ending) done. This document describes the
+Status: Phase G1 (settings & feel) done. This document describes the
 target architecture and marks what exists today.
 
 ## 1. Goals that shape the architecture
@@ -356,6 +356,35 @@ profiling ever shows a need.
   rarity, picked of total, description; undiscovered ones only say where
   they grow) and the bouquets bound.
 
+## 7h. Settings, sound and feel (Phase G1)
+
+* **Settings (`game/settings.rs`):** controls and comfort, graphics
+  `Quality` (Low / Medium / High: shadows and cascades, MSAA, bloom, grass
+  density and fade distance), fullscreen, VSync, interface size (`UiScale`),
+  minimap, master / effects / music / ambience volume and key overrides. Old
+  `settings.ron` files load with defaults for new fields; values are
+  clamped. `apply_settings` keeps `Bindings`, the window and `UiScale` in
+  step; the camera, the sun's shadows and the grass react to quality
+  changes (the grass rebuilds alone).
+* **Key bindings (`input`):** `Action` lists the rebindable actions;
+  `rebind` sets an action's primary key and swaps with any action that
+  already had it; menu keys are reserved. Every on-screen hint reads its
+  key from `Bindings`.
+* **Settings screen (`ui/settings.rs`):** an overlay over the pause menu or
+  the title screen with four tabs, keyboard and mouse; other menus ignore
+  their keys while it is open.
+* **Sound (`audio.rs`):** effects at the effects volume; footsteps chosen by
+  surface (grass, gravel path, bridge wood, water) about every 0.8 m, a
+  landing thump and a travel whoosh. Two music loops (day, night) are
+  composed by a seeded generator on a background thread (pad on a
+  four-chord progression, bass, a sparse kalimba melody on the pentatonic
+  scale, echo; seamless loops) and, like the ambience, cross-fade when the
+  region changes.
+* **Weather (`rendering/wind.rs`):** `Weather::wind` rises and falls over
+  minutes; the wind shader, flower sway and clouds follow it.
+* **Bloom:** HDR cameras; on Medium and High a thresholded bloom lets only
+  bright things glow (lanterns, fireflies, glowing flowers).
+
 ## 8. Persistence (implemented in Phase B)
 
 * One save slot in the OS data folder (`~/Library/Application Support/Bloom
@@ -400,7 +429,8 @@ the region, and walking back to the meadow through a gate (Phase F).
 Run 2 then finishes the game through the real rules, watches the ending
 (celebration, two tour stops, Esc to the summary), continues into free roam,
 opens the herbarium and the journal, and checks the save records the ending
-(Phase Z).
+(Phase Z). Run 1 also opens the settings with O, lowers the quality and
+rebinds the map to N by keyboard; run 2 checks both were saved (Phase G1).
 Injected input is authoritative (real
   device input is discarded) so the test is deterministic.
 

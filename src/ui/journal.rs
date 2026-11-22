@@ -75,7 +75,7 @@ fn toggle(
     }
 }
 
-fn spawn_screen(mut commands: Commands, mut view: ResMut<JournalView>) {
+fn spawn_screen(mut commands: Commands, mut view: ResMut<JournalView>, bindings: Res<Bindings>) {
     view.stale = true;
     commands
         .spawn((
@@ -148,7 +148,12 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<JournalView>) {
                     ..default()
                 })
                 .with_children(|f| {
-                    spawn_button(f, "Close (J)", ButtonVariant::Compact, Act::Close);
+                    spawn_button(
+                        f,
+                        &format!("Close ({})", bindings.label(crate::input::Action::Journal)),
+                        ButtonVariant::Compact,
+                        Act::Close,
+                    );
                 });
             });
         });

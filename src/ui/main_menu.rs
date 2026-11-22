@@ -3,6 +3,7 @@
 
 use bevy::prelude::*;
 
+use super::settings::SettingsScreen;
 use super::theme::{self, font, palette, space};
 use super::widgets::{spawn_button, ButtonVariant};
 use crate::app::{GAME_TITLE, GAME_VERSION};
@@ -31,6 +32,7 @@ enum MenuAction {
     AskNewGame,
     ConfirmNewGame,
     CancelNewGame,
+    Settings,
     Quit,
 }
 
@@ -124,6 +126,12 @@ fn spawn_menu(mut commands: Commands, content: Res<Content>, saves: Res<Saves>) 
                     } else {
                         spawn_button(panel, "Begin", ButtonVariant::Primary, MenuAction::Play);
                     }
+                    spawn_button(
+                        panel,
+                        "Settings",
+                        ButtonVariant::Secondary,
+                        MenuAction::Settings,
+                    );
                     spawn_button(panel, "Quit", ButtonVariant::Secondary, MenuAction::Quit);
                 });
 
@@ -191,9 +199,10 @@ fn handle_buttons(
     mut next_state: ResMut<NextState<AppState>>,
     mut sfx: EventWriter<PlaySfx>,
     mut exit: EventWriter<AppExit>,
+    mut screen: ResMut<SettingsScreen>,
 ) {
     for (interaction, action) in &buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != Interaction::Pressed || screen.open {
             continue;
         }
         sfx.write(PlaySfx::new(Sfx::Click));
@@ -207,6 +216,7 @@ fn handle_buttons(
                 }
                 next_state.set(AppState::InGame);
             }
+            MenuAction::Settings => screen.show(),
             MenuAction::Quit => {
                 exit.write(AppExit::Success);
             }
@@ -218,8 +228,13 @@ fn handle_buttons(
 fn handle_keys(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
+    screen: Res<SettingsScreen>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
+    // Keys belong to the settings screen while it is open (or just closed).
+    if screen.open || screen.is_changed() {
+        return;
+    }
     if Bindings::just_pressed(&keys, &bindings.confirm) {
         next_state.set(AppState::InGame);
     }

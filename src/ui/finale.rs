@@ -525,6 +525,7 @@ fn animate_overlay(
     mut caption: CaptionTexts<Caption, CaptionDetail>,
     mut detail: CaptionTexts<CaptionDetail, Caption>,
     mut hint: Query<&mut Visibility, With<SkipHint>>,
+    bindings: Res<Bindings>,
 ) {
     let t = director.t;
     // Title: in during the celebration, out before the tour.
@@ -576,7 +577,7 @@ fn animate_overlay(
     if director.phase == Phase::Summary && !director.summary_spawned {
         director.summary_spawned = true;
         set_cursor(&mut windows, true);
-        spawn_summary(&mut commands, &session.game);
+        spawn_summary(&mut commands, &session.game, &bindings);
     }
 }
 
@@ -610,7 +611,11 @@ fn duration(secs: f64) -> String {
     format!("{} h {:02} min", m / 60, m % 60)
 }
 
-fn spawn_summary(commands: &mut Commands, game: &Game) {
+fn spawn_summary(commands: &mut Commands, game: &Game, bindings: &Bindings) {
+    let collection = format!(
+        "Collection ({})",
+        bindings.label(crate::input::Action::Collection)
+    );
     let data = game.data();
     let Some(s) = game.journey_summary().cloned() else {
         return;
@@ -769,7 +774,7 @@ fn spawn_summary(commands: &mut Commands, game: &Game) {
                 })
                 .with_children(|b| {
                     spawn_button(b, "Keep wandering", ButtonVariant::Primary, Act::Wander);
-                    spawn_button(b, "Collection (C)", ButtonVariant::Secondary, Act::Collection);
+                    spawn_button(b, &collection, ButtonVariant::Secondary, Act::Collection);
                     spawn_button(b, "Title screen", ButtonVariant::Secondary, Act::Title);
                 });
                 card.spawn(theme::text(

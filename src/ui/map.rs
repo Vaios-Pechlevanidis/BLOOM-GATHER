@@ -38,7 +38,7 @@ impl Plugin for MapPlugin {
                 (
                     toggle.run_if(in_state(AppState::InGame)),
                     mark_stale.after(EventsForwarded),
-                    (refresh_images, place_markers)
+                    (refresh_images, place_markers, minimap_setting)
                         .chain()
                         .run_if(in_state(AppState::InGame)),
                     (keys, buttons, rebuild)
@@ -345,6 +345,23 @@ fn spawn_minimap(
         });
 }
 
+/// The minimap can be switched off in the settings.
+fn minimap_setting(
+    settings: Res<crate::game::Settings>,
+    mut frames: Query<&mut Node, With<MinimapFrame>>,
+) {
+    let display = if settings.show_minimap {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    for mut node in &mut frames {
+        if node.display != display {
+            node.display = display;
+        }
+    }
+}
+
 fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
@@ -469,7 +486,9 @@ fn spawn_screen(
     mut view: ResMut<MapView>,
     mut images: ResMut<MapImages>,
     active: Res<ActiveRegion>,
+    bindings: Res<Bindings>,
 ) {
+    let close = format!("Close ({})", bindings.label(crate::input::Action::Map));
     // Redraw from scratch so gates show what is open right now.
     images.images.clear();
     view.selected = active.0;
@@ -525,7 +544,7 @@ fn spawn_screen(
                     ..default()
                 })
                 .with_children(|f| {
-                    spawn_button(f, "Close (M)", ButtonVariant::Compact, Act::Close);
+                    spawn_button(f, &close, ButtonVariant::Compact, Act::Close);
                 });
             });
         });

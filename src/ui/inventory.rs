@@ -123,7 +123,13 @@ fn toggle(
     }
 }
 
-fn spawn_screen(mut commands: Commands, mut view: ResMut<View>, mut open: ResMut<OpenScreen>) {
+fn spawn_screen(
+    mut commands: Commands,
+    mut view: ResMut<View>,
+    mut open: ResMut<OpenScreen>,
+    bindings: Res<Bindings>,
+) {
+    let close = format!("Close ({})", bindings.label(crate::input::Action::Basket));
     view.stale = true;
     // The shop lives at the tool shelf in the workshop; Tab (or the storage
     // chest) opens the basket.
@@ -277,12 +283,7 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<View>, mut open: ResMut
                                         Action::SellEverything,
                                     );
                                 });
-                            spawn_button(
-                                buttons,
-                                "Close (Tab)",
-                                ButtonVariant::Compact,
-                                Action::Close,
-                            );
+                            spawn_button(buttons, &close, ButtonVariant::Compact, Action::Close);
                         });
                 });
             });

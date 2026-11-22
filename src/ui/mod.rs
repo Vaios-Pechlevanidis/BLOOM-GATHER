@@ -13,12 +13,14 @@ mod journal;
 mod main_menu;
 mod map;
 mod pause_menu;
+mod settings;
 mod skills;
 pub mod theme;
 mod toasts;
 mod widgets;
 mod workshop;
 
+pub use settings::SettingsScreen;
 pub use toasts::Toast;
 
 /// Top-level HUD elements (stats, prompt, tool bar, hints, minimap, gate
@@ -46,6 +48,7 @@ impl Plugin for UiPlugin {
             map::MapPlugin,
             collection::CollectionPlugin,
             finale::FinalePlugin,
+            settings::SettingsPlugin,
         ));
     }
 }

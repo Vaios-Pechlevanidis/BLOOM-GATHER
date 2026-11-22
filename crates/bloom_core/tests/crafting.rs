@@ -341,14 +341,12 @@ fn careless_crafting_order_still_leaves_every_required_bouquet_possible() {
     let mut g = rich(&tools);
     harvest_regions(&mut g, d.regions.len());
     let simple = recipe(&d, "simple_bouquet");
-    loop {
-        match g
-            .craft(simple, g.batch_capacity(), &none())
-            .or_else(|_| g.craft(simple, 1, &none()))
-        {
-            Ok(_) => g.tick(10_000.0),
-            Err(_) => break,
-        }
+    while g
+        .craft(simple, g.batch_capacity(), &none())
+        .or_else(|_| g.craft(simple, 1, &none()))
+        .is_ok()
+    {
+        g.tick(10_000.0);
     }
     let mut order: Vec<usize> = (0..d.recipes.len())
         .filter(|&r| d.recipes[r].required_for_completion)

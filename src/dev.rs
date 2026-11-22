@@ -70,12 +70,13 @@ impl Plugin for SmokeTestPlugin {
             aiming: None,
             mark_count: 0,
             group: 0,
+            count: 0,
         })
         // The test drives the window itself; don't pause if the OS moves
         // focus elsewhere while it runs. Volume off: no surprise sounds.
         .insert_resource(Settings {
             pause_on_focus_loss: false,
-            sound_volume: 0.0,
+            master_volume: 0.0,
             ..default()
         })
         .add_systems(PreUpdate, inject_input.after(InputSystem))
@@ -102,6 +103,8 @@ struct Smoke {
     /// Harvest count before a tool action, and the group it targeted.
     mark_count: u64,
     group: usize,
+    /// Repeats left for a step that taps a key several times.
+    count: usize,
 }
 
 /// Tools the smoke test buys (all harvesting modes, scissors and the
@@ -302,6 +305,11 @@ type SmokeWorld<'a> = (
     Res<'a, Content>,
     Res<'a, Saves>,
 );
+type SmokeSettings<'a> = (
+    Res<'a, crate::ui::SettingsScreen>,
+    Res<'a, Settings>,
+    Res<'a, crate::input::Bindings>,
+);
 
 #[allow(clippy::too_many_arguments)]
 fn drive(
@@ -313,6 +321,7 @@ fn drive(
     mut player: Option<ResMut<Player>>,
     (mut session_mut, scene, content, saves): SmokeWorld<'_>,
     (spawned, target, diagnostics, selected): SmokeView<'_>,
+    (settings_screen, settings, bindings): SmokeSettings<'_>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
     mut exit: EventWriter<AppExit>,
@@ -355,6 +364,14 @@ fn drive(
             }
             // --- the ending: finish the game through the real rules ---
             3 => {
+                let file = std::fs::read_to_string(saves.store.dir().join("settings.ron"))
+                    .unwrap_or_default();
+                let saved: Option<Settings> = ron::from_str(&file).ok();
+                let ok = saved.as_ref().is_some_and(|s| {
+                    s.quality == crate::game::Quality::Medium
+                        && s.keys.get("map").map(String::as_str) == Some("N")
+                });
+                smoke.check("settings and key bindings were saved", ok, ok);
                 if let Some(session) = session_mut.as_deref_mut() {
                     match complete_game(&session.game) {
                         Ok(game) => session.game = game,
@@ -1147,8 +1164,76 @@ fn drive(
                 }
                 smoke.shot(&mut commands, "29_back_in_the_meadow");
                 smoke.tap(KeyCode::Escape);
-                smoke.step = 12; // → 13: pause and save
                 0.6
+            }
+            // --- the settings screen, all by keyboard ---
+            98 => {
+                smoke.expect("Esc pauses", play_state, PlayState::Paused);
+                smoke.tap(KeyCode::KeyO);
+                0.5
+            }
+            99 => {
+                smoke.check(
+                    "O opens the settings",
+                    settings_screen.open,
+                    settings_screen.open,
+                );
+                smoke.shot(&mut commands, "37_settings_controls");
+                smoke.tap(KeyCode::Digit2);
+                0.4
+            }
+            100 => {
+                smoke.tap(KeyCode::ArrowLeft);
+                0.4
+            }
+            101 => {
+                let q = settings.quality;
+                smoke.check(
+                    "Left lowers the graphics quality",
+                    q == crate::game::Quality::Medium,
+                    format!("{q:?}"),
+                );
+                smoke.shot(&mut commands, "38_settings_video");
+                smoke.tap(KeyCode::Digit4);
+                smoke.count = 10; // down to "World map"
+                0.4
+            }
+            102 => {
+                if smoke.count > 0 {
+                    smoke.count -= 1;
+                    smoke.tap(KeyCode::ArrowDown);
+                    smoke.step = 101; // → 102 again
+                    0.15
+                } else {
+                    smoke.tap(KeyCode::Enter);
+                    0.4
+                }
+            }
+            103 => {
+                smoke.tap(KeyCode::KeyN);
+                0.5
+            }
+            104 => {
+                let map = bindings.map.first().copied();
+                smoke.check(
+                    "the world map is rebound to N",
+                    map == Some(KeyCode::KeyN)
+                        && settings.keys.get("map").map(String::as_str) == Some("N"),
+                    format!("{map:?}"),
+                );
+                smoke.shot(&mut commands, "39_settings_keys");
+                smoke.tap(KeyCode::Escape);
+                0.5
+            }
+            105 => {
+                smoke.check(
+                    "Esc closes the settings",
+                    !settings_screen.open,
+                    settings_screen.open,
+                );
+                smoke.expect("still paused", play_state, PlayState::Paused);
+                smoke.step = 12; // → 13: the pause saved the game
+                0.2
             }
             13 => {
                 smoke.expect("Esc pauses", play_state, PlayState::Paused);

@@ -11,7 +11,7 @@ use super::camera::MainCamera;
 use super::color;
 use super::meshes::{self, TREE_MODEL_HEIGHT};
 use super::wind::{sway_by_height, wind_material, Wind, WindMaterial};
-use crate::game::{ActiveRegion, AppState, Content, RegionScene, Session, SessionSet};
+use crate::game::{ActiveRegion, AppState, Content, RegionScene, Session, SessionSet, Settings};
 
 pub struct ScenePlugin;
 
@@ -20,6 +20,7 @@ impl Plugin for ScenePlugin {
         app.configure_sets(OnEnter(AppState::MainMenu), SceneSet.after(SessionSet))
             .add_systems(OnEnter(AppState::MainMenu), ensure_scene.in_set(SceneSet))
             .add_systems(OnEnter(AppState::InGame), ensure_scene.in_set(SceneSet))
+            .add_systems(Update, apply_shadows)
             // Travelling switches the active region: rebuild.
             .add_systems(
                 Update,
@@ -35,6 +36,35 @@ impl Plugin for ScenePlugin {
 /// after it.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SceneSet;
+
+fn cascades(q: crate::game::Quality) -> bevy::pbr::CascadeShadowConfig {
+    CascadeShadowConfigBuilder {
+        num_cascades: q.shadow_cascades(),
+        first_cascade_far_bound: 12.0,
+        maximum_distance: 110.0,
+        ..default()
+    }
+    .build()
+}
+
+/// Shadows follow the graphics quality.
+fn apply_shadows(
+    settings: Res<Settings>,
+    mut lights: Query<(&mut DirectionalLight, &mut bevy::pbr::CascadeShadowConfig)>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    let q = settings.quality;
+    for (mut light, mut config) in &mut lights {
+        if light.shadows_enabled != q.shadows() {
+            light.shadows_enabled = q.shadows();
+        }
+        if config.bounds.len() != q.shadow_cascades() {
+            *config = cascades(q);
+        }
+    }
+}
 
 /// Fence-line centres of the gates that lead somewhere from `region`.
 pub fn open_gates(
@@ -67,7 +97,11 @@ fn ensure_scene(
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<WindMaterial>>,
     ),
-    (mut clear_color, mut ambient): (ResMut<ClearColor>, ResMut<AmbientLight>),
+    (mut clear_color, mut ambient, settings): (
+        ResMut<ClearColor>,
+        ResMut<AmbientLight>,
+        Res<Settings>,
+    ),
 ) {
     if existing.is_some_and(|scene| scene.region == active.0) {
         return;
@@ -125,19 +159,13 @@ fn ensure_scene(
         DirectionalLight {
             color: color(air.sun_color),
             illuminance: air.sun_illuminance,
-            shadows_enabled: true,
+            shadows_enabled: settings.quality.shadows(),
             ..default()
         },
         Transform::from_translation(sun_at).looking_at(Vec3::ZERO, Vec3::Y),
         // Lights the world and the first-person hands/tools layer.
         bevy::render::view::RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
-        CascadeShadowConfigBuilder {
-            num_cascades: 3,
-            first_cascade_far_bound: 12.0,
-            maximum_distance: 110.0,
-            ..default()
-        }
-        .build(),
+        cascades(settings.quality),
     ));
 
     // --- Terrain ----------------------------------------------------------

@@ -51,6 +51,11 @@ Controls:
 | World map: travel to any open region | M (Left / Right choose, Enter travel) |
 | Herbarium (every species, bouquets bound) | C |
 | Skip the ending's tour | Esc |
+| Settings (from the pause menu or the title screen) | O while paused; 1-4 tabs, arrows, Enter, Esc |
+
+Every main action key can be rebound in Settings > Keys (conflicting keys
+swap; Esc, Enter, F3, the arrow keys and 1-4 stay fixed so menus always
+work). Hints everywhere show the keys you chose.
 | Go to the next / previous region | walk through the gate where the footpath meets the fence |
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
@@ -69,7 +74,7 @@ Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
 cargo test                      # all unit + integration tests
 cargo test -p bloom_core        # gameplay/content tests only (no Bevy, fast)
 cargo clippy --all-targets
-scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, journal, map, travel, gates, save, restart, verify, ending, herbarium); screenshots
+scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, journal, map, travel, gates, settings, key rebinding, save, restart, verify, ending, herbarium); screenshots
 ```
 
 ## Project layout

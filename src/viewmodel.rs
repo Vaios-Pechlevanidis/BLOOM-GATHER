@@ -152,6 +152,8 @@ fn spawn_viewmodel(
             Camera {
                 order: 1,
                 clear_color: ClearColorConfig::None,
+                // Same HDR mode as the world camera it draws over.
+                hdr: true,
                 ..default()
             },
             Projection::Perspective(PerspectiveProjection {

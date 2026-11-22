@@ -33,7 +33,9 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
     let t = globals.time;
     let p = world.xz;
-    let amplitude = wind.params.x;
+    // w: the current breeze strength (weather); 0 means "not set".
+    let breeze = select(1.0, wind.params.w, wind.params.w > 0.0);
+    let amplitude = wind.params.x * breeze;
     let speed = wind.params.y;
     let gust = sin(t * 0.4 + p.x * 0.045 + p.y * 0.03) * 0.5 + 0.5;
     let wave = sin(t * speed + p.x * 0.35 + p.y * 0.22);

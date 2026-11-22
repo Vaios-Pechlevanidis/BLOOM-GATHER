@@ -219,15 +219,36 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
 - ✅ Smoke test run 2 finishes the game through the real rules and watches the ending, free
   roam, herbarium and journal, and checks the save records it
 
+## Phase G1: Settings & feel ✅
+
+- ✅ Settings model: master / effects / music / ambience volume, graphics quality (Low / Medium /
+  High), fullscreen, VSync, interface size, minimap, key overrides; older settings files load
+- ✅ Settings screen (O in the pause menu, or the title screen): Controls, Video, Audio and Keys
+  tabs, fully usable by keyboard (1-4, arrows, Enter, Esc) or mouse; changes apply at once
+- ✅ Key rebinding for the twelve main actions; conflicts swap; Esc, Enter, F3, arrows and 1-4
+  stay fixed; reset to defaults; the HUD hint, close buttons and toasts show the chosen keys
+- ✅ Graphics quality drives shadows and cascades, MSAA, bloom, grass density and fade distance
+  (grass rebuilds on change); HDR cameras with a thresholded bloom for lanterns and glows
+- ✅ Music: two calm, seeded, seamless loops (day F major, night D minor) composed in the
+  background at startup; music and ambience cross-fade when you travel
+- ✅ Footsteps by surface (grass, gravel path, bridge wood, water), landing thump, travel whoosh
+- ✅ Weather: the breeze rises and falls over minutes (grass, canopies, flowers, clouds)
+- ✅ Tests: 6 new (rebinding swaps and reserved keys, key names and bad overrides, settings
+  compatibility, volume channels and steps, music loops, footstep sounds, the breeze); 171
+  tests in all
+- ✅ Smoke test opens the settings by keyboard, changes the quality, rebinds the map key and
+  verifies both were saved
+
 ## Later phases ⬜
 
-G Polish & release (next)
+G2 Performance (benchmarks, optimisation) · G3 Packaging (macOS, Windows, Linux) ·
+G4 Bevy upgrade · art pass (painted models need real 3D assets)
 
 ## Temporary assets (replace before release)
 
 - Trees, rocks, fence: procedural low-poly meshes in `src/rendering/meshes.rs`
 - Flowers: procedural models in `src/flowers/models.rs` (replace per species via `FlowerSpecies::model`)
-- Sound effects and ambience: synthesised in `src/audio.rs`
+- Sound effects, footsteps, ambience and music: synthesised in `src/audio.rs`
 - Landmarks, workshop cottage and furniture, bouquets, glints, butterflies, bees, clouds: procedural meshes
 - Gates, bridges, lanterns, water surfaces, mushrooms, glow plants, light shafts, petals, fireflies,
   stars and moon: procedural meshes
@@ -247,8 +268,6 @@ G Polish & release (next)
   1.0, seeds and placement are frozen (content version + migration).
 - Grass and tree shadows: shadows use the un-swayed shape (prepass shader not overridden).
 - Bevy pinned to 0.16 (latest 0.20). Upgrade confined to `src/`; plan before polish.
-- Key rebinding UI arrives with the full settings screen (Phase G); bindings are
-  already data in `Bindings`.
 - The smoke test locks the mouse cursor while it runs (~20 s per run) and ignores real input.
 - Flowers are spawned for the whole region (≤ 750); chunk streaming waits for benchmarks.
 - Travelling rebuilds the whole region behind a short fade (30-90 ms per region measured in the

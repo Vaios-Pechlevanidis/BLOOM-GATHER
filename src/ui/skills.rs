@@ -69,7 +69,7 @@ fn toggle(
     }
 }
 
-fn spawn_screen(mut commands: Commands, mut view: ResMut<TreeView>) {
+fn spawn_screen(mut commands: Commands, mut view: ResMut<TreeView>, bindings: Res<Bindings>) {
     view.stale = true;
     commands
         .spawn((
@@ -118,7 +118,12 @@ fn spawn_screen(mut commands: Commands, mut view: ResMut<TreeView>) {
                     ..default()
                 })
                 .with_children(|f| {
-                    spawn_button(f, "Close (K)", ButtonVariant::Compact, Act::Close);
+                    spawn_button(
+                        f,
+                        &format!("Close ({})", bindings.label(crate::input::Action::Skills)),
+                        ButtonVariant::Compact,
+                        Act::Close,
+                    );
                 });
             });
         });

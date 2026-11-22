@@ -323,8 +323,8 @@ fn bouquet_bonuses_never_touch_flower_prices() {
     assert_eq!(g.bouquet_price(simple), (45.0f64 * 1.2).round() as u64);
     assert_eq!(g.bouquet_price(wrapped), (190.0f64 * 1.38).round() as u64);
     assert_eq!(g.data().flower_value(), 10);
-    for r in 0..d.recipes.len() {
-        assert!(g.bouquet_price(r) >= d.recipes[r].sell_price);
+    for (r, recipe) in d.recipes.iter().enumerate() {
+        assert!(g.bouquet_price(r) >= recipe.sell_price);
     }
 }
 
