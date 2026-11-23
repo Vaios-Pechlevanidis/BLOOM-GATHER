@@ -23,7 +23,8 @@ pub use growth::{
     Effect, SkillBranch, SkillDef, UpgradeCategory, UpgradeDef, MIN_PRICE_FACTOR, MIN_TIME_FACTOR,
 };
 pub use scenery::{
-    Ambience, Atmosphere, EntranceKind, FlowerRows, PondDef, RegionFeatures, Scenery, StreamDef,
+    Ambience, Atmosphere, BulbFields, DayCycle, EntranceKind, FlowerRows, PondDef, RegionFeatures,
+    Scenery, StreamDef,
 };
 pub use validation::ValidationError;
 

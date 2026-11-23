@@ -71,6 +71,7 @@ impl Plugin for SmokeTestPlugin {
             mark_count: 0,
             group: 0,
             count: 0,
+            mark_hour: 0.0,
         })
         // The test drives the window itself; don't pause if the OS moves
         // focus elsewhere while it runs. Volume off: no surprise sounds.
@@ -105,6 +106,8 @@ struct Smoke {
     group: usize,
     /// Repeats left for a step that taps a key several times.
     count: usize,
+    /// Time of day before the smoke test jumped to sunset and night.
+    mark_hour: f32,
 }
 
 /// Tools the smoke test buys (all harvesting modes, scissors and the
@@ -330,6 +333,7 @@ fn drive(
     windows: Query<&CursorOptions, With<PrimaryWindow>>,
     mut next_app: ResMut<NextState<AppState>>,
     mut exit: MessageWriter<AppExit>,
+    mut daylight: ResMut<crate::rendering::Daylight>,
 ) {
     smoke.wait -= time.delta_secs();
     if smoke.wait > 0.0 {
@@ -398,21 +402,23 @@ fn drive(
             5 => {
                 let here = scene.map(|s| s.region);
                 smoke.check(
-                    "the tour starts in the meadow",
+                    "the tour starts on the farm",
                     here == Some(0),
                     format!("{here:?}"),
                 );
-                smoke.shot(&mut commands, "31_finale_tour_meadow");
+                smoke.shot(&mut commands, "31_finale_tour");
                 9.4
             }
             6 => {
                 let here = scene.map(|s| s.region);
+                // With one map the tour stays on the farm.
+                let next = (content.regions.len() > 1) as usize;
                 smoke.check(
-                    "the tour moves on to the next region",
-                    here == Some(1),
+                    "the tour carries on",
+                    here == Some(next),
                     format!("{here:?}"),
                 );
-                smoke.shot(&mut commands, "32_finale_tour_lavender");
+                smoke.shot(&mut commands, "32_finale_tour_later");
                 smoke.tap(KeyCode::Escape);
                 3.0
             }
@@ -494,8 +500,8 @@ fn drive(
                 smoke.expect("starts playing", play_state, PlayState::Playing);
                 smoke.check("cursor locked while playing", locked, locked);
                 smoke.check(
-                    "all 100 meadow flowers spawned",
-                    spawned.map.len() == 100,
+                    "every flower of the farm spawned",
+                    spawned.map.len() == content.regions[0].flower_total as usize,
                     spawned.map.len(),
                 );
                 if let Some(b) = body {
@@ -601,7 +607,12 @@ fn drive(
                     smoke.check("XP gained", session.state().xp > 0, session.state().xp);
                 }
                 let left = spawned.map.len();
-                smoke.check("95 flowers left in the world", left == 100 - PICKS, left);
+                let total = content.regions[0].flower_total as usize;
+                smoke.check(
+                    "the picked flowers left the world",
+                    left == total - PICKS,
+                    left,
+                );
                 let fps = diagnostics
                     .get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
                     .and_then(|d| d.smoothed())
@@ -955,9 +966,9 @@ fn drive(
                         .copied()
                         .filter(|id| !got.contains(*id))
                         .collect();
-                    // first_rare only if a rare flower was picked; the
-                    // meadow has none, so it must still be locked.
-                    let ok = missing == ["first_rare"];
+                    // first_rare only if a rare flower was picked (the farm
+                    // has rare ones, so it may or may not be unlocked yet).
+                    let ok = missing.is_empty() || missing == ["first_rare"];
                     smoke.check(
                         "early achievements unlocked",
                         ok,
@@ -999,42 +1010,20 @@ fn drive(
                 smoke.tap(KeyCode::KeyM);
                 0.6
             }
-            // --- the world map and travelling between regions ---
+            // --- the farm map, the save, and a whole day ---
             77 => {
-                smoke.expect("M opens the world map", play_state, PlayState::Map);
+                smoke.expect("M opens the map", play_state, PlayState::Map);
                 smoke.check("cursor free on the map", !locked, locked);
-                smoke.shot(&mut commands, "22_world_map");
-                smoke.tap(KeyCode::ArrowRight);
-                0.25
+                smoke.shot(&mut commands, "22_farm_map");
+                smoke.tap(KeyCode::KeyM);
+                0.6
             }
-            78..=80 => {
-                smoke.tap(KeyCode::ArrowRight);
-                if smoke.step == 80 {
-                    0.5
-                } else {
-                    0.25
-                }
-            }
-            81 => {
-                smoke.shot(&mut commands, "23_map_moonlight_selected");
-                smoke.tap(KeyCode::Enter);
-                3.5
-            }
-            82 => {
-                let moon = content.region_index("moonlight_garden").unwrap_or(0);
-                arrived(
-                    &mut smoke,
-                    scene,
-                    play_state,
-                    body,
-                    moon,
-                    "Enter on the map travels to the Moonlight Garden",
-                );
-                smoke.shot(&mut commands, "24_moonlight_garden");
+            78 => {
+                smoke.expect("M closes the map", play_state, PlayState::Playing);
                 smoke.tap(KeyCode::Escape);
                 0.6
             }
-            83 => {
+            79 => {
                 smoke.expect("Esc pauses (and saves)", play_state, PlayState::Paused);
                 let raw =
                     std::fs::read_to_string(saves.store.dir().join("save.ron")).unwrap_or_default();
@@ -1044,133 +1033,47 @@ fn drive(
                     .map(|p| p.region)
                     .unwrap_or_default();
                 smoke.check(
-                    "the save remembers the region you are in",
-                    region == "moonlight_garden",
+                    "the save remembers the farm",
+                    region == content.regions[0].id,
                     &region,
                 );
                 smoke.tap(KeyCode::Escape);
-                0.4
-            }
-            84 => {
-                smoke.tap(KeyCode::KeyM);
                 0.5
             }
-            85 => {
-                smoke.expect("M opens the map again", play_state, PlayState::Map);
-                smoke.tap(KeyCode::ArrowLeft);
-                0.3
+            80 => {
+                smoke.check("the farm has a day cycle", daylight.cycle, daylight.clock());
+                smoke.mark_hour = daylight.hour;
+                daylight.hour = 20.4;
+                1.5
             }
-            86 => {
-                smoke.tap(KeyCode::Enter);
-                3.5
-            }
-            87 => {
-                let forest = content.region_index("enchanted_forest").unwrap_or(0);
-                arrived(
-                    &mut smoke,
-                    scene,
-                    play_state,
-                    body,
-                    forest,
-                    "travelled to the Enchanted Forest",
+            81 => {
+                smoke.check(
+                    "the sun sets in the evening",
+                    daylight.dusk > 0.3 && daylight.elevation_deg < 8.0,
+                    format!("{} dusk {:.2}", daylight.clock(), daylight.dusk),
                 );
-                smoke.shot(&mut commands, "25_enchanted_forest");
-                smoke.tap(KeyCode::KeyM);
-                0.5
+                smoke.shot(&mut commands, "23_sunset");
+                daylight.hour = 0.5;
+                1.5
             }
-            88 => {
-                smoke.tap(KeyCode::ArrowLeft);
-                0.3
-            }
-            89 => {
-                smoke.tap(KeyCode::Enter);
-                3.5
-            }
-            90 => {
-                let valley = content.region_index("blossom_valley").unwrap_or(0);
-                arrived(
-                    &mut smoke,
-                    scene,
-                    play_state,
-                    body,
-                    valley,
-                    "travelled to Blossom Valley",
+            82 => {
+                smoke.check(
+                    "night falls with the moon up",
+                    daylight.night > 0.9 && daylight.moon_dir.y > 0.3,
+                    format!("{} night {:.2}", daylight.clock(), daylight.night),
                 );
-                // Look at the bridge over the stream.
-                if let (Some(p), Some(sc)) = (player.as_deref_mut(), scene) {
-                    let ok = view_bridge(p, sc, &content);
-                    smoke.check("the valley has a bridge", ok, ok);
-                }
-                0.8
+                smoke.shot(&mut commands, "24_night");
+                daylight.hour = smoke.mark_hour;
+                1.0
             }
-            91 => {
-                smoke.shot(&mut commands, "26_blossom_valley_bridge");
-                smoke.tap(KeyCode::KeyM);
-                0.5
-            }
-            92 => {
-                smoke.tap(KeyCode::ArrowLeft);
-                0.3
-            }
-            93 => {
-                smoke.tap(KeyCode::Enter);
-                3.0
-            }
-            94 => {
-                let lavender = content.region_index("lavender_fields").unwrap_or(0);
-                arrived(
-                    &mut smoke,
-                    scene,
-                    play_state,
-                    body,
-                    lavender,
-                    "travelled to the Lavender Fields",
-                );
-                smoke.shot(&mut commands, "27_lavender_fields");
-                0.4
-            }
-            95 => {
-                // Walk back to the meadow on foot through the south gate.
-                if let (Some(p), Some(sc)) = (player.as_deref_mut(), scene) {
-                    face_gate(p, sc, bloom_core::world::GateSide::South);
-                }
-                0.6
-            }
-            96 => {
-                smoke.shot(&mut commands, "28_gate_to_the_meadow");
-                smoke.hold(KeyCode::KeyW, 2.0);
-                3.5
-            }
-            97 => {
-                arrived(
-                    &mut smoke,
-                    scene,
-                    play_state,
-                    body,
-                    0,
-                    "walking through the gate leads back to the meadow",
-                );
-                if let (Some(b), Some(sc)) = (body, scene) {
-                    let (at, _) = sc.layout.arrival(bloom_core::world::GateSide::North);
-                    let d = b.ground_position().distance(at);
-                    smoke.check(
-                        "arrived just inside the meadow's north gate",
-                        d < 3.0,
-                        format!("{d:.2} m"),
-                    );
-                }
-                if let Some(s) = session_mut.as_deref() {
-                    let visited = s.state().visited_regions.len();
-                    smoke.check(
-                        "every region visited",
-                        visited == content.regions.len(),
-                        visited,
-                    );
-                }
-                smoke.shot(&mut commands, "29_back_in_the_meadow");
+            83 => {
+                let passed = daylight.hour > smoke.mark_hour;
+                smoke.check("time passes while playing", passed, daylight.clock());
                 smoke.tap(KeyCode::Escape);
                 0.6
             }
+            // (Steps once used for travelling between regions.)
+            84..=97 => 0.0,
             // --- the settings screen, all by keyboard ---
             98 => {
                 smoke.expect("Esc pauses", play_state, PlayState::Paused);
@@ -1381,7 +1284,7 @@ fn verify_resumed(
     let n = spawned.map.len();
     smoke.check(
         "the rest still bloom",
-        n == 100 - expected.len(),
+        n == scene.field.len() - expected.len(),
         format!("{n} in the world"),
     );
     let owned: Vec<String> = session.state().tools.iter().cloned().collect();
@@ -1526,68 +1429,6 @@ fn click_button(
     };
     commands.trigger(bevy::ui_widgets::Activate { entity });
     true
-}
-
-/// After a journey: in the right region, playing, standing on the ground.
-fn arrived(
-    smoke: &mut Smoke,
-    scene: Option<&RegionScene>,
-    play_state: Option<&State<PlayState>>,
-    body: Option<CharacterBody>,
-    region: usize,
-    label: &str,
-) {
-    let here = scene.map(|s| s.region);
-    smoke.check(label, here == Some(region), format!("in region {here:?}"));
-    smoke.expect("playing after travelling", play_state, PlayState::Playing);
-    if let (Some(b), Some(sc)) = (body, scene) {
-        smoke.check(
-            "standing inside the new region",
-            b.grounded && sc.layout.in_bounds(b.ground_position(), 0.0),
-            b.position,
-        );
-    }
-}
-
-/// Stand on the path a little way before the first bridge, looking along it.
-fn view_bridge(player: &mut Player, scene: &RegionScene, content: &Content) -> bool {
-    let layout = &scene.layout;
-    let Some(bridge) = layout.bridges.first() else {
-        return false;
-    };
-    let env = Environment {
-        terrain: &layout.terrain,
-        colliders: &layout.colliders,
-    };
-    let at = bridge.point(0.0) - bridge.dir * 7.0;
-    let body = CharacterBody::standing_at(at, &env);
-    player.body = body;
-    player.previous = body.position;
-    let target = bridge.point(0.5);
-    let d = Vec3::new(target.x, bridge.deck_height(0.5), target.y) - body.eye(&content.player);
-    player.yaw = (-d.x).atan2(-d.z);
-    player.pitch = (d.y / d.length()).asin().min(0.0) - 0.05;
-    true
-}
-
-/// Stand on the path four metres in front of a gate, facing it.
-fn face_gate(player: &mut Player, scene: &RegionScene, side: bloom_core::world::GateSide) {
-    let layout = &scene.layout;
-    let gate = layout.gate(side);
-    let inward = match side {
-        bloom_core::world::GateSide::North => Vec2::Y,
-        bloom_core::world::GateSide::South => Vec2::NEG_Y,
-    };
-    let env = Environment {
-        terrain: &layout.terrain,
-        colliders: &layout.colliders,
-    };
-    let body = CharacterBody::standing_at(gate.position + inward * 4.0, &env);
-    player.body = body;
-    player.previous = body.position;
-    let d = -inward;
-    player.yaw = (-d.x).atan2(-d.y);
-    player.pitch = -0.05;
 }
 
 /// `id=level,...` for the expected-state file.

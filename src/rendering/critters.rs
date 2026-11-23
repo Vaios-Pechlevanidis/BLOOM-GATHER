@@ -20,7 +20,7 @@ impl Plugin for CrittersPlugin {
             Update,
             (
                 spawn_critters.run_if(resource_exists_and_changed::<RegionScene>),
-                (fly, flap),
+                (fly, flap, sleep_at_night),
             )
                 .chain(),
         );
@@ -62,7 +62,8 @@ fn spawn_critters(
 ) {
     let field = &scene.field;
     // Butterflies and bees sleep at night (fireflies come out instead).
-    if field.is_empty() || content.regions[scene.region].scenery.atmosphere.night {
+    let scenery = &content.regions[scene.region].scenery;
+    if field.is_empty() || (scenery.atmosphere.night && scenery.day_cycle.is_none()) {
         return;
     }
     let mut rng = SplitMix64::new(0xB077_E2F1 ^ scene.region as u64);
@@ -277,6 +278,23 @@ fn fly(
         if flat.length_squared() > 1e-4 {
             let goal = Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation;
             transform.rotation = transform.rotation.slerp(goal, blend);
+        }
+    }
+}
+
+/// With a day cycle, butterflies and bees go to bed at dusk.
+fn sleep_at_night(
+    daylight: Res<crate::rendering::Daylight>,
+    mut critters: Query<&mut Visibility, With<Critter>>,
+) {
+    let want = if daylight.night > 0.45 {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    for mut v in &mut critters {
+        if *v != want {
+            *v = want;
         }
     }
 }

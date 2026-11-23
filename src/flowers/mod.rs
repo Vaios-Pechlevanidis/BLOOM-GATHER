@@ -39,6 +39,7 @@ impl Plugin for FlowersPlugin {
                     animate_harvest,
                     animate_particles,
                     (sync_memory, grow_memory).chain(),
+                    glow_with_daylight,
                 ),
             );
     }
@@ -271,6 +272,30 @@ fn ensure_assets(
         particle: meshes.add(models::petal_particle()),
         particle_materials,
     });
+}
+
+/// Night flowers glow faintly by day and brightly after dark.
+fn glow_with_daylight(
+    daylight: Res<crate::rendering::Daylight>,
+    assets: Option<Res<FlowerAssets>>,
+    content: Option<Res<Content>>,
+    mut wind_materials: ResMut<Assets<WindMaterial>>,
+    mut last: Local<Option<f32>>,
+) {
+    let (Some(assets), Some(content)) = (assets, content) else {
+        return;
+    };
+    let glow = daylight.glow();
+    if last.is_some_and(|g| (g - glow).abs() < 0.01) && !assets.is_changed() {
+        return;
+    }
+    *last = Some(glow);
+    for (species, handle) in content.species.iter().zip(&assets.glow_materials) {
+        let Some(handle) = handle else { continue };
+        if let Some(mut m) = wind_materials.get_mut(handle) {
+            m.base.emissive = color(species.petal_color).to_linear() * (species.glow * 4.0 * glow);
+        }
+    }
 }
 
 /// Flowers are spawned around the camera: everything within the stream

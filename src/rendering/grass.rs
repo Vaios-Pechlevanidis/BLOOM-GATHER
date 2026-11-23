@@ -156,6 +156,11 @@ fn spawn_grass(
         Wind::new(0.07, 1.9, 0.3),
     ));
 
+    // Bulb beds carry broad, blue-green leaves instead of grass.
+    let leaf_base = lin(Color::srgb_u8(58, 92, 52));
+    let leaf_tip = lin(Color::srgb_u8(112, 152, 92));
+    let fields = layout.fields.as_ref();
+
     // Grass grows up to the fence.
     let min = layout.bounds_min - Vec2::splat(1.0);
     let max = layout.bounds_max + Vec2::splat(1.0);
@@ -178,6 +183,37 @@ fn spawn_grass(
                         z + rng.range_f32(0.0, SPACING),
                     );
                     x += SPACING;
+                    let planted = fields.filter(|f| f.in_planted_area(p, 0.3));
+                    if let Some(plan) = planted {
+                        // Bare furrows; leaves on the beds, close around
+                        // every flower (picked or not) like a real crop.
+                        if plan.bed_weight(p) < 0.6
+                            || rng.next_f32() > quality.grass_density().max(0.5)
+                            || !field.query_radius(p, 0.12, &none_picked).is_empty()
+                        {
+                            continue;
+                        }
+                        let ground = layout.terrain.height_at(p);
+                        let root = Vec3::new(p.x, ground - 0.02, p.y);
+                        let tint = rng.next_f32();
+                        for _ in 0..2 + rng.below(2) {
+                            let lean =
+                                Vec2::new(rng.range_f32(-0.3, 0.3), rng.range_f32(-0.3, 0.3));
+                            let offset =
+                                Vec3::new(rng.range_f32(-0.1, 0.1), 0.0, rng.range_f32(-0.1, 0.1));
+                            b.blade(
+                                root + offset,
+                                rng.range_f32(0.0, std::f32::consts::TAU),
+                                rng.range_f32(0.24, 0.42),
+                                rng.range_f32(0.07, 0.1),
+                                lean,
+                                mix(leaf_base, dark, tint * 0.3),
+                                mix(leaf_tip, mid, tint * 0.3),
+                            );
+                            blades_total += 1;
+                        }
+                        continue;
+                    }
                     let density = (0.55 + 0.45 * patches(p)) * grass_density;
                     if rng.next_f32() > density || layout.water_level_at(p).is_some() {
                         continue;

@@ -10,7 +10,7 @@ use bloom_core::{Game, GameData, Modifiers, SkillStatus, UpgradeStatus};
 use glam::Vec3;
 
 fn data() -> Arc<GameData> {
-    Arc::new(GameData::builtin().unwrap())
+    Arc::new(GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap())
 }
 
 fn levels(pairs: &[(&str, u32)]) -> BTreeMap<String, u32> {
@@ -125,7 +125,7 @@ fn upgrades_need_their_tool_and_the_coins() {
 fn the_guard_keeps_coins_needed_for_required_tools() {
     // Tight content: required tools cost exactly the guaranteed income, so
     // every coin earned by selling flowers is already spoken for.
-    let mut tight = GameData::builtin().unwrap();
+    let mut tight = GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap();
     // Achievement rewards would be spare coins on top; leave them out here.
     tight.achievements.clear();
     let total = tight.required_tool_cost();
@@ -499,11 +499,11 @@ fn content_rules_for_growth_hold() {
     let tree: u32 = d.skills.iter().map(|s| s.cost * s.max_level).sum();
     assert!(tree > 40, "{tree}");
     // A broken prerequisite is caught.
-    let mut broken = GameData::builtin().unwrap();
+    let mut broken = GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap();
     broken.skills[1].requires_skill = Some("no_such_skill".into());
     assert!(broken.reindexed_and_validated().is_err());
     // So is a reduction that could never take effect.
-    let mut wasteful = GameData::builtin().unwrap();
+    let mut wasteful = GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap();
     wasteful.upgrades[0].max_level = 20;
     assert!(wasteful.reindexed_and_validated().is_err());
 }

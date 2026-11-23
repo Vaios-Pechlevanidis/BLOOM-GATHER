@@ -8,7 +8,7 @@ use bloom_core::{Game, GameData};
 use glam::Vec3;
 
 fn data() -> Arc<GameData> {
-    Arc::new(GameData::builtin().unwrap())
+    Arc::new(GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap())
 }
 
 /// An eye position right next to a flower's bloom.

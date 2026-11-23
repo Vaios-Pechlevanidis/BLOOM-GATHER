@@ -11,7 +11,7 @@ use bloom_core::{Game, GameData, RecipeStatus};
 use glam::Vec3;
 
 fn data() -> Arc<GameData> {
-    Arc::new(GameData::builtin().unwrap())
+    Arc::new(GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap())
 }
 
 fn recipe(d: &GameData, id: &str) -> usize {

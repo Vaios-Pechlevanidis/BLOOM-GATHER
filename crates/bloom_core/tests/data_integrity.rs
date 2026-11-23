@@ -16,6 +16,12 @@ fn raw() -> GameData {
     ron::from_str(BUILTIN_GAME_DATA).expect("content parses")
 }
 
+/// The older five-region content (see `fixtures/README.md`), for the rules
+/// that only matter with several regions.
+fn raw_valley() -> GameData {
+    ron::from_str(include_str!("fixtures/valley.ron")).expect("fixture parses")
+}
+
 fn invalid_messages(data: GameData) -> Vec<String> {
     match data.reindexed_and_validated() {
         Err(DataError::Invalid(errors)) => errors.into_iter().map(|e| e.0).collect(),
@@ -54,24 +60,22 @@ fn every_flower_has_the_same_base_value() {
 }
 
 #[test]
-fn five_regions_with_spec_flower_counts() {
+fn one_bulb_farm_with_every_species_and_a_day_cycle() {
     let d = data();
-    let counts: Vec<(&str, u32)> = d
-        .regions
-        .iter()
-        .map(|r| (r.id.as_str(), r.counted_flowers()))
-        .collect();
-    assert_eq!(
-        counts,
-        vec![
-            ("sunny_meadow", 100),
-            ("lavender_fields", 200),
-            ("blossom_valley", 350),
-            ("enchanted_forest", 500),
-            ("moonlight_garden", 750),
-        ]
-    );
+    assert_eq!(d.regions.len(), 1, "the game has a single map");
+    let farm = &d.regions[0];
+    assert_eq!(farm.id, "tulip_fields");
+    assert_eq!(farm.counted_flowers(), 1_900);
     assert_eq!(d.world_flower_total(), 1_900);
+    assert!(farm.workshop);
+    assert!(farm.scenery.features.fields.is_some());
+    assert!(farm.scenery.day_cycle.is_some());
+    for s in &d.species {
+        assert!(farm.species_count(&s.id) > 0, "{} does not grow", s.id);
+    }
+    // Tulips are the farm's main crop.
+    let most = farm.flowers.iter().max_by_key(|f| f.count).unwrap();
+    assert_eq!(most.species, "tulip");
 }
 
 #[test]
@@ -133,7 +137,7 @@ fn bouquet_margins_rise_with_tier() {
 fn required_tools_fit_in_guaranteed_income() {
     let d = data();
     assert_eq!(d.required_tool_cost(), 15_300);
-    assert_eq!(d.guaranteed_income(), 20_900);
+    assert_eq!(d.guaranteed_income(), 19_500);
     assert!(d.required_tool_cost() <= d.guaranteed_income());
 }
 
@@ -197,14 +201,14 @@ fn rejects_unknown_references() {
 
 #[test]
 fn rejects_unreachable_region_threshold() {
-    let mut d = raw();
+    let mut d = raw_valley();
     d.regions[1].unlock.flowers_harvested = 101; // Sunny Meadow only has 100
     assert_flags(d, "earlier regions only hold 100");
 }
 
 #[test]
 fn rejects_region_level_unreachable_by_harvesting() {
-    let mut d = raw();
+    let mut d = raw_valley();
     d.regions[1].unlock.level = 10; // 60 flowers × 3 XP is nowhere near level 10
     assert_flags(d, "needs level 10");
 }

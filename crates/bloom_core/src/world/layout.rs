@@ -16,6 +16,7 @@ use super::collision::{BoxCollider, CircleCollider, ColliderSet};
 use super::features::{
     self, Bridge, Gate, GateSide, Water, GATE_ARRIVAL_DEPTH, GATE_HALF_WIDTH, GATE_TRIGGER_DEPTH,
 };
+use super::fields::{FieldPlan, RIDGE_HEIGHT};
 use super::grid::SpatialGrid;
 use super::terrain::{FlattenArea, Terrain};
 use crate::data::{RegionDef, WorldConfig};
@@ -126,6 +127,8 @@ pub struct RegionLayout {
     pub gates: [Gate; 2],
     pub water: Vec<Water>,
     pub bridges: Vec<Bridge>,
+    /// Bulb-field beds, in regions planted like a bulb farm.
+    pub fields: Option<FieldPlan>,
     pub colliders: ColliderSet,
     /// Footpath segments by cell (for `distance_to_path`).
     path_index: SpatialGrid,
@@ -163,7 +166,18 @@ impl RegionLayout {
 
         // Spawn near the south edge (+Z), looking north into the region.
         let spawn = Vec2::new(0.0, bounds_max.y - 6.0);
-        let path = footpath(&mut rng, spawn, bounds_min, bounds_max);
+        let path_half_width = 1.1;
+        let fields = features
+            .fields
+            .as_ref()
+            .map(|f| FieldPlan::new(f, bounds_min, bounds_max, path_half_width));
+        // A bulb farm has a dead straight track between its beds.
+        let path = if fields.is_some() {
+            straight_track(spawn, bounds_min, bounds_max)
+        } else {
+            footpath(&mut rng, spawn, bounds_min, bounds_max)
+        };
+        let yard_z = fields.as_ref().map(|f| f.yard_z);
 
         // A stream is laid out first so landmarks can keep their feet dry.
         let mut water: Vec<Water> = features
@@ -178,6 +192,7 @@ impl RegionLayout {
             bounds_min,
             bounds_max,
             region.workshop,
+            yard_z,
             &|p| wet(&water, p, 4.0),
         );
         let mut flatten = vec![FlattenArea {
@@ -198,6 +213,10 @@ impl RegionLayout {
             region.seed,
             &flatten,
         );
+        // Beds are raised a hand's breadth above their furrows.
+        if let Some(plan) = &fields {
+            terrain.reshape(|p, h| h + plan.bed_weight(p) * RIDGE_HEIGHT);
+        }
         for w in &mut water {
             features::carve(&mut terrain, w, bounds_min, bounds_max);
         }
@@ -252,7 +271,7 @@ impl RegionLayout {
             spawn,
             spawn_yaw: 0.0,
             path,
-            path_half_width: 1.1,
+            path_half_width,
             landmarks,
             interactables: Vec::new(),
             trees: Vec::new(),
@@ -261,6 +280,7 @@ impl RegionLayout {
             gates,
             water,
             bridges: Vec::new(),
+            fields,
             colliders: ColliderSet::default(),
             path_index: SpatialGrid::new(Vec2::ZERO, Vec2::ONE, 1.0),
             trees_index: SpatialGrid::new(Vec2::ZERO, Vec2::ONE, 1.0),
@@ -492,7 +512,15 @@ impl RegionLayout {
         let mut attempts = count * 60;
         while self.trees.len() < count as usize && attempts > 0 {
             attempts -= 1;
-            let p = self.random_point(rng, 3.0);
+            let mut p = self.random_point(rng, 3.0);
+            // On a bulb farm trees only grow around the farmyard.
+            if let Some(f) = &self.fields {
+                let (lo, hi) = (f.yard_z + 4.0, self.bounds_max.y - 3.0);
+                p.y = lo
+                    + (p.y - self.bounds_min.y - 3.0)
+                        / (self.bounds_max.y - self.bounds_min.y - 6.0)
+                        * (hi - lo);
+            }
             if p.distance(self.spawn) < SPAWN_CLEARANCE
                 || self.near_landmark(p, 3.0)
                 || self.distance_to_path(p) < TREE_PATH_CLEARANCE
@@ -535,6 +563,11 @@ impl RegionLayout {
                 rng.range_f32(-outer.y, outer.y),
             );
             if p.x.abs() < inner.x && p.y.abs() < inner.y {
+                continue;
+            }
+            // Open views over the neighbouring fields: only a windbreak
+            // behind the farmyard.
+            if self.fields.is_some() && p.y < inner.y {
                 continue;
             }
             let depth = (p.x.abs() - inner.x).max(p.y.abs() - inner.y);
@@ -718,16 +751,23 @@ fn place_landmarks(
     min: Vec2,
     max: Vec2,
     with_workshop: bool,
+    yard_z: Option<f32>,
     wet: &dyn Fn(Vec2) -> bool,
 ) -> Vec<Landmark> {
+    // On a bulb farm the bench and the well stand in the farmyard.
+    let in_yard = |q: Vec2, margin: f32| yard_z.is_none_or(|z| q.y > z + margin);
     let along = |i: usize| {
         let i = i.clamp(1, path.len() - 2);
         let tangent = (path[i + 1] - path[i - 1]).normalize_or(Vec2::NEG_Y);
         (path[i], Vec2::new(-tangent.y, tangent.x))
     };
     let side = if rng.next_f32() < 0.5 { 1.0 } else { -1.0 };
-    // A third of the way along, or the nearest dry spot to it.
-    let third = path.len() / 3;
+    // A third of the way along, or the nearest dry spot to it (in the yard
+    // on a farm, a little way up the track).
+    let third = match yard_z {
+        Some(z) => path.iter().position(|p| p.y < z + 7.0).unwrap_or(1),
+        None => path.len() / 3,
+    };
     let (p, normal) = (0..path.len())
         .flat_map(|k| [third + k, third.saturating_sub(k)])
         .map(along)
@@ -797,6 +837,7 @@ fn place_landmarks(
         );
         let clear_of_workshop = workshop.is_none_or(|w| q.distance(w.position) > 10.0);
         if path_distance(q) > 6.0
+            && in_yard(q, 4.0)
             && !wet(q)
             && q.distance(spawn) > 14.0
             && q.distance(bench.position) > 10.0
@@ -818,6 +859,17 @@ fn place_landmarks(
         });
     }
     out
+}
+
+/// A straight farm track from the south edge northwards to the far edge.
+fn straight_track(spawn: Vec2, min: Vec2, max: Vec2) -> Vec<Vec2> {
+    let mut points = Vec::new();
+    let mut z = max.y;
+    while z >= min.y {
+        points.push(Vec2::new(spawn.x, z));
+        z -= 2.0;
+    }
+    points
 }
 
 /// A meandering path from the spawn northwards to the far edge.

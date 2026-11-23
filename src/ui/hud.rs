@@ -332,6 +332,7 @@ fn update_stats(
     mut texts: Query<(&Stat, &mut Text)>,
     mut fill: Query<&mut Node, With<XpFill>>,
     bindings: Res<Bindings>,
+    daylight: Res<crate::rendering::Daylight>,
 ) {
     let Some(session) = session else { return };
     let skills_key = bindings.label(crate::input::Action::Skills);
@@ -353,6 +354,8 @@ fn update_stats(
         });
     for (stat, mut text) in &mut texts {
         let value = match stat {
+            // With a day cycle the card shows the time of day.
+            Stat::RegionName if daylight.cycle => format!("{}  {}", region.name, daylight.clock()),
             Stat::RegionName => region.name.clone(),
             Stat::Remaining if session.is_game_complete() => {
                 "Every flower gathered. Free roam".to_string()

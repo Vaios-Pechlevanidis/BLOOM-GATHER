@@ -294,6 +294,33 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started. Phases are described in
   High just over the 60 Hz budget at 2560x1600 on an M2
 - ✅ 176 tests, clippy clean, both smoke runs pass on 0.20; the macOS package rebuilt and run
 
+## Phase M: One map, day and night ✅
+
+- ✅ The five regions became one map, the Tulip Fields (52 x 88 m, 1,900 flowers, all 17
+  species); tulips are the main crop; the older valley content lives on as a test fixture
+  (`crates/bloom_core/tests/fixtures/valley.ron`) for the multi-region rules the engine keeps
+- ✅ Bulb fields in data (`fields:` in scenery) and core (`world/fields.rs`): straight raised beds
+  and furrows on both sides of a straight track, a farmyard with the workshop, bench and well,
+  a headland halfway; flowers planted in beds by height (short by the track, tall at the back),
+  wildflowers on the verges, rare strays scattered singly; the bed spacing adapts to the count
+- ✅ Day cycle in data (`day_cycle:`) and `rendering/daylight.rs`: sun path east-south-north-west,
+  sunrise/sunset colours, moonlight, ambient light, fog and sky follow the hour; 16 minutes per
+  day, paused with the game; clock in the HUD
+- ✅ Sky: moving sun and moon discs with halos, a sunset glow on the dome, stars fading in,
+  clouds tinted by the time of day
+- ✅ Lanterns light up at dusk; night flowers glow after dark; fireflies at night, butterflies and
+  bees by day; night music and crickets after dark
+- ✅ Look: sandy furrows and leafy bed crowns in the terrain, tulip leaves on the beds instead of
+  grass, every bed flower drawn as a clump of blooms that goes with it when picked
+  (`rendering/beds.rs`), neighbours' fields in colour bands to the horizon with tree lines and barns
+- ✅ Skills and achievements without regions (Wide Rows replaces New Meadows / Region Unlock
+  Bonuses; Harvest Home replaces the region achievements)
+- ✅ Tests: farm placement, beds of one colour, tall at the back, farmyard, the whole farm to the
+  ending, sun path, sunset, night, clock; smoke test checks the map, the save, sunset, night and
+  passing time; `BLOOM_VIEWS` screenshot tool for the look
+- ✅ Older saves from the five-region game no longer match the world: they are refused (tested), set
+  aside as `save.unreadable-*`, and a new game starts
+
 ## Later phases ⬜
 
 Art pass (painted models need real 3D assets; flower pictures can already replace a species'

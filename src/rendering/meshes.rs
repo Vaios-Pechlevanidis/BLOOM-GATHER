@@ -121,6 +121,10 @@ pub fn terrain_chunks(
     // Tilled soil between flower rows, and a muddy stream or pond bed.
     let soil = mix(path, lin(Color::srgb_u8(120, 96, 76)), 0.6);
     let bed = mix(dark, lin(Color::srgb_u8(96, 86, 66)), 0.55);
+    let furrow = lin(Color::srgb_u8(170, 140, 102));
+    let furrow_light = lin(Color::srgb_u8(204, 176, 132));
+    let leaf_soil = lin(Color::srgb_u8(104, 112, 66));
+    let leaf = lin(Color::srgb_u8(78, 116, 60));
     let across = rows.map(|r| {
         let a = r.angle_deg.to_radians();
         (Vec2::new(-a.sin(), a.cos()), r.spacing)
@@ -154,6 +158,17 @@ pub fn terrain_chunks(
                 if d < w.outer_radius() {
                     let wet = 1.0 - smoothstep(w.half_width * 0.5, w.outer_radius(), d);
                     c = mix(c, bed, wet);
+                }
+            }
+            // Bulb fields: sandy furrows between raised beds whose crowns
+            // are dark with leaves; the rest stays meadow.
+            if let Some(plan) = &layout.fields {
+                if plan.in_planted_area(p, 0.35) {
+                    let w = plan.bed_weight(p);
+                    let grain = hash3(Vec3::new(p.x * 3.1, 0.0, p.y * 3.1)) * 0.5 + 0.5;
+                    let sand = mix(furrow, furrow_light, grain * 0.6 + (v - 0.5) * 0.4);
+                    let crown = mix(leaf_soil, leaf, grain * 0.35);
+                    c = mix(sand, crown, w);
                 }
             }
             let d = layout.distance_to_path(p);

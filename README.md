@@ -1,24 +1,37 @@
 # Bloom & Gather
 
 A cozy, finite, first-person 3D flower-picking and bouquet-crafting game for
-the desktop (Windows, macOS, Linux). Walk through five hand-seeded regions,
-pick every flower, buy better tools, craft increasingly valuable bouquets, and finish
-the game with a real ending. It runs fully offline as a native app, with no
-browser and no account.
+the desktop (Windows, macOS, Linux). Walk one big bulb farm, the Tulip Fields,
+pick every flower, buy better tools, craft increasingly valuable bouquets, and
+finish the game with a real ending. It runs fully offline as a native app,
+with no browser and no account.
 
-**Status:** Phases 1, A, B, C, D, E, U, P, F and Z are complete, so the game can be played
-from the first daisy to its ending: walk all five regions
-in first person (Sunny Meadow, Lavender Fields, Blossom Valley with its stream and
-bridge, the Enchanted Forest and the night-time Moonlight Garden) through gates at
-the ends of their paths or with the world map (M), pick their 1,900 flowers by looking at them and pressing E
-(or with the basket, garden rake and flower cart), discover species, level up,
-buy tools at the workshop's tool shelf, bind bouquets at the workbench and sell
-them, buy upgrades and learn skills (K), follow achievements, statistics and the
-road to the ending in the journal (J), and quit and continue later, in whatever
-region you were in. Gather everything and the finale plays: a tour of the valley with
-every picked flower blooming again in memory, then your journey summary; afterwards
-you can keep wandering (free roam). Picked
-flowers never come back. See [TODO.md](TODO.md) and
+**The map:** a flat polder farm in the style of the Dutch bulb fields. Long,
+raised beds of one colour each (tulips, hyacinth-blue bluebells, daffodils,
+roses, lavender, foxgloves and more, shortest by the track, tallest at the
+back) run north on both sides of a straight farm track lined with lanterns;
+bare furrows lie between them. Wildflowers grow on the verges and around the
+farmyard with the workshop, rare strays hide among the beds, and beyond the
+fence the neighbours' fields stripe the land in colour up to tree lines on the
+horizon. Every pickable flower stands in a clump of blooms that goes with it
+when you pick it.
+
+**Day and night:** the sun rises in the east, crosses the south and sets in
+the north-west over the beds; a whole day lasts 16 minutes. Sunsets colour the
+sky orange and purple, at night the moon and stars come out, the lanterns
+light up, night flowers glow, fireflies replace the butterflies and bees, and
+the music and ambience turn to night. The HUD shows the time; time stands
+still while the game is paused.
+
+**Status:** the game can be played from the first daisy to its ending: pick
+the farm's 1,900 flowers by looking at them and pressing E (or with the
+basket, garden rake and flower cart), discover species, level up, buy tools at
+the workshop's tool shelf, bind bouquets at the workbench and sell them, buy
+upgrades and learn skills (K), follow achievements, statistics and the road to
+the ending in the journal (J), see the farm on the map (M), and quit and
+continue later. Gather everything and the finale plays, then your journey
+summary; afterwards you can keep wandering (free roam). Picked flowers never
+come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
 
 ## Download & install
@@ -95,7 +108,7 @@ Controls:
 | Tool shelf (Tool Shop, Upgrades) | 2 / 3 tabs, arrows choose, Enter buys |
 | Skill tree | K (arrows choose, Enter learns, K / Esc close) |
 | Journal (achievements, statistics, progress) | J (1 / 2 / 3 pages, J / Esc close) |
-| World map: travel to any open region | M (Left / Right choose, Enter travel) |
+| Map of the farm | M |
 | Herbarium (every species, bouquets bound) | C |
 | Skip the ending's tour | Esc |
 | Settings (from the pause menu or the title screen) | O while paused; 1-4 tabs, arrows, Enter, Esc |
@@ -103,13 +116,10 @@ Controls:
 Every main action key can be rebound in Settings > Keys (conflicting keys
 swap; Esc, Enter, F3, the arrow keys and 1-4 stay fixed so menus always
 work). Hints everywhere show the keys you chose.
-| Go to the next / previous region | walk through the gate where the footpath meets the fence |
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
 | Pause / settings | Esc (sensitivity, field of view, sound volume, head movement, invert look) |
 | Performance overlay | F3 |
-
-M (map) arrives with the world map.
 
 Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
 `%APPDATA%\Bloom and Gather` (Windows) or `~/.local/share/bloom-and-gather`
@@ -123,7 +133,8 @@ cargo test -p bloom_core        # gameplay/content tests only (no Bevy, fast)
 cargo clippy --all-targets
 scripts/package-macos.sh       # macOS .app + .dmg (Linux/Windows scripts and CI: docs/release.md)
 scripts/bench.sh               # performance: core + game at 1k-500k flowers (docs/performance.md)
-scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, journal, map, travel, gates, settings, key rebinding, save, restart, verify, ending, herbarium); screenshots
+scripts/smoke.sh               # play the real game twice (pick, tools, workshop, upgrades, skills, journal, map, sunset and night, settings, key rebinding, save, restart, verify, ending, herbarium); screenshots
+BLOOM_VIEWS=/tmp/views cargo run   # debug builds: screenshots of fixed spots from morning to night, then quit
 ```
 
 ## Project layout
@@ -131,7 +142,7 @@ scripts/smoke.sh               # play the real game twice (pick, tools, workshop
 | Path | Purpose |
 |---|---|
 | `crates/bloom_core/` | Engine-independent, authoritative game rules and content model |
-| `assets/data/game_data.ron` | All content and balancing (species, tools, recipes, regions, economy) |
+| `assets/data/game_data.ron` | All content and balancing (species, tools, recipes, the farm map, economy) |
 | `src/` | Bevy app: windowing, rendering, UI, input |
 | `docs/` | Architecture, game design, economy balancing, roadmap |
 

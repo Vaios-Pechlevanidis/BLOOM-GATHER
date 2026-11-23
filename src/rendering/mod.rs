@@ -4,9 +4,11 @@
 //! Rendering only *reads* game state. Placement and collision come from
 //! `bloom_core`, so what you see and what you bump into always agree.
 
+mod beds;
 mod bouquets;
 mod camera;
 mod critters;
+pub mod daylight;
 mod grass;
 mod landmarks;
 pub mod meshes;
@@ -16,6 +18,7 @@ mod sky;
 mod wind;
 
 pub use camera::MainCamera;
+pub use daylight::Daylight;
 pub use scene::SceneSet;
 pub use wind::{sway_by_height, wind_material, Weather, Wind, WindMaterial};
 
@@ -31,10 +34,12 @@ impl Plugin for RenderingPlugin {
             camera::CameraPlugin,
             scene::ScenePlugin,
             grass::GrassPlugin,
+            daylight::DaylightPlugin,
             sky::SkyPlugin,
             landmarks::LandmarksPlugin,
             critters::CrittersPlugin,
             bouquets::BouquetsPlugin,
+            beds::BedsPlugin,
             scenery::SceneryPlugin,
         ));
     }

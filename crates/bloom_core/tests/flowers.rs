@@ -7,7 +7,7 @@ use bloom_core::GameData;
 use glam::{Vec2, Vec3};
 
 fn data() -> GameData {
-    GameData::builtin().unwrap()
+    GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap()
 }
 
 fn region_field(d: &GameData, i: usize) -> (RegionLayout, FlowerField) {

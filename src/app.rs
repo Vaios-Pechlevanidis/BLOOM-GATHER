@@ -15,6 +15,8 @@ pub fn build() -> App {
     // The smoke test must never touch the player's real save or settings.
     #[cfg(debug_assertions)]
     crate::dev::isolate_save_dir();
+    #[cfg(debug_assertions)]
+    crate::views::isolate_save_dir();
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
@@ -48,7 +50,7 @@ pub fn build() -> App {
         ui::UiPlugin,
     ));
     #[cfg(debug_assertions)]
-    app.add_plugins(crate::dev::SmokeTestPlugin);
+    app.add_plugins((crate::dev::SmokeTestPlugin, crate::views::ViewsPlugin));
     app.add_plugins((crate::bench::BenchPlugin, crate::icon::IconPlugin));
     app
 }

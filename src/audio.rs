@@ -231,18 +231,25 @@ fn follow_region(
     music: Option<Res<Music>>,
     content: Option<Res<Content>>,
     active: Option<Res<ActiveRegion>>,
+    daylight: Option<Res<crate::rendering::Daylight>>,
     mut playing: Query<&mut LoopTrack>,
 ) {
     let (Some(sounds), Some(content), Some(active)) = (sounds, content, active) else {
         return;
     };
     let scenery = &content.regions[active.0].scenery;
-    let mut wanted = vec![(
-        Track::Ambience(scenery.ambience),
-        sounds.ambience(scenery.ambience).clone(),
-    )];
+    // With a day cycle, crickets and the night tune take over after dark.
+    let night = match (&daylight, scenery.day_cycle) {
+        (Some(d), Some(_)) => d.night > 0.5,
+        _ => scenery.atmosphere.night,
+    };
+    let ambience = if night && scenery.day_cycle.is_some() {
+        Ambience::Night
+    } else {
+        scenery.ambience
+    };
+    let mut wanted = vec![(Track::Ambience(ambience), sounds.ambience(ambience).clone())];
     if let Some(music) = &music {
-        let night = scenery.atmosphere.night;
         let handle = if night { &music.night } else { &music.day };
         wanted.push((Track::Music { night }, handle.clone()));
     }

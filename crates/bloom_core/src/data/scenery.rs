@@ -104,10 +104,71 @@ pub struct PondDef {
     pub depth: f32,
 }
 
+/// A bulb farm: flowers planted in long, straight beds of one colour each,
+/// separated by bare furrows, on both sides of a straight farm track (like
+/// the tulip and hyacinth fields of Holland). The south end is a farmyard
+/// with the spawn, the workshop and the well; beds fill the rest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BulbFields {
+    /// Planted width of a bed in metres.
+    pub bed_width: f32,
+    /// Bare soil between two beds in metres.
+    pub furrow_width: f32,
+    /// Rows of flowers along each bed.
+    pub lines: u32,
+    /// Depth of the farmyard at the south end (no beds there).
+    pub yard_depth: f32,
+    /// Grassy margin inside the fence around the beds.
+    pub verge: f32,
+    /// Width of the grass strip that crosses the beds halfway.
+    pub headland: f32,
+    /// Species that grow wild on the verges and in the yard instead.
+    pub verge_species: Vec<String>,
+    /// Species that turn up as single strays among the beds.
+    pub stray_species: Vec<String>,
+}
+
+impl Default for BulbFields {
+    fn default() -> Self {
+        Self {
+            bed_width: 1.4,
+            furrow_width: 0.8,
+            lines: 2,
+            yard_depth: 24.0,
+            verge: 3.0,
+            headland: 3.0,
+            verge_species: Vec::new(),
+            stray_species: Vec::new(),
+        }
+    }
+}
+
+/// The sun rises and sets: a full day and night every `day_length_secs`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DayCycle {
+    /// Real seconds for one whole day (24 hours).
+    pub day_length_secs: f32,
+    /// Hour of the day (0-24) a session starts at.
+    pub start_hour: f32,
+}
+
+impl Default for DayCycle {
+    fn default() -> Self {
+        Self {
+            day_length_secs: 960.0,
+            start_hour: 8.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RegionFeatures {
     pub rows: Option<FlowerRows>,
+    /// Straight bulb-field beds (see [`BulbFields`]).
+    pub fields: Option<BulbFields>,
     pub stream: Option<StreamDef>,
     pub pond: Option<PondDef>,
     /// Lantern posts along the footpath (solid; lit at night).
@@ -137,6 +198,9 @@ pub struct Scenery {
     pub ambience: Ambience,
     pub atmosphere: Atmosphere,
     pub features: RegionFeatures,
+    /// Day and night follow each other; `atmosphere` is then the light at
+    /// noon (and `night` is ignored).
+    pub day_cycle: Option<DayCycle>,
 }
 
 impl Scenery {

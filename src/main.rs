@@ -23,6 +23,8 @@ mod tools;
 mod travel;
 mod ui;
 mod viewmodel;
+#[cfg(debug_assertions)]
+mod views;
 
 fn main() -> bevy::app::AppExit {
     app::build().run()

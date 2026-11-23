@@ -9,7 +9,7 @@ use bloom_core::{Game, GameData};
 use glam::Vec3;
 
 fn data() -> Arc<GameData> {
-    Arc::new(GameData::builtin().unwrap())
+    Arc::new(GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap())
 }
 
 fn achievement(d: &GameData, id: &str) -> usize {
@@ -98,7 +98,7 @@ fn progress_counts_up_and_is_capped() {
 #[test]
 fn a_rare_find_counts_rare_and_very_rare_flowers() {
     // Make the meadow's first flower's species rare for this test.
-    let mut content = GameData::builtin().unwrap();
+    let mut content = GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap();
     let mut probe = Game::new(Arc::new(content.clone()));
     let species = probe.region(0).field.species(0);
     content.species[species].rarity = Rarity::Rare;
@@ -228,7 +228,7 @@ fn achievements_are_reachable_and_optional() {
         assert!(d.achievements.iter().any(|a| a.category == c), "{c:?}");
     }
     // An impossible target is rejected.
-    let mut broken = GameData::builtin().unwrap();
+    let mut broken = GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap();
     broken.achievements[0].condition = Condition::BouquetsCrafted(100_000);
     assert!(broken.reindexed_and_validated().is_err());
     // Skill points from achievements keep the tree a choice until late game.

@@ -1095,8 +1095,11 @@ fn drift_floaters(
 
 fn wander_fireflies(
     time: Res<Time>,
+    daylight: Res<crate::rendering::Daylight>,
     mut flies: Query<(&Firefly, &mut Transform, &mut Visibility)>,
 ) {
+    // Out from dusk; the later it gets, the more of them.
+    let out = ((daylight.night - 0.2) / 0.6).clamp(0.0, 1.0);
     let t = time.elapsed_secs();
     for (f, mut tr, mut vis) in &mut flies {
         let k = t * f.rate + f.phase;
@@ -1107,7 +1110,7 @@ fn wander_fireflies(
                 (k * 0.5).cos() * 1.6,
             );
         // Blink: lit most of the time, dark for a moment now and then.
-        let lit = (k * 1.7).sin() > -0.55;
+        let lit = (k * 1.7).sin() > -0.55 && (f.phase / TAU) < out;
         let want = if lit {
             Visibility::Inherited
         } else {

@@ -16,7 +16,7 @@ use glam::Vec2;
 const DT: f32 = 1.0 / 64.0;
 
 fn data() -> GameData {
-    GameData::builtin().unwrap()
+    GameData::from_ron_str(include_str!("fixtures/valley.ron")).unwrap()
 }
 
 fn layouts(d: &GameData) -> Vec<RegionLayout> {

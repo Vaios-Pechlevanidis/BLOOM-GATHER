@@ -219,13 +219,19 @@ impl GameData {
             // Generation must be able to place every flower with the minimum
             // spacing. Each flower needs roughly a spacing² cell; demand 2×
             // headroom so jittered placement never runs out of room.
+            // (Bulb fields plant their beds more densely; whether every bed
+            // flower fits is checked when the field is laid out.)
             let spacing = self.world.min_flower_spacing;
             let needed_area = counted as f32 * spacing * spacing * 2.0;
-            r.check(region.width * region.depth >= needed_area, || {
-                format!(
+            let planted = region.scenery.features.fields.is_some();
+            r.check(
+                planted || region.width * region.depth >= needed_area,
+                || {
+                    format!(
                     "region '{id}' is too small to place {counted} flowers {spacing} units apart"
                 )
-            });
+                },
+            );
 
             // Reachability without spending anything: the harvest threshold
             // must be satisfiable from earlier regions, and harvest XP alone
@@ -289,6 +295,38 @@ impl GameData {
             r.check(
                 (2.0..=half / 3.0).contains(&p.radius) && p.depth > 0.1 && p.depth <= wade,
                 || format!("region '{id}': the pond must be 2 m to a third of the region's half size across and at most {wade:.2} m deep"),
+            );
+        }
+        if let Some(b) = &f.fields {
+            r.check(
+                b.bed_width >= 0.4
+                    && b.furrow_width >= 0.3
+                    && (1..=4).contains(&b.lines)
+                    && b.yard_depth >= 12.0
+                    && b.verge >= 1.0
+                    && b.headland >= 0.0,
+                || format!("region '{id}': bulb fields need beds >= 0.4 m, furrows >= 0.3 m, 1-4 lines, a yard >= 12 m and a verge >= 1 m"),
+            );
+            for s in b.verge_species.iter().chain(&b.stray_species) {
+                r.check(region.species_count(s) > 0, || {
+                    format!("region '{id}': bulb-field species '{s}' does not grow in the region")
+                });
+            }
+            r.check(
+                !b.verge_species.iter().any(|s| b.stray_species.contains(s)),
+                || format!("region '{id}': a species is either a verge or a stray species"),
+            );
+            r.check(
+                region.flowers.iter().any(|f| {
+                    !b.verge_species.contains(&f.species) && !b.stray_species.contains(&f.species)
+                }),
+                || format!("region '{id}': bulb fields need at least one species in the beds"),
+            );
+        }
+        if let Some(c) = region.scenery.day_cycle {
+            r.check(
+                c.day_length_secs >= 30.0 && (0.0..24.0).contains(&c.start_hour),
+                || format!("region '{id}': a day lasts at least 30 s and starts at hour 0-24"),
             );
         }
         r.check((0.0..=1.0).contains(&f.blossom_trees), || {

@@ -18,7 +18,11 @@ impl Plugin for LandmarksPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            spawn_landmarks.run_if(resource_exists_and_changed::<RegionScene>),
+            (
+                spawn_landmarks.run_if(resource_exists_and_changed::<RegionScene>),
+                light_lanterns,
+            )
+                .chain(),
         );
     }
 }
@@ -41,15 +45,12 @@ fn spawn_landmarks(
     let sign = meshes.add(signpost());
     let cottage = meshes.add(workshop());
     let lantern = meshes.add(lantern_post());
-    let night = content.regions[scene.region].scenery.atmosphere.night;
+    let _ = &content;
     let glass = meshes.add(Cuboid::new(0.2, 0.3, 0.2));
+    // Lit by `light_lanterns` as the evening comes.
     let lamp = materials.add(StandardMaterial {
         base_color: Color::srgb(1.0, 0.9, 0.7),
-        emissive: if night {
-            LinearRgba::rgb(4.0, 2.7, 1.2)
-        } else {
-            LinearRgba::rgb(0.4, 0.3, 0.15)
-        },
+        emissive: LinearRgba::rgb(0.4, 0.3, 0.15),
         ..default()
     });
     for l in &scene.layout.landmarks {
@@ -74,19 +75,19 @@ fn spawn_landmarks(
                     MeshMaterial3d(lamp.clone()),
                     Transform::from_xyz(0.0, 2.05, 0.32),
                     bevy::light::NotShadowCaster,
+                    LanternGlass,
                 ));
-                if night {
-                    post.spawn((
-                        PointLight {
-                            color: Color::srgb(1.0, 0.8, 0.52),
-                            intensity: 45_000.0,
-                            range: 9.0,
-                            shadow_maps_enabled: false,
-                            ..default()
-                        },
-                        Transform::from_xyz(0.0, 2.0, 0.4),
-                    ));
-                }
+                post.spawn((
+                    PointLight {
+                        color: Color::srgb(1.0, 0.8, 0.52),
+                        intensity: 0.0,
+                        range: 9.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_xyz(0.0, 2.0, 0.4),
+                    LanternLight,
+                ));
             });
         }
         if l.kind == LandmarkKind::Workshop {
@@ -104,6 +105,37 @@ fn spawn_landmarks(
                     RenderLayers::from_layers(&[0, crate::viewmodel::VIEW_LAYER]),
                 ));
             });
+        }
+    }
+}
+
+#[derive(Component)]
+struct LanternGlass;
+
+#[derive(Component)]
+struct LanternLight;
+
+/// Lanterns come on at dusk and go out in the morning.
+fn light_lanterns(
+    daylight: Res<crate::rendering::Daylight>,
+    mut lights: Query<&mut PointLight, With<LanternLight>>,
+    added: Query<(), Added<LanternLight>>,
+    glass: Query<&MeshMaterial3d<StandardMaterial>, With<LanternGlass>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut last: Local<Option<f32>>,
+) {
+    let on = ((daylight.night - 0.05) / 0.4).clamp(0.0, 1.0);
+    if last.is_some_and(|l| (l - on).abs() < 0.005) && added.is_empty() {
+        return;
+    }
+    *last = Some(on);
+    for mut light in &mut lights {
+        light.intensity = 45_000.0 * on;
+    }
+    if let Some(m) = glass.iter().next() {
+        if let Some(mut m) = materials.get_mut(&m.0) {
+            m.emissive =
+                LinearRgba::rgb(0.4, 0.3, 0.15) * (1.0 - on) + LinearRgba::rgb(4.0, 2.7, 1.2) * on;
         }
     }
 }
