@@ -34,6 +34,30 @@ summary; afterwards you can keep wandering (free roam). Picked flowers never
 come back. See [TODO.md](TODO.md) and
 [docs/development-roadmap.md](docs/development-roadmap.md).
 
+## Quick start
+
+**Just play** (installs the latest release and starts it; run again to update):
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/main/scripts/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/main/scripts/install.ps1 | iex
+```
+
+**From source** (needs Rust via `rustup`):
+
+```bash
+git clone https://github.com/Vaios-Pechlevanidis/BLOOM-GATHER.git && cd BLOOM-GATHER && cargo run --release
+```
+
+In game: Enter to begin, WASD + mouse to walk and look, E to pick, Tab for
+the basket, Esc to pause. Full controls are under
+[Running from source](#running-from-source).
+
 ## Download & install
 
 Ready-made packages for macOS, Windows and Linux are on the
@@ -112,14 +136,14 @@ Controls:
 | Herbarium (every species, bouquets bound) | C |
 | Skip the ending's tour | Esc |
 | Settings (from the pause menu or the title screen) | O while paused; 1-4 tabs, arrows, Enter, Esc |
-
-Every main action key can be rebound in Settings > Keys (conflicting keys
-swap; Esc, Enter, F3, the arrow keys and 1-4 stay fixed so menus always
-work). Hints everywhere show the keys you chose.
 | Look around | Mouse |
 | Start from title screen | Enter or click **Begin** |
 | Pause / settings | Esc (sensitivity, field of view, sound volume, head movement, invert look) |
 | Performance overlay | F3 |
+
+Every main action key can be rebound in Settings > Keys (conflicting keys
+swap; Esc, Enter, F3, the arrow keys and 1-4 stay fixed so menus always
+work). Hints everywhere show the keys you chose.
 
 Saves live in `~/Library/Application Support/Bloom and Gather` (macOS),
 `%APPDATA%\Bloom and Gather` (Windows) or `~/.local/share/bloom-and-gather`
