@@ -48,11 +48,31 @@ curl -fsSL https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/ma
 irm https://raw.githubusercontent.com/Vaios-Pechlevanidis/BLOOM-GATHER/main/scripts/install.ps1 | iex
 ```
 
-**From source** (needs Rust via `rustup`):
+**From source in the terminal**, step by step:
 
 ```bash
-git clone https://github.com/Vaios-Pechlevanidis/BLOOM-GATHER.git && cd BLOOM-GATHER && cargo run --release
+# 1. Install Rust (skip if `cargo --version` already works)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+#    macOS with Homebrew's rustup instead: export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
+
+# 2. Linux only: system libraries Bevy needs (Debian/Ubuntu)
+sudo apt install -y build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxkbcommon-dev libwayland-dev
+
+# 3. Get the code and start the game (the first build takes a few minutes)
+git clone https://github.com/Vaios-Pechlevanidis/BLOOM-GATHER.git
+cd BLOOM-GATHER
+cargo run --release
+
+# Later: update and play again
+git pull && cargo run --release
+
+# Run the tests
+cargo test
 ```
+
+On Windows, install Rust with the installer from <https://rustup.rs>, then
+run step 3 in PowerShell.
 
 In game: Enter to begin, WASD + mouse to walk and look, E to pick, Tab for
 the basket, Esc to pause. Full controls are under
@@ -110,6 +130,23 @@ reinstalling keeps your progress.
 Requirements: a recent stable Rust toolchain (`rustup`). On Linux, Bevy also
 needs the usual system packages (`libasound2-dev`, `libudev-dev`, and X11 or
 Wayland dev headers).
+
+Start the game from your checkout:
+
+```bash
+cd ~/BLOOM-GATHER
+export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # only for Homebrew's rustup on macOS
+cargo run
+```
+
+To make the `PATH` line permanent (then `cargo run` is enough in every new
+terminal):
+
+```bash
+echo 'export PATH="/opt/homebrew/opt/rustup/bin:$PATH"' >> ~/.zshrc
+```
+
+Build variants:
 
 ```bash
 cargo run              # debug build (dependencies are optimised, so it is smooth)
