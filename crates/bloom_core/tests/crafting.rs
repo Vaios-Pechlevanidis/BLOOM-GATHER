@@ -270,6 +270,8 @@ fn bouquets_sell_for_their_price() {
     g.craft(simple, 3, &none()).unwrap();
     g.tick(100.0);
     let coins = g.state().coins;
+    assert_eq!(g.sell_bouquets(simple, 2), Err(GameError::NotAtWorkshop));
+    g.set_at_workshop(true);
     assert_eq!(
         g.sell_bouquets(simple, 2),
         Ok(2 * d.recipes[simple].sell_price)

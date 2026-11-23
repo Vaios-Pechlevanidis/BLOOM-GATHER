@@ -80,6 +80,10 @@ pub fn stat(game: &Game, effect: &Effect) -> (String, String) {
             "Bouquets per batch".into(),
             game.batch_capacity().to_string(),
         ),
+        Effect::CarryCapacity(_) => (
+            "Flowers carried at once".into(),
+            game.carry_capacity().to_string(),
+        ),
         Effect::BouquetPrice(_) => (
             format!("{} sells for", data.recipes[0].name),
             format!("{} coins", game.bouquet_price(0)),

@@ -71,6 +71,8 @@ enum Stat {
     Remaining,
     Collection,
     Coins,
+    /// Flowers carried / how many fit (the carry limit).
+    Carry,
     Level,
     XpText,
     /// "Binding 3 Simple Bouquets: 40%" while the workbench works.
@@ -157,6 +159,7 @@ fn spawn_hud(mut commands: Commands, content: Res<Content>, active: Res<ActiveRe
         ))
         .with_children(|card| {
             card.spawn((Stat::Coins, theme::text("", font::TITLE, palette::INK)));
+            card.spawn((Stat::Carry, theme::text("", font::BODY, palette::INK)));
             card.spawn((Stat::Level, theme::text("", font::BODY, palette::INK)));
             card.spawn((
                 Node {
@@ -367,6 +370,16 @@ fn update_stats(
             ),
             Stat::Collection => format!("Collection {discovered} / {} species", data.species.len()),
             Stat::Coins => format!("{} coins", session.state().coins),
+            Stat::Carry => {
+                let (held, cap) = (session.carried(), session.carry_capacity());
+                if session.at_workshop() {
+                    format!("At the hut  carrying {held} / {cap}")
+                } else if held >= cap {
+                    format!("Hands full {held} / {cap}: back to the hut")
+                } else {
+                    format!("Carrying {held} / {cap}")
+                }
+            }
             Stat::Level => format!("Level {level}"),
             Stat::Job => match session.craft_job() {
                 Some(job) => {
@@ -449,7 +462,7 @@ fn update_prompt(
             }
             InteractableKind::Storage => {
                 let held: u32 = session.state().inventory.values().sum();
-                format!("{held} flower{} in the basket", plural(held as usize))
+                format!("{held} flower{} stored at the hut", plural(held as usize))
             }
             InteractableKind::BouquetDisplay => {
                 let n: u32 = session.state().bouquets.values().sum();
@@ -505,6 +518,18 @@ fn update_prompt(
             }),
         }
     };
+    // With full hands nothing more can be gathered: say where to go.
+    let lines = lines.map(|(name, detail, action)| {
+        if target.station.is_none() && session.carry_space() == 0 {
+            (
+                name,
+                "Hands full. Bring your flowers to the hut".to_string(),
+                action,
+            )
+        } else {
+            (name, detail, action)
+        }
+    });
     let show = playing && lines.is_some();
     for mut v in &mut prompt {
         let want = if show {

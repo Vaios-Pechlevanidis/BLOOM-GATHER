@@ -38,6 +38,9 @@
         area_cooldown_secs: 1.5,
         // How far beyond the flower reach the ground can be targeted.
         ground_reach_bonus: 1.5,
+        // Flowers carried in bare hands. Carrying tools (sacks, baskets, the
+        // cart) and skills add to it; walking into the hut leaves them there.
+        base_carry_capacity: 1,
     ),
 
     // All world distances are in metres.
@@ -126,19 +129,32 @@
          description: "A faintly glowing five-pointed bloom. Very few exist."),
     ],
 
+    // Carrying tools (CarryCapacity) are optional: they add up, and the hut
+    // is the only place flowers are left and sold.
     tools: [
+        (id: "linen_sack", name: "Linen Sack", category: Harvesting, price: 40, unlock_level: 1,
+         description: "A little linen sack on a strap. Carry two more flowers per trip to the hut.",
+         effects: [CarryCapacity(2)], required_for_completion: false, icon_color: (226, 214, 186)),
         (id: "binding_ribbon", name: "Flower Binding Ribbon", category: Crafting, price: 100, unlock_level: 2,
          description: "A spool of soft linen ribbon. Lets you tie your first simple bouquets.",
          effects: [], icon_color: (238, 190, 190)),
         (id: "garden_scissors", name: "Garden Scissors", category: Both, price: 300, unlock_level: 3,
          description: "Sharp little snips: pick faster and trim stems for colourful bouquets.",
          effects: [HarvestCooldownMultiplier(0.6)], icon_color: (180, 190, 200)),
+        (id: "burlap_sack", name: "Burlap Sack", category: Harvesting, price: 250, unlock_level: 4,
+         description: "A roomy burlap sack slung over the shoulder. Carry six more flowers.",
+         requires_tools: ["linen_sack"],
+         effects: [CarryCapacity(6)], required_for_completion: false, icon_color: (176, 150, 110)),
         (id: "harvesting_basket", name: "Harvesting Basket", category: Harvesting, price: 600, unlock_level: 5,
-         description: "A wide wicker basket. Gather every flower in a small circle at once.",
-         effects: [RadiusMode(radius: 1.6, max_flowers: 6)], icon_color: (196, 160, 110)),
+         description: "A wide wicker basket. Gather every flower in a small circle at once, and carry six more.",
+         effects: [RadiusMode(radius: 1.6, max_flowers: 6), CarryCapacity(6)], icon_color: (196, 160, 110)),
         (id: "florist_knife", name: "Florist Knife", category: Crafting, price: 1000, unlock_level: 7,
          description: "A curved blade for clean angled cuts. Opens special arrangements.",
          effects: [], icon_color: (150, 130, 110)),
+        (id: "back_basket", name: "Wicker Back Basket", category: Harvesting, price: 1200, unlock_level: 8,
+         description: "A tall wicker basket worn on the back. Carry fifteen more flowers.",
+         requires_tools: ["harvesting_basket"],
+         effects: [CarryCapacity(15)], required_for_completion: false, icon_color: (184, 140, 92)),
         (id: "wrapping_paper_set", name: "Wrapping Paper Set", category: Crafting, price: 1500, unlock_level: 9,
          description: "Kraft paper, tissue and twine for wrapped, higher-value bouquets.",
          effects: [], icon_color: (226, 200, 160)),
@@ -150,9 +166,9 @@
          description: "A proper bench with buckets and twine. Bigger batches, finer arrangements.",
          effects: [CraftBatchCapacity(25)], icon_color: (170, 130, 90)),
         (id: "advanced_harvesting_equipment", name: "Advanced Harvesting Equipment", category: Harvesting, price: 3200, unlock_level: 14,
-         description: "A flower cart with wide rakes. Mark out a whole area and gather it.",
+         description: "A flower cart with wide rakes. Mark out a whole area and gather it; it holds forty more flowers.",
          requires_tools: ["pro_gardening_tools"],
-         effects: [AreaMode(max_width: 8.0, max_height: 8.0, max_flowers: 40)], icon_color: (120, 140, 160)),
+         effects: [AreaMode(max_width: 8.0, max_height: 8.0, max_flowers: 40), CarryCapacity(40)], icon_color: (120, 140, 160)),
         (id: "pro_florist_set", name: "Professional Florist Set", category: Crafting, price: 4000, unlock_level: 16,
          description: "Everything a master florist needs, for the most exquisite arrangements.",
          requires_tools: ["florist_workbench"],
@@ -277,7 +293,11 @@
     // collection milestones. Skills never grant tools, modes or recipes.
     skills: [
         // Harvesting
+        (id: "strong_arms", name: "Strong Arms", branch: Harvesting, max_level: 5, cost: 1,
+         description: "Carry two more flowers at a time before heading back to the hut.",
+         effects: [CarryCapacity(2)]),
         (id: "quick_fingers", name: "Quick Fingers", branch: Harvesting, max_level: 3, cost: 1,
+         requires_skill: Some("strong_arms"),
          description: "Pick single flowers a little faster.",
          effects: [PickCooldown(0.05)]),
         (id: "double_harvest", name: "Double Harvest", branch: Harvesting, max_level: 3, cost: 1,
@@ -290,8 +310,8 @@
          effects: [GatherRadius(0.08)]),
         (id: "master_picker", name: "Master Picker", branch: Harvesting, max_level: 1, cost: 2,
          requires_skill: Some("improved_radius"), requires_tool: Some("pro_gardening_tools"),
-         description: "Every basket, rake and cart action gathers a quarter more.",
-         effects: [GatherCapacity(0.25)]),
+         description: "Every basket, rake and cart action gathers a quarter more, and you carry ten more flowers.",
+         effects: [GatherCapacity(0.25), CarryCapacity(10)]),
         // Botany
         (id: "botanical_knowledge", name: "Botanical Knowledge", branch: Botany, max_level: 2, cost: 1,
          description: "More XP for every new species you discover.",

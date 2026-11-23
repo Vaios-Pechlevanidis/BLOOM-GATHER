@@ -289,6 +289,7 @@ impl Game {
                 self.state.inventory.insert(id.clone(), left);
             }
         }
+        self.clamp_carried();
         let id = data.recipes[recipe].id.clone();
         let before = self.crafted_count(recipe);
         *self.state.crafted.entry(id.clone()).or_default() += count;
@@ -360,6 +361,9 @@ impl Game {
             .get(recipe)
             .ok_or(GameError::UnknownRecipe)?
             .clone();
+        if !self.at_workshop {
+            return Err(GameError::NotAtWorkshop);
+        }
         let have = self.bouquet_count(recipe);
         if count == 0 {
             return Err(GameError::NothingToSell);

@@ -29,6 +29,9 @@ fn pick(g: &mut Game, region: usize, i: u32) {
     let (c, _) = g.region(region).field.pick_sphere(i);
     g.tick(1.0);
     g.harvest(region, i, c + Vec3::Y).unwrap();
+    // Carry limit: leave every flower at the hut straight away.
+    g.set_at_workshop(true);
+    g.set_at_workshop(false);
 }
 
 /// What the journey leaves undone.
@@ -190,6 +193,7 @@ fn the_summary_is_a_snapshot_of_the_moment() {
     g.mark_finale_seen();
     assert!(!g.finale_pending());
     g.tick(500.0);
+    g.set_at_workshop(true);
     g.sell_all();
     let held: Vec<usize> = (0..d.recipes.len())
         .filter(|&r| g.state().bouquets.contains_key(&d.recipes[r].id))

@@ -154,6 +154,7 @@ fn selling_pays_the_same_for_every_species() {
         pick(&mut game, 0, i).unwrap();
     }
     let mut before = game.state().coins;
+    game.set_at_workshop(true);
     for species in 0..d.species.len() {
         let n = game.inventory_count(species);
         if n == 0 {
@@ -174,6 +175,8 @@ fn selling_validates_quantities() {
     pick(&mut game, 0, 0).unwrap();
     let coins = game.state().coins; // first-flower achievement rewards
     let species = game.region(0).field.species(0);
+    assert_eq!(game.sell(species, 1), Err(GameError::NotAtWorkshop));
+    game.set_at_workshop(true);
     assert_eq!(game.sell(species, 0), Err(GameError::NothingToSell));
     assert_eq!(
         game.sell(species, 2),
@@ -216,6 +219,7 @@ fn reserve_protects_flowers_needed_for_required_bouquets() {
     state.stats.flowers_harvested = world as u64;
     let mut game = Game::from_state(d.clone(), state).expect("consistent state");
 
+    game.set_at_workshop(true);
     assert_eq!(game.sellable(starpetal), 2);
     assert_eq!(game.reserved(starpetal), 1);
     assert_eq!(
@@ -238,6 +242,7 @@ fn early_game_flowers_are_never_reserved() {
     let held: u32 = (0..game.data().species.len())
         .map(|s| game.inventory_count(s))
         .sum();
+    game.set_at_workshop(true);
     let (sold, coins) = game.sell_all();
     assert_eq!(sold, held);
     assert_eq!(coins, held as u64 * 10);

@@ -175,6 +175,9 @@ fn the_whole_farm_can_be_finished() {
         let (c, _) = g.region(0).field.pick_sphere(i);
         g.tick(1.0);
         g.harvest(0, i, c + Vec3::Y).unwrap();
+        // Carry limit: leave every flower at the hut straight away.
+        g.set_at_workshop(true);
+        g.set_at_workshop(false);
     }
     g.tick(1_000.0);
     for t in 0..d.tools.len() {

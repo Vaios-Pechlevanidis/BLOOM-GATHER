@@ -474,6 +474,23 @@ impl RegionLayout {
         }
     }
 
+    /// Whether a point (world x, z) is inside the workshop hut, doorway
+    /// included. False in regions without one.
+    pub fn in_workshop(&self, p: Vec2) -> bool {
+        let Some(w) = self
+            .landmarks
+            .iter()
+            .find(|l| l.kind == LandmarkKind::Workshop)
+        else {
+            return false;
+        };
+        // Inverse of `to_world`: rotate the offset back into the hut's frame.
+        let (s, c) = w.yaw.sin_cos();
+        let d = p - w.position;
+        let local = Vec2::new(d.x * c - d.y * s, d.x * s + d.y * c);
+        local.x.abs() <= workshop::HALF.x && local.y.abs() <= workshop::HALF.y + workshop::WALL
+    }
+
     /// The interactable whose sphere the ray hits first within `range`.
     pub fn pick_interactable(
         &self,

@@ -24,6 +24,9 @@ fn played_game(flowers: &[u32]) -> Game {
         let (c, _) = game.region(0).field.pick_sphere(i);
         game.tick(5.0);
         game.harvest(0, i, c + Vec3::Y).unwrap();
+        // A trip to the hut and back after every flower (carry limit).
+        game.set_at_workshop(true);
+        game.set_at_workshop(false);
     }
     game
 }

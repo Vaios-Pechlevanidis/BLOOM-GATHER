@@ -38,6 +38,9 @@
         area_cooldown_secs: 1.5,
         // How far beyond the flower reach the ground can be targeted.
         ground_reach_bonus: 1.5,
+        // Effectively unlimited: these tests are about other rules (the
+        // carry limit has its own tests in carrying.rs).
+        base_carry_capacity: 1000000,
     ),
 
     // All world distances are in metres.

@@ -37,8 +37,13 @@ pub struct GameState {
     pub coins: Coins,
     /// Lifetime XP; the level is derived from it.
     pub xp: Xp,
-    /// Flowers in the basket, by species id.
+    /// Every flower the player owns, by species id: those left at the hut
+    /// plus those still being carried.
     pub inventory: BTreeMap<String, u32>,
+    /// How many of the flowers in `inventory` are being carried (picked
+    /// since the player last walked into the hut). Bounded by the carry
+    /// capacity; the hut takes them all off the player's hands.
+    pub carried: u32,
     /// Species harvested at least once.
     pub discovered: BTreeSet<String>,
     /// Harvested flowers per region id. Bits are never cleared.
@@ -159,6 +164,10 @@ pub enum GameEvent {
         coins: Coins,
         xp: Xp,
     },
+    /// The player walked into the hut and left the flowers they carried.
+    FlowersStored {
+        count: u32,
+    },
     /// Efficient Production put flowers back in the basket.
     FlowersSaved {
         species: usize,
@@ -248,6 +257,12 @@ pub enum GameError {
     SavingForTools {
         can_spend: Coins,
     },
+    /// The player can't carry any more flowers until they visit the hut.
+    HandsFull {
+        capacity: u32,
+    },
+    /// Selling only happens at the hut.
+    NotAtWorkshop,
 }
 
 impl std::fmt::Display for GameError {
@@ -295,6 +310,12 @@ impl std::fmt::Display for GameError {
                 f,
                 "keep your coins for the tools you still need (you can spend {can_spend} on extras)"
             ),
+            GameError::HandsFull { capacity } => write!(
+                f,
+                "your hands are full ({capacity} flower{}); bring them to the hut",
+                if *capacity == 1 { "" } else { "s" }
+            ),
+            GameError::NotAtWorkshop => write!(f, "flowers and bouquets are sold at the hut"),
             GameError::Reserved { sellable } => {
                 write!(
                     f,
@@ -337,6 +358,8 @@ pub enum ToolLock {
     Level(u32),
     NeedsTool(String),
     Coins(Coins),
+    /// An optional tool that would leave too little for the required ones.
+    SavingForTools(Coins),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -374,6 +397,8 @@ pub struct Game {
     state: GameState,
     regions: Vec<Option<RegionRuntime>>,
     harvest_cooldown: f32,
+    /// The player is inside the hut (not saved; the app reports it).
+    at_workshop: bool,
     events: Vec<GameEvent>,
     dirty: bool,
 }
@@ -407,6 +432,7 @@ impl Game {
             state,
             regions,
             harvest_cooldown: 0.0,
+            at_workshop: false,
             events: Vec::new(),
             dirty: false,
         }
@@ -513,6 +539,9 @@ impl Game {
                 return bad(format!("basket holds more '{id}' than were ever picked"));
             }
         }
+        // Never carrying more than is owned or than fits (older saves carry 0).
+        game.clamp_carried();
+        game.state.carried = game.state.carried.min(game.carry_capacity());
         let recipe_ids = game
             .state
             .discovered_recipes
@@ -689,6 +718,7 @@ impl Game {
         if self.is_harvested(region, flower) {
             return Err(GameError::AlreadyHarvested);
         }
+        self.check_carry_space()?;
         let range = self.reach();
         let (center, radius) = field.pick_sphere(flower);
         let distance = eye.distance(center) - radius;
@@ -701,7 +731,8 @@ impl Game {
         let (species, newly_discovered, mut xp) = self.apply_one(region, &field, flower);
         // Double Harvest: sometimes the nearest neighbour comes along too.
         let mut bonus_flower = None;
-        if self.roll(self.modifiers().double_harvest) {
+        // (Rolled even with full hands, so the RNG sequence doesn't depend on it.)
+        if self.roll(self.modifiers().double_harvest) && self.carry_space() > 0 {
             let bits = self.harvested(region);
             let here = field.position(flower);
             let neighbour = field
@@ -826,7 +857,7 @@ impl Game {
                 .distance(center)
                 .total_cmp(&field.position(b).distance(center))
         });
-        hits.truncate(params.max_flowers as usize);
+        hits.truncate(params.max_flowers.min(self.carry_space()) as usize);
         hits
     }
 
@@ -845,7 +876,7 @@ impl Game {
         let bits = self.harvested(region);
         let field = self.region(region).field.clone();
         let mut hits = field.query_rect(min, max, &bits);
-        hits.truncate(params.max_flowers as usize);
+        hits.truncate(params.max_flowers.min(self.carry_space()) as usize);
         Some((min, max, hits))
     }
 
@@ -880,6 +911,7 @@ impl Game {
             return Err(GameError::ModeLocked);
         }
         let field = self.begin_harvest(region)?;
+        self.check_carry_space()?;
         let distance = eye.distance(center);
         if distance > self.ground_reach() + REACH_SLACK {
             return Err(GameError::OutOfReach { distance });
@@ -908,6 +940,7 @@ impl Game {
             return Err(GameError::ModeLocked);
         }
         let field = self.begin_harvest(region)?;
+        self.check_carry_space()?;
         let (min, max, targets) = self
             .preview_area(region, start, end)
             .ok_or(GameError::ModeLocked)?;
@@ -986,6 +1019,7 @@ impl Game {
         let species = field.species(flower);
         let species_id = data.species[species].id.clone();
         *self.state.inventory.entry(species_id.clone()).or_default() += 1;
+        self.state.carried += 1;
         *self
             .state
             .harvested_per_species
@@ -1075,6 +1109,12 @@ impl Game {
         if self.state.coins < price {
             return ToolStatus::Locked(ToolLock::Coins(price));
         }
+        if !def.required_for_completion {
+            let can_spend = self.optional_spending_limit();
+            if price > can_spend {
+                return ToolStatus::Locked(ToolLock::SavingForTools(can_spend));
+            }
+        }
         ToolStatus::Buyable
     }
 
@@ -1092,6 +1132,9 @@ impl Game {
                 price,
                 have: self.state.coins,
             }),
+            ToolStatus::Locked(ToolLock::SavingForTools(can_spend)) => {
+                Err(GameError::SavingForTools { can_spend })
+            }
             ToolStatus::Buyable => {
                 let price = self.tool_price(tool);
                 self.state.coins -= price;
@@ -1109,6 +1152,78 @@ impl Game {
     pub(super) fn earn(&mut self, coins: Coins) {
         self.state.coins += coins;
         self.state.stats.coins_earned += coins;
+    }
+
+    // ---------------------------------------------------------------------
+    // Carrying and the hut
+    // ---------------------------------------------------------------------
+
+    /// How many flowers the player can carry at once: bare hands, plus
+    /// every owned carrying tool (sacks, baskets, the cart), plus skills
+    /// and upgrades.
+    pub fn carry_capacity(&self) -> u32 {
+        let tools: u32 = self
+            .state
+            .tools
+            .iter()
+            .filter_map(|t| self.data.tool(t))
+            .flat_map(|t| &t.effects)
+            .map(|e| match *e {
+                ToolEffect::CarryCapacity(n) => n,
+                _ => 0,
+            })
+            .sum();
+        self.data.harvesting.base_carry_capacity + tools + self.modifiers().carry_capacity
+    }
+
+    /// Flowers picked since the last visit to the hut.
+    pub fn carried(&self) -> u32 {
+        self.state.carried
+    }
+
+    /// How many more flowers fit before a trip to the hut is needed.
+    pub fn carry_space(&self) -> u32 {
+        self.carry_capacity().saturating_sub(self.state.carried)
+    }
+
+    fn check_carry_space(&self) -> Result<(), GameError> {
+        if self.carry_space() == 0 {
+            return Err(GameError::HandsFull {
+                capacity: self.carry_capacity(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Whether the player is inside the hut (where selling happens).
+    pub fn at_workshop(&self) -> bool {
+        self.at_workshop
+    }
+
+    /// The app reports whether the player stands inside the hut. Walking in
+    /// leaves everything carried there.
+    pub fn set_at_workshop(&mut self, inside: bool) {
+        self.at_workshop = inside;
+        if inside {
+            self.store_carried();
+        }
+    }
+
+    /// Leave every carried flower at the hut. Returns how many.
+    fn store_carried(&mut self) -> u32 {
+        let count = std::mem::take(&mut self.state.carried);
+        if count > 0 {
+            self.events.push(GameEvent::FlowersStored { count });
+            self.dirty = true;
+        }
+        count
+    }
+
+    /// Carried flowers are a subset of the inventory; keep it that way when
+    /// flowers leave it.
+    pub(super) fn clamp_carried(&mut self) {
+        let owned: u32 = self.state.inventory.values().sum();
+        self.state.carried = self.state.carried.min(owned);
     }
 
     // ---------------------------------------------------------------------
@@ -1160,6 +1275,9 @@ impl Game {
         if species >= self.data.species.len() {
             return Err(GameError::UnknownSpecies);
         }
+        if !self.at_workshop {
+            return Err(GameError::NotAtWorkshop);
+        }
         if count == 0 {
             return Err(GameError::NothingToSell);
         }
@@ -1178,6 +1296,7 @@ impl Game {
         } else {
             self.state.inventory.insert(id, left);
         }
+        self.clamp_carried();
         let coins = self.data.economy.raw_flower_value(count as u64);
         self.earn(coins);
         self.state.stats.flowers_sold += count as u64;
@@ -1192,6 +1311,9 @@ impl Game {
 
     /// Sell every flower that isn't reserved. Returns `(flowers, coins)`.
     pub fn sell_all(&mut self) -> (u32, Coins) {
+        if !self.at_workshop {
+            return (0, 0);
+        }
         let mut flowers = 0;
         let mut coins = 0;
         for species in 0..self.data.species.len() {

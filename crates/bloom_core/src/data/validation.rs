@@ -58,6 +58,9 @@ impl GameData {
         r.check(e.upgrade_cost_growth > 1.0, || {
             "economy.upgrade_cost_growth must be > 1.0".into()
         });
+        r.check(self.harvesting.base_carry_capacity > 0, || {
+            "harvesting.base_carry_capacity must be > 0 (the player must carry something)".into()
+        });
 
         let p = &self.progression;
         r.check(p.xp_per_harvest > 0, || {
@@ -401,7 +404,7 @@ impl GameData {
                             && (1.0..=20.0).contains(&max_height)
                             && max_flowers > 0
                     }
-                    ToolEffect::CraftBatchCapacity(c) => c > 0,
+                    ToolEffect::CraftBatchCapacity(c) | ToolEffect::CarryCapacity(c) => c > 0,
                 };
                 r.check(ok, || {
                     format!("tool '{id}' has an out-of-range effect {effect:?}")
@@ -552,6 +555,9 @@ impl GameData {
             match e {
                 Effect::BatchCapacity(n) => {
                     r.check(*n > 0, || format!("{owner}: batch capacity must be > 0"))
+                }
+                Effect::CarryCapacity(n) => {
+                    r.check(*n > 0, || format!("{owner}: carry capacity must be > 0"))
                 }
                 Effect::BouquetPriceWithTool { tool, .. } => r
                     .check(self.tool(tool).is_some(), || {

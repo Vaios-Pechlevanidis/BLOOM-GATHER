@@ -136,6 +136,7 @@ fn the_guard_keeps_coins_needed_for_required_tools() {
 
     let mut g = Game::new(tight.clone());
     pick(&mut g, 12);
+    g.set_at_workshop(true);
     let (_, coins) = g.sell_all();
     assert!(coins >= 80);
     let u = upgrade(&tight, "nimble_hands");
@@ -163,6 +164,7 @@ fn the_guard_keeps_coins_needed_for_required_tools() {
     let d = data();
     let mut g = Game::new(d.clone());
     pick(&mut g, 12);
+    g.set_at_workshop(true);
     g.sell_all();
     assert!(g.optional_spending_limit() >= 80);
     assert_eq!(g.buy_upgrade(upgrade(&d, "nimble_hands")), Ok(1));

@@ -230,6 +230,8 @@ fn act(
         |result: Result<bloom_core::BatchOutcome, GameError>, quiet_empty: bool| match result {
             Ok(_) | Err(GameError::CoolingDown { .. }) => {}
             Err(GameError::NothingInReach) if quiet_empty => {}
+            // Sweeping asks every frame: say "hands full" once per press.
+            Err(GameError::HandsFull { .. }) if quiet_empty && !just => {}
             Err(GameError::NothingInReach) => {
                 sfx.write(PlaySfx::new(Sfx::Deny));
             }

@@ -41,6 +41,8 @@ pub enum Effect {
     CraftTime(f32),
     /// Bouquets the workbench binds at once, added on top of tools.
     BatchCapacity(u32),
+    /// Flowers the player can carry, added on top of hands and tools.
+    CarryCapacity(u32),
     /// Every bouquet sells for more.
     BouquetPrice(f32),
     /// Bouquets whose recipe needs `tool` sell for more.
@@ -89,6 +91,7 @@ impl Effect {
             Effect::CraftXp(_) => "craft xp",
             Effect::CraftTime(_) => "craft time",
             Effect::BatchCapacity(_) => "batch capacity",
+            Effect::CarryCapacity(_) => "carry capacity",
             Effect::BouquetPrice(_) => "bouquet price",
             Effect::BouquetPriceWithTool { .. } => "bouquet price with tool",
             Effect::FlowerSaver(_) => "flower saver",

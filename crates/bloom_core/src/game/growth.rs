@@ -30,6 +30,7 @@ pub struct Modifiers {
     pub craft_xp: f32,
     pub craft_time: f32,
     pub batch_capacity: u32,
+    pub carry_capacity: u32,
     pub bouquet_price: f32,
     /// `(tool id, bonus)`: bouquets whose recipe needs that tool.
     pub bouquet_price_with_tool: Vec<(String, f32)>,
@@ -59,6 +60,7 @@ impl Modifiers {
             Effect::CraftXp(x) => self.craft_xp += x * n,
             Effect::CraftTime(x) => self.craft_time += x * n,
             Effect::BatchCapacity(c) => self.batch_capacity += c * levels,
+            Effect::CarryCapacity(c) => self.carry_capacity += c * levels,
             Effect::BouquetPrice(x) => self.bouquet_price += x * n,
             Effect::BouquetPriceWithTool { tool, bonus } => {
                 match self

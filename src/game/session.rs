@@ -10,7 +10,7 @@ use bloom_core::game::{GameEvent, PlayerPose};
 use bloom_core::persistence::{LoadSource, SaveStore};
 use bloom_core::Game;
 
-use super::{ActiveRegion, AppState, Content, PlayState, Touring};
+use super::{ActiveRegion, AppState, Content, PlayState, RegionScene, Touring};
 use crate::player::Player;
 
 pub struct SessionPlugin;
@@ -24,6 +24,12 @@ impl Plugin for SessionPlugin {
                 ensure_session.in_set(SessionSet),
             )
             .add_systems(Update, forward_events.in_set(EventsForwarded))
+            .add_systems(
+                Update,
+                track_workshop
+                    .before(EventsForwarded)
+                    .run_if(in_state(PlayState::Playing)),
+            )
             .add_systems(OnEnter(PlayState::Paused), save_now)
             .add_systems(OnExit(AppState::InGame), save_now)
             .add_systems(
@@ -188,6 +194,26 @@ pub fn start_new_game(
         generation: session.generation + 1,
     });
     commands.remove_resource::<Player>();
+}
+
+/// Tell the game whether the player stands inside the hut: walking in leaves
+/// the flowers they carry there, and only there can things be sold. (Only
+/// while walking about: a hut screen keeps the player "at the hut".)
+fn track_workshop(
+    player: Option<Res<Player>>,
+    scene: Option<Res<RegionScene>>,
+    session: Option<ResMut<Session>>,
+    touring: Option<Res<Touring>>,
+) {
+    let (Some(player), Some(scene), Some(mut session)) = (player, scene, session) else {
+        return;
+    };
+    let p = player.body.position;
+    let inside = touring.is_none() && scene.layout.in_workshop(Vec2::new(p.x, p.z));
+    // Only touch the session when something changes (it is change-detected).
+    if inside != session.at_workshop() || (inside && session.carried() > 0) {
+        session.set_at_workshop(inside);
+    }
 }
 
 fn tick_session(time: Res<Time>, mut session: ResMut<Session>) {

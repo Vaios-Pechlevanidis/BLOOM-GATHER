@@ -103,6 +103,17 @@ struct Grid;
 #[derive(Component)]
 struct Summary;
 
+/// Basket-tab parts that only make sense at the hut (selling).
+#[derive(Component)]
+struct HutOnly;
+
+/// The basket footer line (what selling pays, or where to sell).
+#[derive(Component)]
+struct FooterNote;
+
+type NoteText<'w, 's> =
+    Query<'w, 's, &'static mut Text, (With<FooterNote>, Without<Summary>, Without<Title>)>;
+
 fn toggle(
     keys: Res<ButtonInput<KeyCode>>,
     bindings: Res<Bindings>,
@@ -261,11 +272,8 @@ fn spawn_screen(
                 .with_children(|footer| {
                     footer.spawn((
                         BasketOnly,
-                        theme::text(
-                            "Every flower sells for the same price, whatever its rarity.",
-                            font::CAPTION,
-                            palette::INK_SOFT,
-                        ),
+                        FooterNote,
+                        theme::text("", font::CAPTION, palette::INK_SOFT),
                     ));
                     footer
                         .spawn(Node {
@@ -274,7 +282,7 @@ fn spawn_screen(
                         })
                         .with_children(|buttons| {
                             buttons
-                                .spawn((BasketOnly, Node::default()))
+                                .spawn((HutOnly, Node::default()))
                                 .with_children(|b| {
                                     spawn_button(
                                         b,
@@ -447,7 +455,9 @@ fn rebuild_grid(
     grid: Query<(Entity, Option<&Children>), With<Grid>>,
     mut summary: Query<&mut Text, (With<Summary>, Without<Title>)>,
     mut title: Query<&mut Text, (With<Title>, Without<Summary>)>,
-    mut basket_only: Query<&mut Node, With<BasketOnly>>,
+    mut basket_only: Query<&mut Node, (With<BasketOnly>, Without<HutOnly>)>,
+    mut hut_only: Query<&mut Node, (With<HutOnly>, Without<BasketOnly>)>,
+    mut note: NoteText,
 ) {
     let (Some(session), Ok((grid, children))) = (session, grid.single()) else {
         return;
@@ -473,7 +483,32 @@ fn rebuild_grid(
                 session.state().coins,
                 session.optional_spending_limit()
             ),
-            _ => format!("{held} flowers   {} coins", session.state().coins),
+            _ => format!(
+                "{held} flowers   carrying {} / {}   {} coins",
+                session.carried(),
+                session.carry_capacity(),
+                session.state().coins
+            ),
+        };
+    }
+    // Selling happens only at the hut; out in the field the basket is a list.
+    let at_hut = session.at_workshop();
+    for mut t in &mut note {
+        t.0 = if at_hut {
+            "Every flower sells for the same price, whatever its rarity.".into()
+        } else {
+            format!(
+                "Flowers are sold at the hut. You carry {} of {}; walk into the hut to leave them there.",
+                session.carried(),
+                session.carry_capacity()
+            )
+        };
+    }
+    for mut node in &mut hut_only {
+        node.display = if view.tab == Tab::Basket && at_hut {
+            Display::Flex
+        } else {
+            Display::None
         };
     }
     for mut t in &mut title {
@@ -588,7 +623,7 @@ fn rebuild_grid(
                     }
                     col.spawn(theme::text(detail, font::CAPTION, palette::INK_SOFT));
                 });
-                if count > kept {
+                if count > kept && at_hut {
                     tile.spawn(Node {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(2.0),
@@ -670,9 +705,14 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected
                 .with_children(|row| {
                     row.spawn(theme::text(
                         format!(
-                            "Level {}   {} coins",
+                            "Level {}   {} coins{}",
                             tool.unlock_level,
-                            session.tool_price(i)
+                            session.tool_price(i),
+                            if tool.required_for_completion {
+                                ""
+                            } else {
+                                "   optional"
+                            }
                         ),
                         font::CAPTION,
                         palette::INK,
@@ -694,6 +734,7 @@ fn shop_tiles(commands: &mut Commands, grid: Entity, session: &Session, selected
                                     )
                                 }
                                 ToolLock::Coins(_) => "Not enough coins".to_string(),
+                                ToolLock::SavingForTools(_) => "Save for tools first".to_string(),
                             };
                             row.spawn(theme::text(why, font::CAPTION, palette::BROWN));
                         }

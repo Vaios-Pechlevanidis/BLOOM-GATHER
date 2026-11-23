@@ -130,6 +130,10 @@ fn interact(
         return;
     }
     if let Some(station) = target.station {
+        // Every station is part of the hut: using one counts as being there.
+        if let Some(mut session) = session {
+            session.set_at_workshop(true);
+        }
         open.0 = Some(station);
         sfx.write(PlaySfx::new(Sfx::Click));
         next.set(match station {
@@ -232,6 +236,13 @@ fn react_to_events(
                     format!("New tool: {}", data.tools[tool].name),
                     data.tools[tool].description.clone(),
                 ));
+            }
+            GameEvent::FlowersStored { count } => {
+                sfx.write(PlaySfx::new(Sfx::Click));
+                toasts.write(Toast::info(format!(
+                    "Left {count} flower{} at the hut. Your hands are free again.",
+                    if count == 1 { "" } else { "s" }
+                )));
             }
             GameEvent::FlowersSold { .. } | GameEvent::BouquetsSold { .. } => {
                 sfx.write(PlaySfx::new(Sfx::Coins));

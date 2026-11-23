@@ -216,7 +216,12 @@ fn rejects_region_level_unreachable_by_harvesting() {
 #[test]
 fn rejects_unaffordable_required_tools() {
     let mut d = raw();
-    d.tools[0].price = 1_000_000;
+    let ribbon = d
+        .tools
+        .iter_mut()
+        .find(|t| t.id == "binding_ribbon")
+        .unwrap();
+    ribbon.price = 1_000_000;
     assert_flags(d, "guaranteed income");
 }
 

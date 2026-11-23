@@ -168,6 +168,9 @@ pub enum ToolEffect {
     },
     /// Raises the workshop batch capacity to at least this value.
     CraftBatchCapacity(u32),
+    /// Lets the player carry this many more flowers before going back to
+    /// the hut (adds up across every owned tool).
+    CarryCapacity(u32),
 }
 
 impl ToolEffect {
@@ -177,7 +180,9 @@ impl ToolEffect {
             ToolEffect::RadiusMode { .. } => Some(HarvestMode::Radius),
             ToolEffect::SweepMode { .. } => Some(HarvestMode::Sweep),
             ToolEffect::AreaMode { .. } => Some(HarvestMode::Area),
-            ToolEffect::HarvestCooldownMultiplier(_) | ToolEffect::CraftBatchCapacity(_) => None,
+            ToolEffect::HarvestCooldownMultiplier(_)
+            | ToolEffect::CraftBatchCapacity(_)
+            | ToolEffect::CarryCapacity(_) => None,
         }
     }
 }
@@ -343,6 +348,14 @@ pub struct HarvestingConfig {
     pub area_cooldown_secs: f32,
     /// Ground targets may be this much further away than flower reach.
     pub ground_reach_bonus: f32,
+    /// Flowers the player can carry with nothing but their hands. Tools
+    /// and skills add to it; flowers are left at the hut to make room.
+    #[serde(default = "default_carry_capacity")]
+    pub base_carry_capacity: u32,
+}
+
+fn default_carry_capacity() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

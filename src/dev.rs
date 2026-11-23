@@ -591,6 +591,16 @@ fn drive(
                     smoke.check("it is in the basket", in_basket, species);
                     smoke.picked.push(flower);
                 }
+                // A new player carries one flower at a time; the hut takes
+                // it off their hands (standing in for the walk there).
+                if let Some(s) = session_mut.as_deref_mut() {
+                    smoke.check(
+                        "hands full after one flower",
+                        s.carry_space() == 0,
+                        format!("{} / {}", s.carried(), s.carry_capacity()),
+                    );
+                    s.set_at_workshop(true);
+                }
                 if smoke.picked.len() < PICKS {
                     smoke.step = 6; // → 7 again
                 }
@@ -733,6 +743,10 @@ fn drive(
             39 => {
                 let gained = harvested(session_mut.as_deref()) - smoke.mark_count;
                 smoke.check("holding E sweeps flowers up", gained > 0, gained);
+                // Empty hands before the cart (as after a trip to the hut).
+                if let Some(s) = session_mut.as_deref_mut() {
+                    s.set_at_workshop(true);
+                }
                 smoke.tap(KeyCode::Digit4);
                 0.2
             }
@@ -927,7 +941,7 @@ fn drive(
                     .unwrap_or_default();
                 smoke.check(
                     "Enter learns skills, arrows move between them",
-                    learned == ["botanical_knowledge", "flower_recognition", "quick_fingers"],
+                    learned == ["botanical_knowledge", "flower_recognition", "strong_arms"],
                     learned.join(","),
                 );
                 smoke.shot(&mut commands, "17_skills_learned");
@@ -1382,6 +1396,9 @@ fn complete_game(game: &bloom_core::Game) -> Result<bloom_core::Game, String> {
             let (c, _) = field.pick_sphere(i);
             g.tick(1.0);
             g.harvest(r, i, c + Vec3::Y).map_err(|e| e.to_string())?;
+            // Carry limit: leave every flower at the hut straight away.
+            g.set_at_workshop(true);
+            g.set_at_workshop(false);
         }
     }
     g.tick(1_000.0);
