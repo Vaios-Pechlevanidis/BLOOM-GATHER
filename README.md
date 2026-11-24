@@ -36,6 +36,17 @@ come back. See [TODO.md](TODO.md) and
 
 ## Quick start
 
+**Start the game** (code already checked out, Rust installed):
+
+```bash
+cd ~/BLOOM-GATHER
+export PATH="/opt/homebrew/opt/rustup/bin:$PATH"   # only for Homebrew's rustup on macOS
+cargo run --release
+```
+
+The first build takes about 3 minutes; later starts take seconds. If no
+window appears, it may be behind your editor (Cmd+Tab to "bloom-and-gather").
+
 **Just play** (installs the latest release and starts it; run again to update):
 
 ```bash
