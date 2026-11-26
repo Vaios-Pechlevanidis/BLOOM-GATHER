@@ -250,8 +250,13 @@ fn terrain_chunk(
 pub const TREE_MODEL_HEIGHT: f32 = 6.0;
 
 /// Four tree silhouettes: round oak, tall poplar, a green tree dotted with
-/// blooms, and a tree in full blossom (canopy in the accent colour).
+/// blooms, and a tree in full blossom (canopy in the accent colour). If the
+/// game ships a tree model, all four are that model.
 pub fn tree_variants(palette: &RegionPalette) -> [Mesh; 4] {
+    // A modelled tree (`assets/trees/tree.glb`) replaces all of them.
+    if let Some(tree) = crate::flowers::imported::tree_mesh(TREE_MODEL_HEIGHT) {
+        return [tree.clone(), tree.clone(), tree.clone(), tree];
+    }
     let bark_dark = lin(Color::srgb_u8(104, 80, 62));
     let bark_light = lin(Color::srgb_u8(146, 114, 86));
     let leaf_dark = lin(color(palette.ground_dark)) * 0.72;

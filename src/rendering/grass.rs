@@ -1,5 +1,6 @@
-//! Decorative meadow grass: thousands of tapered blades merged into 16 m
-//! chunk meshes, swaying with the wind shader.
+//! Decorative grass: thousands of tapered blades merged into 16 m chunk
+//! meshes, swaying with the wind shader. Leaves on the flower beds, and the
+//! meadow's tufts unless the meadow is laid with the lawn model (`lawn`).
 //!
 //! Grass is pure decoration. It is never harvestable, never counted, and
 //! deliberately leaves room around every flower so flowers stay easy to see
@@ -160,6 +161,8 @@ fn spawn_grass(
     let leaf_base = lin(Color::srgb_u8(58, 92, 52));
     let leaf_tip = lin(Color::srgb_u8(112, 152, 92));
     let fields = layout.fields.as_ref();
+    // The lawn model covers the meadow; only the beds' leaves remain here.
+    let meadow = !super::lawn::has_lawn();
 
     // Grass grows up to the fence.
     let min = layout.bounds_min - Vec2::splat(1.0);
@@ -212,6 +215,9 @@ fn spawn_grass(
                             );
                             blades_total += 1;
                         }
+                        continue;
+                    }
+                    if !meadow {
                         continue;
                     }
                     let density = (0.55 + 0.45 * patches(p)) * grass_density;

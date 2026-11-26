@@ -1,5 +1,5 @@
-//! World rendering: the 3D camera, the region scene (terrain, props, grass,
-//! landmarks), sky and clouds, and the wind material.
+//! World rendering: the 3D camera, the region scene (terrain, props, lawn,
+//! grass, landmarks), sky and clouds, and the wind material.
 //!
 //! Rendering only *reads* game state. Placement and collision come from
 //! `bloom_core`, so what you see and what you bump into always agree.
@@ -11,6 +11,7 @@ mod critters;
 pub mod daylight;
 mod grass;
 mod landmarks;
+mod lawn;
 pub mod meshes;
 mod scene;
 mod scenery;
@@ -34,6 +35,7 @@ impl Plugin for RenderingPlugin {
             camera::CameraPlugin,
             scene::ScenePlugin,
             grass::GrassPlugin,
+            lawn::LawnPlugin,
             daylight::DaylightPlugin,
             sky::SkyPlugin,
             landmarks::LandmarksPlugin,

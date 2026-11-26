@@ -71,10 +71,6 @@ const SOIL_NEAR: f32 = 8.0;
 /// stays underneath as backing.
 const SOIL_LIFT: f32 = 0.012;
 
-/// Plants of a modelled species stand this much of their width apart, so
-/// each stands on its own with soil between the leaves.
-const SPACING: f32 = 1.3;
-
 #[derive(Clone, Copy)]
 struct Bloom {
     ground: Vec3,
@@ -183,7 +179,8 @@ struct SoilPlacement {
 /// model near the player, then the middle and the simple version.
 struct Clump {
     models: [Plant; 3],
-    /// Distance between neighbouring plants (metres, as drawn).
+    /// Distance between neighbouring plants (metres, as drawn): half the
+    /// species' hitbox (the radius of its look-at sphere).
     spacing: f32,
 }
 
@@ -193,7 +190,7 @@ impl Clump {
         let low = imported::load_version(species, "low")?;
         let mid = imported::load_version(species, "mid").unwrap_or_else(|| low.clone());
         let full = imported::load_plant(species).unwrap_or_else(|| mid.clone());
-        let spacing = (full.reach() * scale * 2.0 * SPACING).clamp(0.1, 1.5);
+        let spacing = bloom_core::world::flowers::pick_radius(species.height * scale);
         Some(Self {
             models: [full, mid, low],
             spacing,
@@ -468,8 +465,8 @@ fn lay_out(
                     let p = Vec2::new(x, z)
                         + Vec2::new(rng.range_f32(-1.0, 1.0), rng.range_f32(-1.0, 1.0))
                             * (step * 0.06);
-                    // Leave room for the pickable flowers.
-                    if !field.query_radius(p, step * 0.75, &none).is_empty() {
+                    // Half a hitbox from the pickable flowers too.
+                    if !field.query_radius(p, step, &none).is_empty() {
                         continue;
                     }
                     let Some(owner) = owner_near(p) else { continue };

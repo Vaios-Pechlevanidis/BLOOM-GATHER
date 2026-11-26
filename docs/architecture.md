@@ -188,7 +188,10 @@ profiling ever shows a need.
   `scripts/flower_model.py` prepares one). The bulb field beds are built from
   a stone-framed soil model (`assets/beds/soil.glb`, cut into start, middle
   and end pieces by `scripts/bed_soil.py`), laid over the terrain ridges
-  (`src/rendering/beds.rs`).
+  (`src/rendering/beds.rs`). The meadow near the player is laid with tiles of
+  a modelled lawn (`assets/lawn/lawn.glb`, cut by `scripts/lawn_tile.py`;
+  `src/rendering/lawn.rs`). Every tree is a modelled one
+  (`assets/trees/tree.glb`, used by `meshes::tree_variants`).
 
 ## 7. Flower world (implemented in Phase B)
 

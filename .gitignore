@@ -4,3 +4,7 @@
 # Local save data written during development runs
 /saves/
 /dist
+
+# Python bytecode (from running the asset scripts)
+__pycache__/
+*.pyc

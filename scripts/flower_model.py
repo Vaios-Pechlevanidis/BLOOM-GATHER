@@ -283,11 +283,19 @@ def main() -> None:
     ap.add_argument("--triangles", type=int, default=2500, help="triangle budget")
     ap.add_argument("--mid-triangles", type=int, default=700, help="budget for beds near the player")
     ap.add_argument("--low-triangles", type=int, default=160, help="budget for beds and flowers far away")
+    ap.add_argument("--out", type=pathlib.Path,
+                    help="write only the full model, here (for models that are not flowers, e.g. a tree)")
     args = ap.parse_args()
 
     positions, colours, triangles = gather(Glb(args.model))
     before = len(triangles)
     positions, colours, triangles = weld(positions, colours, triangles)
+    if args.out:
+        p, c, t = simplify(positions, colours, triangles, args.triangles)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        write_glb(args.out, p, smooth_normals(p, t), c, t)
+        print(f"{before} -> {len(t)} triangles, {len(p)} vertices: {args.out} ({args.out.stat().st_size // 1024} KB)")
+        return
     folder = pathlib.Path(__file__).resolve().parent.parent / "assets" / "flowers"
     versions = [
         (args.species, args.triangles),

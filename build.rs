@@ -1,5 +1,6 @@
 //! Embeds the flower pictures (`assets/flowers/*.png`), flower models
-//! (`assets/flowers/*.glb`) and flower bed models (`assets/beds/*.glb`) into
+//! (`assets/flowers/*.glb`), flower bed models (`assets/beds/*.glb`), the
+//! lawn (`assets/lawn/*.glb`) and the tree (`assets/trees/*.glb`) into
 //! the binary, like every other asset of the game, so a release needs no
 //! assets folder. Adding or changing one triggers a rebuild.
 
@@ -12,6 +13,8 @@ fn main() {
         ("flowers", "FILES", "png", "Painted flower pictures"),
         ("flowers", "MODELS", "glb", "Flower models"),
         ("beds", "BEDS", "glb", "Flower bed models"),
+        ("lawn", "LAWN", "glb", "Lawn models"),
+        ("trees", "TREES", "glb", "Tree models"),
     ] {
         let dir = Path::new(&root).join("assets").join(folder);
         println!("cargo:rerun-if-changed={}", dir.display());

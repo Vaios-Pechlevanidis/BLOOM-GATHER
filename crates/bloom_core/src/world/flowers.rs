@@ -398,7 +398,7 @@ impl FlowerField {
     /// bloom, generous enough to be easy to target.
     pub fn pick_sphere(&self, i: u32) -> (Vec3, f32) {
         let h = self.bloom_heights[i as usize];
-        let radius = (0.12 + h * 0.28).clamp(0.22, 0.6);
+        let radius = pick_radius(h);
         let center = self.ground_point(i) + Vec3::Y * (h - radius * 0.5).max(radius * 0.6);
         (center, radius)
     }
@@ -485,6 +485,12 @@ fn ray_sphere(origin: Vec3, dir: Vec3, center: Vec3, radius: f32) -> Option<f32>
 }
 
 /// Uniform grid of flower indices.
+/// Radius of a flower's look-at sphere (its "hitbox") for a bloom
+/// `bloom_height` metres above the ground.
+pub fn pick_radius(bloom_height: f32) -> f32 {
+    (0.12 + bloom_height * 0.28).clamp(0.22, 0.6)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

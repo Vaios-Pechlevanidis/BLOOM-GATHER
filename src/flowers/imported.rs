@@ -36,6 +36,34 @@ pub fn load_version(species: &FlowerSpecies, version: &str) -> Option<Plant> {
     plant(species, &format!("{}_{version}", species.id))
 }
 
+/// The tree (`assets/trees/tree.glb`), if there is one: rooted at the
+/// origin, `height` tall, without the flat ground disc such models often
+/// stand on (the terrain is the ground).
+pub fn tree_mesh(height: f32) -> Option<Mesh> {
+    let bytes = super::embedded::TREES
+        .iter()
+        .find(|(n, _)| *n == "tree")
+        .map(|(_, b)| *b)?;
+    let mut tree = match parse(bytes) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!("Tree model unreadable: {e}");
+            return None;
+        }
+    };
+    tree.drop_ground_disc();
+    tree.stand(height);
+    Some(tree.into_mesh())
+}
+
+/// The meadow lawn tile (`assets/lawn/lawn.glb`), if there is one.
+pub fn lawn_model() -> Option<&'static [u8]> {
+    super::embedded::LAWN
+        .iter()
+        .find(|(n, _)| *n == "lawn")
+        .map(|(_, b)| *b)
+}
+
 /// A flower bed model from `assets/beds/<name>.glb`, if there is one.
 pub fn bed_model(name: &str) -> Option<&'static [u8]> {
     super::embedded::BEDS
@@ -187,14 +215,6 @@ fn finish(mut plant: Plant) -> Result<Plant, String> {
 }
 
 impl Plant {
-    /// How far the plant reaches out from its stem (leaves included).
-    pub fn reach(&self) -> f32 {
-        self.positions
-            .iter()
-            .map(|p| Vec2::new(p.x, p.z).length())
-            .fold(0.0, f32::max)
-    }
-
     /// Stand the plant up: its lowest point on the ground, the middle of its
     /// lowest part (the stem base) at the origin, and `height` tall.
     fn stand(&mut self, height: f32) {
@@ -215,6 +235,39 @@ impl Plant {
         for p in &mut self.positions {
             *p = Vec3::new(p.x - stem.x, p.y - low, p.z - stem.z) * scale;
         }
+    }
+
+    /// Remove flat, upward-facing triangles at the very bottom (a ground
+    /// disc), and the vertices only they used.
+    fn drop_ground_disc(&mut self) {
+        let (low, high) = self
+            .positions
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), p| (l.min(p.y), h.max(p.y)));
+        let flat = (high - low) * 0.012;
+        let keep: Vec<u32> = self
+            .indices
+            .chunks_exact(3)
+            .filter(|t| {
+                let at_bottom = t.iter().all(|&i| self.positions[i as usize].y < low + flat);
+                let level = t.iter().all(|&i| self.normals[i as usize].y.abs() > 0.8);
+                !(at_bottom && level)
+            })
+            .flatten()
+            .copied()
+            .collect();
+        let mut map = vec![u32::MAX; self.positions.len()];
+        let mut plant = Plant::default();
+        for &i in &keep {
+            if map[i as usize] == u32::MAX {
+                map[i as usize] = plant.positions.len() as u32;
+                plant.positions.push(self.positions[i as usize]);
+                plant.normals.push(self.normals[i as usize]);
+                plant.colors.push(self.colors[i as usize]);
+            }
+            plant.indices.push(map[i as usize]);
+        }
+        *self = plant;
     }
 
     /// Area-weighted smooth normals for vertices the model gave none.
@@ -288,6 +341,26 @@ mod tests {
         // The stem base (not the middle of the wide top) is at the origin.
         let foot = plant.positions[..3].iter().sum::<Vec3>() / 3.0;
         assert!(foot.x.abs() < 1e-6 && foot.z.abs() < 1e-6, "{foot}");
+    }
+
+    #[test]
+    fn the_tree_stands_on_the_ground_at_its_height() {
+        let mesh = tree_mesh(6.0).expect("assets/trees/tree.glb");
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("positions");
+        };
+        let low = p.iter().map(|v| v[1]).fold(f32::MAX, f32::min);
+        let high = p.iter().map(|v| v[1]).fold(f32::MIN, f32::max);
+        assert!(low.abs() < 1e-4 && (high - 6.0).abs() < 1e-3);
+        // No ground disc: nothing wide lies flat at the very bottom.
+        let wide = p
+            .iter()
+            .filter(|v| v[1] < 0.05)
+            .map(|v| v[0].hypot(v[2]))
+            .fold(0.0f32, f32::max);
+        assert!(wide < 1.5, "{wide}");
     }
 
     #[test]
