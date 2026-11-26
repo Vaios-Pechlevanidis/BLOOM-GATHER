@@ -9,13 +9,20 @@
 //!    exist in the world; the player resumes where they stood.
 //!
 //! Input is injected through the same `ButtonInput` / `AccumulatedMouseMotion`
-//! resources real devices feed. The save folder is `<dir>/save`, never the
-//! player's real one. Screenshots of every step land in `<dir>`.
+//! resources real devices feed; real keyboard and mouse input never reaches
+//! the game while the test runs (a stray key or click, say on the title
+//! screen's buttons as the window opens, would derail it). The save folder is
+//! `<dir>/save`, never the player's real one. Screenshots of every step land
+//! in `<dir>`.
 
 use std::path::PathBuf;
 
-use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::input::keyboard::KeyboardInput;
+use bevy::input::mouse::{
+    AccumulatedMouseMotion, AccumulatedMouseScroll, MouseButtonInput, MouseWheel,
+};
 use bevy::input::InputSystems;
+use bevy::picking::input::PointerInputSettings;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
@@ -80,6 +87,13 @@ impl Plugin for SmokeTestPlugin {
             master_volume: 0.0,
             ..default()
         })
+        // The real mouse doesn't hover or click the UI either (buttons are
+        // clicked through their `Activate` event, see `click_button`).
+        .insert_resource(PointerInputSettings {
+            is_touch_enabled: false,
+            is_mouse_enabled: false,
+        })
+        .add_systems(PreUpdate, drop_real_input.before(InputSystems))
         .add_systems(PreUpdate, inject_input.after(InputSystems))
         .add_systems(Update, drive);
     }
@@ -209,13 +223,29 @@ impl Smoke {
     }
 }
 
+/// Throw away what real keyboards and mice sent this frame, before the input
+/// resources and focused UI widgets (Enter on a focused button) see it.
+fn drop_real_input(
+    mut keyboard: ResMut<Messages<KeyboardInput>>,
+    mut buttons: ResMut<Messages<MouseButtonInput>>,
+    mut wheel: ResMut<Messages<MouseWheel>>,
+) {
+    keyboard.clear();
+    buttons.clear();
+    wheel.clear();
+}
+
 fn inject_input(
     time: Res<Time<Real>>,
     mut smoke: ResMut<Smoke>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut mouse_buttons: ResMut<ButtonInput<MouseButton>>,
     mut motion: ResMut<AccumulatedMouseMotion>,
+    mut scroll: ResMut<AccumulatedMouseScroll>,
 ) {
     let dt = time.delta_secs();
+    mouse_buttons.reset_all();
+    scroll.delta = Vec2::ZERO;
     // Only injected input counts: whatever the person at the computer does
     // with the real keyboard and mouse while the test runs is discarded.
     // Injected held keys stay held (no fresh "just pressed" every frame).

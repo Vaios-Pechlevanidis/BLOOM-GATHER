@@ -33,3 +33,39 @@ transparent background (PNG, WebP, ...) into this format.
 `<species id>_glow.png` (same size, black except the parts that glow) makes
 those parts glow in the species' petal colour. Without it, a pictured night
 flower does not glow.
+
+# Flower models
+
+A 3D model named after a species id (`daisy.glb`, ...) replaces that species'
+procedural model, and its picture if it also has one. Unlike a picture it is
+real geometry, so it looks right from every side and casts a true shadow.
+
+Models are embedded into the game at build time: rebuild after adding or
+changing one.
+
+`scripts/flower_model.py <model.glb> <species id>` turns a model from a 3D
+tool or generator into this format:
+
+| | |
+|---|---|
+| File | binary glTF, `<species id>.glb` |
+| Geometry | triangles; positions, normals and vertex colours (`COLOR_0`) |
+| Colour | vertex colours only: the script bakes the base-colour texture in |
+| Size | about 2500 triangles (`--triangles`); a meadow holds hundreds |
+| Orientation | upright, +Y up (as glTF is); size and position do not matter |
+
+The game measures each model: its lowest point goes on the ground, the middle
+of its lowest part (the stem base) at the flower's spot, and its top at the
+species' `height`. Like the procedural flowers it sways in the wind (the more,
+the higher up) and shares their material.
+
+The script also writes two simpler versions of the same plant:
+`<species id>_mid.glb` (about 700 triangles) and `<species id>_low.glb`
+(about 160). A bed of a modelled species is planted in neat, staggered rows
+of copies of the plant around its pickable flowers, just far enough apart
+that each stands on its own: the full model within a few metres of the
+player, the middle version further on, the simple one in the distance. The
+simple one also stands in for the pickable flower far away. Without them the
+species keeps the old simple stand-in and decorative blooms.
+
+A modelled night flower does not glow (yet).

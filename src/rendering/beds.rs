@@ -5,10 +5,14 @@
 //! is drawn as a *clump*: the real, pickable model plus a handful of simple
 //! decorative blooms of its species packed around it. Picking the flower
 //! takes its whole clump with it, so what you see always matches what is
-//! left to pick (strays stand alone).
+//! left to pick (strays stand alone). A bed of a species with an imported
+//! model (`flowers::imported`) is planted in neat rows of copies of it
+//! instead, spaced so the plants don't grow into each other: the full model
+//! near the player, simpler versions further away.
 //!
-//! Each bed is one merged, wind-swayed mesh, rebuilt only when one of its
-//! flowers is picked.
+//! Each bed is drawn in pieces, each one merged, wind-swayed mesh, rebuilt
+//! only when one of its flowers is picked or the player comes near or
+//! leaves.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
@@ -22,6 +26,7 @@ use super::color;
 use super::meshes::lin;
 use super::scene::SceneEntity;
 use super::wind::{wind_material, Wind, WindMaterial};
+use crate::flowers::imported::{self, Plant};
 use crate::game::{Content, RegionScene, Session};
 
 pub struct BedsPlugin;
@@ -38,8 +43,23 @@ impl Plugin for BedsPlugin {
     }
 }
 
-/// Decorative blooms per metre of bed.
+/// Decorative blooms per metre of bed (species drawn the simple way).
 const BLOOMS_PER_METRE: f32 = 42.0;
+
+/// Beds are drawn in pieces this long (metres), each one mesh, so the
+/// pieces near the player can use the finer models.
+const CHUNK_LENGTH: f32 = 4.0;
+
+/// Pieces of bed closer than these (metres, to their middle) use the full
+/// model and the middle version; further away, the simple one. A piece
+/// switches back to a coarser one only `SLACK` beyond.
+const NEAR: f32 = 7.0;
+const MIDDLE: f32 = 18.0;
+const SLACK: f32 = 2.0;
+
+/// Plants of a modelled species stand this much of their width apart, so
+/// each stands on its own with soil between the leaves.
+const SPACING: f32 = 1.3;
 
 #[derive(Clone, Copy)]
 struct Bloom {
@@ -53,21 +73,50 @@ struct Bloom {
     tint: f32,
 }
 
+/// One piece of a bed, drawn as one mesh.
 #[derive(Default)]
-struct BedBlooms {
+struct Chunk {
+    /// Middle of the piece (X, Z).
+    centre: Vec2,
     blooms: Vec<Bloom>,
     owners: Vec<u32>,
-    /// Unpicked owners when the mesh was last built.
+    /// Unpicked owners and level of detail (0 finest) when the mesh was
+    /// last built.
     built_with: usize,
+    detail: usize,
     entity: Option<Entity>,
+}
+
+/// The models a species' decorative blooms copy, finest first: the full
+/// model near the player, then the middle and the simple version.
+struct Clump {
+    models: [Plant; 3],
+    /// Distance between neighbouring plants (metres, as drawn).
+    spacing: f32,
+}
+
+impl Clump {
+    /// `scale`: how much larger than life flowers are drawn.
+    fn load(species: &bloom_core::data::FlowerSpecies, scale: f32) -> Option<Self> {
+        let low = imported::load_version(species, "low")?;
+        let mid = imported::load_version(species, "mid").unwrap_or_else(|| low.clone());
+        let full = imported::load_plant(species).unwrap_or_else(|| mid.clone());
+        let spacing = (full.reach() * scale * 2.0 * SPACING).clamp(0.1, 1.5);
+        Some(Self {
+            models: [full, mid, low],
+            spacing,
+        })
+    }
 }
 
 #[derive(Resource, Default)]
 struct Carpet {
     /// (session generation, region) the carpet was laid out for.
     key: Option<(u64, usize)>,
-    beds: Vec<BedBlooms>,
+    chunks: Vec<Chunk>,
     material: Option<Handle<WindMaterial>>,
+    /// Per species: the models its decorative blooms copy, if any.
+    clumps: Option<Vec<Option<Clump>>>,
     since: f32,
 }
 
@@ -83,19 +132,37 @@ fn keep_carpet(
     content: Res<Content>,
     mut carpet: ResMut<Carpet>,
     old: Query<Entity, With<BedCarpet>>,
+    cameras: Query<&GlobalTransform, With<super::MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
 ) {
     let Some(session) = session else { return };
     let key = (session.generation, scene.region);
     let carpet = &mut *carpet;
+    let clumps = carpet.clumps.get_or_insert_with(|| {
+        let scale = content.world.flower_scale;
+        content
+            .species
+            .iter()
+            .map(|s| Clump::load(s, scale))
+            .collect()
+    });
     if carpet.key != Some(key) || scene.is_changed() {
         for e in &old {
             commands.entity(e).despawn();
         }
         carpet.key = Some(key);
-        carpet.beds = lay_out(&scene, &content);
+        carpet.chunks = lay_out(&scene, &content, clumps);
         carpet.since = f32::MAX;
+        let blooms = carpet.chunks.iter().flat_map(|c| &c.blooms);
+        let (count, modelled) = blooms.fold((0, 0), |(n, m), b| {
+            let clump = clumps[scene.field.species(b.owner)].as_ref();
+            (n + 1, m + usize::from(clump.is_some()))
+        });
+        info!(
+            "Laid out {count} decorative blooms ({modelled} modelled) in {} pieces of bed",
+            carpet.chunks.len()
+        );
         if carpet.material.is_none() {
             carpet.material = Some(materials.add(wind_material(
                 StandardMaterial {
@@ -116,23 +183,47 @@ fn keep_carpet(
     }
     carpet.since = 0.0;
     let material = carpet.material.clone().expect("made above");
+    let eye = cameras
+        .single()
+        .ok()
+        .map(|c| Vec2::new(c.translation().x, c.translation().z));
     let region = scene.region;
-    for bed in &mut carpet.beds {
-        let unpicked = bed
+    for chunk in &mut carpet.chunks {
+        let unpicked = chunk
             .owners
             .iter()
             .filter(|&&i| !session.is_harvested(region, i))
             .count();
-        if bed.entity.is_some() && unpicked == bed.built_with {
+        let distance = eye.map_or(f32::MAX, |e| e.distance(chunk.centre));
+        let mut detail = [NEAR, MIDDLE]
+            .iter()
+            .position(|&d| distance < d)
+            .unwrap_or(2);
+        // Only coarser once clearly past the edge (no flicker on it).
+        if detail > chunk.detail && chunk.entity.is_some() {
+            let edge = [NEAR, MIDDLE][chunk.detail];
+            if distance < edge + SLACK {
+                detail = chunk.detail;
+            }
+        }
+        if chunk.entity.is_some() && unpicked == chunk.built_with && detail == chunk.detail {
             continue;
         }
-        bed.built_with = unpicked;
-        if let Some(e) = bed.entity.take() {
+        chunk.built_with = unpicked;
+        chunk.detail = detail;
+        if let Some(e) = chunk.entity.take() {
             commands.entity(e).despawn();
         }
-        let mesh = build_mesh(bed, |i| !session.is_harvested(region, i), &scene, &content);
+        let mesh = build_mesh(
+            &chunk.blooms,
+            |i| !session.is_harvested(region, i),
+            &scene,
+            &content,
+            clumps,
+            detail,
+        );
         if let Some(mesh) = mesh {
-            bed.entity = Some(
+            chunk.entity = Some(
                 commands
                     .spawn((
                         SceneEntity,
@@ -147,9 +238,12 @@ fn keep_carpet(
     }
 }
 
-/// Spread decorative blooms over every bed and give each to its nearest
-/// pickable (non-stray) flower.
-fn lay_out(scene: &RegionScene, content: &Content) -> Vec<BedBlooms> {
+/// Fill every bed with decorative blooms and give each to its nearest
+/// pickable (non-stray) flower. A bed of a modelled species is planted in
+/// neat staggered rows around its pickable flowers, the plants just far
+/// enough apart not to grow into each other; other beds get a dense random
+/// carpet of simple blooms.
+fn lay_out(scene: &RegionScene, content: &Content, clumps: &[Option<Clump>]) -> Vec<Chunk> {
     let (Some(plan), Some(def)) = (
         scene.layout.fields.as_ref(),
         content.regions[scene.region]
@@ -167,49 +261,115 @@ fn lay_out(scene: &RegionScene, content: &Content) -> Vec<BedBlooms> {
             .iter()
             .any(|s| *s == content.species[field.species(i)].id)
     };
+    let owner_near = |p: Vec2| {
+        field
+            .query_radius(p, 1.3, &none)
+            .into_iter()
+            .filter(|&i| !stray(i))
+            .min_by(|&a, &c| {
+                field
+                    .position(a)
+                    .distance_squared(p)
+                    .total_cmp(&field.position(c).distance_squared(p))
+            })
+    };
     let mut rng = SplitMix64::new(content.regions[scene.region].seed ^ 0xBED5);
-    let usable = plan.bed_width * 0.86;
     let mut out = Vec::new();
     for bed in &plan.beds {
-        let mut b = BedBlooms::default();
-        let length = bed.z1 - bed.z0 - 0.3;
-        let count = (length * BLOOMS_PER_METRE) as usize;
-        for _ in 0..count {
-            let p = Vec2::new(
-                bed.x + rng.range_f32(-usable / 2.0, usable / 2.0),
-                rng.range_f32(bed.z0 + 0.15, bed.z1 - 0.15),
-            );
-            let owner = field
-                .query_radius(p, 1.3, &none)
-                .into_iter()
-                .filter(|&i| !stray(i))
-                .min_by(|&a, &c| {
-                    field
-                        .position(a)
-                        .distance_squared(p)
-                        .total_cmp(&field.position(c).distance_squared(p))
-                });
-            let Some(owner) = owner else { continue };
-            // Not right on top of the real flower.
-            if field.position(owner).distance(p) < 0.12 {
-                continue;
+        let length = bed.z1 - bed.z0;
+        let pieces = (length / CHUNK_LENGTH).ceil().max(1.0) as usize;
+        let mut chunks: Vec<Chunk> = (0..pieces)
+            .map(|k| Chunk {
+                centre: Vec2::new(bed.x, bed.z0 + (k as f32 + 0.5) * length / pieces as f32),
+                ..default()
+            })
+            .collect();
+        let mut add = |p: Vec2, bloom: Bloom| {
+            let k = (((p.y - bed.z0) / length) * pieces as f32) as usize;
+            let chunk = &mut chunks[k.min(pieces - 1)];
+            chunk.blooms.push(bloom);
+            if !chunk.owners.contains(&bloom.owner) {
+                chunk.owners.push(bloom.owner);
             }
-            let species = &content.species[field.species(owner)];
-            let height = species.height * field.scale(owner) * rng.range_f32(0.72, 1.0);
-            b.blooms.push(Bloom {
-                ground: Vec3::new(p.x, scene.layout.terrain.height_at(p), p.y),
-                owner,
-                height,
-                yaw: rng.range_f32(0.0, std::f32::consts::TAU),
-                size: rng.range_f32(0.8, 1.15),
-                lean: Vec2::new(rng.range_f32(-0.12, 0.12), rng.range_f32(-0.12, 0.12)),
-                tint: rng.range_f32(-1.0, 1.0),
-            });
-            if !b.owners.contains(&owner) {
-                b.owners.push(owner);
+        };
+        let ground = |p: Vec2| Vec3::new(p.x, scene.layout.terrain.height_at(p), p.y);
+        // What grows here: the commonest species among the bed's flowers.
+        let middle = Vec2::new(bed.x, (bed.z0 + bed.z1) / 2.0);
+        let mut counts = vec![0u32; content.species.len()];
+        for i in field.query_radius(middle, length / 2.0 + plan.bed_width, &none) {
+            if !stray(i) && plan.bed_at(field.position(i)).is_some_and(|b| b == bed) {
+                counts[field.species(i)] += 1;
             }
         }
-        out.push(b);
+        let main = (0..counts.len()).max_by_key(|&s| counts[s]).unwrap_or(0);
+        if let Some(clump) = clumps.get(main).and_then(Option::as_ref) {
+            // Rows across the bed, the outer two on the pickable flowers'
+            // planting lines; neighbouring rows staggered.
+            let step = clump.spacing;
+            let half = plan.bed_width * 0.36;
+            let rows = ((2.0 * half / (step * 0.87)).round() as usize + 1).max(2);
+            let z_count = ((length - 0.6) / step).floor().max(0.0) as usize;
+            for r in 0..rows {
+                let x = bed.x - half + 2.0 * half * r as f32 / (rows - 1) as f32;
+                let shift = if r % 2 == 1 { step * 0.5 } else { 0.0 };
+                for j in 0..z_count {
+                    let z = bed.z1 - 0.3 - (j as f32 + 0.5) * step - shift;
+                    if z < bed.z0 + 0.3 {
+                        continue;
+                    }
+                    let p = Vec2::new(x, z)
+                        + Vec2::new(rng.range_f32(-1.0, 1.0), rng.range_f32(-1.0, 1.0))
+                            * (step * 0.06);
+                    // Leave room for the pickable flowers.
+                    if !field.query_radius(p, step * 0.75, &none).is_empty() {
+                        continue;
+                    }
+                    let Some(owner) = owner_near(p) else { continue };
+                    let species = &content.species[field.species(owner)];
+                    add(
+                        p,
+                        Bloom {
+                            ground: ground(p),
+                            owner,
+                            height: species.height * field.scale(owner) * rng.range_f32(0.88, 1.0),
+                            yaw: rng.range_f32(0.0, std::f32::consts::TAU),
+                            size: 1.0,
+                            lean: Vec2::new(rng.range_f32(-0.03, 0.03), rng.range_f32(-0.03, 0.03)),
+                            tint: rng.range_f32(-1.0, 1.0),
+                        },
+                    );
+                }
+            }
+        } else {
+            let usable = plan.bed_width * 0.86;
+            let count = ((length - 0.3) * BLOOMS_PER_METRE) as usize;
+            for _ in 0..count {
+                let p = Vec2::new(
+                    bed.x + rng.range_f32(-usable / 2.0, usable / 2.0),
+                    rng.range_f32(bed.z0 + 0.15, bed.z1 - 0.15),
+                );
+                let Some(owner) = owner_near(p) else { continue };
+                // Not right on top of the real flower.
+                if field.position(owner).distance(p) < 0.12 {
+                    continue;
+                }
+                let species = &content.species[field.species(owner)];
+                let height = species.height * field.scale(owner) * rng.range_f32(0.72, 1.0);
+                add(
+                    p,
+                    Bloom {
+                        ground: ground(p),
+                        owner,
+                        height,
+                        yaw: rng.range_f32(0.0, std::f32::consts::TAU),
+                        size: rng.range_f32(0.8, 1.15),
+                        lean: Vec2::new(rng.range_f32(-0.12, 0.12), rng.range_f32(-0.12, 0.12)),
+                        tint: rng.range_f32(-1.0, 1.0),
+                    },
+                );
+            }
+        }
+        out.extend(chunks.into_iter().filter(|c| !c.blooms.is_empty()));
     }
     out
 }
@@ -245,17 +405,24 @@ fn shade(c: LinearRgba, k: f32) -> LinearRgba {
 }
 
 fn build_mesh(
-    bed: &BedBlooms,
+    blooms: &[Bloom],
     unpicked: impl Fn(u32) -> bool,
     scene: &RegionScene,
     content: &Content,
+    clumps: &[Option<Clump>],
+    detail: usize,
 ) -> Option<Mesh> {
     let field = &scene.field;
     let stem = lin(Color::srgb_u8(86, 128, 70));
     let scale = content.world.flower_scale;
     let mut m = Builder::default();
-    for bloom in bed.blooms.iter().filter(|b| unpicked(b.owner)) {
-        let species = &content.species[field.species(bloom.owner)];
+    for bloom in blooms.iter().filter(|b| unpicked(b.owner)) {
+        let index = field.species(bloom.owner);
+        let species = &content.species[index];
+        if let Some(Some(clump)) = clumps.get(index) {
+            add_model(&mut m, &clump.models[detail], bloom, species.height);
+            continue;
+        }
         let petal = shade(lin(color(species.petal_color)), 1.0 + bloom.tint * 0.08);
         let centre = lin(color(species.center_color));
         let top = bloom.ground
@@ -370,6 +537,35 @@ fn build_mesh(
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, m.colors)
         .with_inserted_indices(Indices::U32(m.indices)),
     )
+}
+
+/// A small copy of a species' simple model for `bloom`: its height, turned
+/// and leaning like the bloom, the colours tinted a little.
+fn add_model(m: &mut Builder, model: &Plant, bloom: &Bloom, height: f32) {
+    let scale = bloom.height / height.max(1e-3);
+    let turn = Quat::from_rotation_y(bloom.yaw);
+    let tint = 1.0 + bloom.tint * 0.08;
+    let base = m.positions.len() as u32;
+    for ((p, n), c) in model
+        .positions
+        .iter()
+        .zip(&model.normals)
+        .zip(&model.colors)
+    {
+        let local = turn * (*p * scale);
+        let lean = Vec3::new(bloom.lean.x, 0.0, bloom.lean.y) * local.y;
+        m.positions.push((bloom.ground + local + lean).to_array());
+        m.normals.push((turn * *n).to_array());
+        // Rooted at the ground, freest at the bloom (as `sway_by_height`).
+        let t = (p.y / height.max(1e-3)).clamp(0.0, 1.0);
+        m.colors.push([
+            c[0] * tint,
+            c[1] * tint,
+            c[2] * tint,
+            t * t * (3.0 - 2.0 * t),
+        ]);
+    }
+    m.indices.extend(model.indices.iter().map(|i| base + i));
 }
 
 /// Colours of the neighbours' fields (sRGB): tulips and hyacinths in bloom.

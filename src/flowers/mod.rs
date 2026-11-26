@@ -7,9 +7,15 @@
 //! module mirrors it. A harvested flower is despawned after its animation and
 //! never spawned again — on reload, harvested indices are simply skipped.
 
+pub mod imported;
 pub mod models;
 mod sparkles;
 mod sprites;
+
+/// Flower pictures and models from `assets/flowers`, embedded by `build.rs`.
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/flower_sprites.rs"));
+}
 
 use std::collections::HashMap;
 
@@ -178,6 +184,7 @@ fn ensure_assets(
     let mut highlights = Vec::new();
     let mut pictures = Vec::new();
     let mut particle_materials = Vec::new();
+    let mut imported = 0;
     for species in &content.species {
         let petal = color(species.petal_color);
         particle_materials.push(materials.add(StandardMaterial {
@@ -185,6 +192,26 @@ fn ensure_assets(
             perceptual_roughness: 0.7,
             ..default()
         }));
+        if let Some(mut plant) = imported::load(species) {
+            // A model from a 3D tool: vertex-coloured like the procedural
+            // models, so it shares their material. Not a night flower's
+            // glow (the model has no separate glowing parts).
+            let mut far = match imported::load_version(species, "low") {
+                Some(low) => low.into_mesh(),
+                None => models::build_far(species, &plant),
+            };
+            sway_by_height(&mut plant, 0.0, species.height, 1.0);
+            sway_by_height(&mut far, 0.0, species.height, 1.0);
+            plants.push(meshes.add(plant));
+            fars.push(meshes.add(far));
+            glows.push(None);
+            glow_materials.push(None);
+            bodies.push(shared.clone());
+            highlights.push(shared_highlight.clone());
+            pictures.push(None);
+            imported += 1;
+            continue;
+        }
         if let Some(sprite) = sprites::load(species) {
             // A painted picture on a card: cheap enough to serve near and
             // far alike.
@@ -255,7 +282,7 @@ fn ensure_assets(
         .map(|m| m.indices().map_or(0, |i| i.len() / 3))
         .sum();
     info!(
-        "Built {} flower models ({} from pictures) in {:.1} ms ({} triangles on average)",
+        "Built {} flower models ({} from pictures, {imported} imported) in {:.1} ms ({} triangles on average)",
         plants.len(),
         pictures.iter().flatten().count(),
         started.elapsed().as_secs_f64() * 1000.0,

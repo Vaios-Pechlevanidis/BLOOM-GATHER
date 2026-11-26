@@ -182,7 +182,10 @@ profiling ever shows a need.
   in TODO.md); painted glTF models replace them later without code changes to
   gameplay, because placement and collision come from `bloom_core`. Flowers
   can already be painted pictures: `assets/flowers/<species id>.png`, embedded
-  by `build.rs` and drawn as a card turned to the player (`src/flowers/sprites.rs`).
+  by `build.rs` and drawn as a card turned to the player (`src/flowers/sprites.rs`),
+  or vertex-coloured glTF models: `assets/flowers/<species id>.glb`, embedded
+  the same way and stood up at the species' height (`src/flowers/imported.rs`;
+  `scripts/flower_model.py` prepares one).
 
 ## 7. Flower world (implemented in Phase B)
 

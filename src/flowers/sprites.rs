@@ -20,10 +20,6 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bloom_core::data::FlowerSpecies;
 
-mod embedded {
-    include!(concat!(env!("OUT_DIR"), "/flower_sprites.rs"));
-}
-
 /// Alpha below this is cut away (`AlphaMode::Mask`).
 pub const CUTOFF: f32 = 0.5;
 
@@ -64,7 +60,7 @@ pub fn load(species: &FlowerSpecies) -> Option<FlowerSprite> {
 }
 
 fn find(name: &str) -> Option<&'static [u8]> {
-    embedded::FILES
+    super::embedded::FILES
         .iter()
         .find(|(n, _)| *n == name)
         .map(|(_, b)| *b)

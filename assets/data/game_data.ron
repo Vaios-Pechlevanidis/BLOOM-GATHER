@@ -50,7 +50,7 @@
         terrain_cell: 0.5,
         // Flowers are drawn (and picked) larger than life so they read well
         // from eye height; species heights below are botanical sizes.
-        flower_scale: 2.2,
+        flower_scale: 1.4,
         boundary_margin: 4.0,
     ),
 
