@@ -123,8 +123,10 @@ pub fn terrain_chunks(
     let bed = mix(dark, lin(Color::srgb_u8(96, 86, 66)), 0.55);
     let furrow = lin(Color::srgb_u8(170, 140, 102));
     let furrow_light = lin(Color::srgb_u8(204, 176, 132));
-    let leaf_soil = lin(Color::srgb_u8(104, 112, 66));
-    let leaf = lin(Color::srgb_u8(78, 116, 60));
+    // The beds' crowns: the brown of the bed soil model laid over them
+    // (`beds::soil_mesh`), so nothing green shows through its seams.
+    let bed_soil = lin(Color::srgb_u8(120, 62, 32));
+    let bed_soil_light = lin(Color::srgb_u8(150, 82, 44));
     let across = rows.map(|r| {
         let a = r.angle_deg.to_radians();
         (Vec2::new(-a.sin(), a.cos()), r.spacing)
@@ -160,15 +162,17 @@ pub fn terrain_chunks(
                     c = mix(c, bed, wet);
                 }
             }
-            // Bulb fields: sandy furrows between raised beds whose crowns
-            // are dark with leaves; the rest stays meadow.
+            // Bulb fields: sandy furrows between raised beds of brown soil;
+            // the rest stays meadow.
             if let Some(plan) = &layout.fields {
                 if plan.in_planted_area(p, 0.35) {
                     let w = plan.bed_weight(p);
                     let grain = hash3(Vec3::new(p.x * 3.1, 0.0, p.y * 3.1)) * 0.5 + 0.5;
                     let sand = mix(furrow, furrow_light, grain * 0.6 + (v - 0.5) * 0.4);
-                    let crown = mix(leaf_soil, leaf, grain * 0.35);
-                    c = mix(sand, crown, w);
+                    let crown = mix(bed_soil, bed_soil_light, grain * 0.5);
+                    // Brown only right under the soil model, so it doesn't
+                    // bleed into the grass beyond a bed's end.
+                    c = mix(sand, crown, smoothstep(0.9, 1.0, w));
                 }
             }
             let d = layout.distance_to_path(p);

@@ -185,7 +185,10 @@ profiling ever shows a need.
   by `build.rs` and drawn as a card turned to the player (`src/flowers/sprites.rs`),
   or vertex-coloured glTF models: `assets/flowers/<species id>.glb`, embedded
   the same way and stood up at the species' height (`src/flowers/imported.rs`;
-  `scripts/flower_model.py` prepares one).
+  `scripts/flower_model.py` prepares one). The bulb field beds are built from
+  a stone-framed soil model (`assets/beds/soil.glb`, cut into start, middle
+  and end pieces by `scripts/bed_soil.py`), laid over the terrain ridges
+  (`src/rendering/beds.rs`).
 
 ## 7. Flower world (implemented in Phase B)
 

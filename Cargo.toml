@@ -33,7 +33,7 @@ ron.workspace = true
 # Only for the window icon on Windows and Linux; the same version Bevy uses.
 winit = { version = "0.30", default-features = false }
 # Reads the flower models (`assets/flowers/*.glb`); the same version Bevy uses.
-gltf = { version = "1.4", default-features = false, features = ["utils"] }
+gltf = { version = "1.4", default-features = false, features = ["utils", "names"] }
 
 [features]
 # Faster incremental rebuilds during development: `cargo run --features dev`.

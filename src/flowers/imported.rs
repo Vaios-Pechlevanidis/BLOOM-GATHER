@@ -36,6 +36,14 @@ pub fn load_version(species: &FlowerSpecies, version: &str) -> Option<Plant> {
     plant(species, &format!("{}_{version}", species.id))
 }
 
+/// A flower bed model from `assets/beds/<name>.glb`, if there is one.
+pub fn bed_model(name: &str) -> Option<&'static [u8]> {
+    super::embedded::BEDS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, b)| *b)
+}
+
 fn plant(species: &FlowerSpecies, name: &str) -> Option<Plant> {
     let bytes = super::embedded::MODELS
         .iter()
@@ -75,67 +83,95 @@ fn parse(bytes: &[u8]) -> Result<Plant, String> {
     while let Some((node, parent)) = stack.pop() {
         let at = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
         stack.extend(node.children().map(|c| (c, at)));
-        let Some(mesh) = node.mesh() else { continue };
-        for primitive in mesh.primitives() {
-            if primitive.mode() != gltf::mesh::Mode::Triangles {
-                continue;
-            }
-            let reader = primitive.reader(|buffer| match buffer.source() {
-                gltf::buffer::Source::Bin => blob,
-                gltf::buffer::Source::Uri(_) => None,
-            });
-            let Some(positions) = reader.read_positions() else {
-                continue;
-            };
-            let base = plant.positions.len() as u32;
-            plant
-                .positions
-                .extend(positions.map(|p| at.transform_point3(Vec3::from(p))));
-            let count = plant.positions.len() - base as usize;
-            let normal_matrix = Mat3::from_mat4(at).inverse().transpose();
-            match reader.read_normals() {
-                Some(n) => plant
-                    .normals
-                    .extend(n.map(|n| (normal_matrix * Vec3::from(n)).normalize_or(Vec3::Y))),
-                None => plant.normals.extend(std::iter::repeat_n(Vec3::ZERO, count)),
-            }
-            let factor = primitive
-                .material()
-                .pbr_metallic_roughness()
-                .base_color_factor();
-            match reader.read_colors(0) {
-                Some(c) => plant.colors.extend(
-                    c.into_rgba_f32()
-                        .map(|c| std::array::from_fn(|k| c[k] * factor[k])),
-                ),
-                None => plant.colors.extend(std::iter::repeat_n(factor, count)),
-            }
-            let flip = at.determinant() < 0.0;
-            match reader.read_indices() {
-                Some(i) => {
-                    let i: Vec<u32> = i.into_u32().collect();
-                    for t in i.chunks_exact(3) {
-                        let t = if flip {
-                            [t[0], t[2], t[1]]
-                        } else {
-                            [t[0], t[1], t[2]]
-                        };
-                        plant.indices.extend(t.map(|i| base + i));
-                    }
+        if let Some(mesh) = node.mesh() {
+            read_mesh(&mesh, blob, at, &mut plant);
+        }
+    }
+    finish(plant)
+}
+
+/// Every mesh of a model by name, each in its own space (node placement
+/// ignored), for models made of named pieces.
+pub fn parse_named(bytes: &[u8]) -> Result<Vec<(String, Plant)>, String> {
+    let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| e.to_string())?;
+    let blob = gltf.blob.as_deref();
+    gltf.meshes()
+        .map(|mesh| {
+            let mut plant = Plant::default();
+            read_mesh(&mesh, blob, Mat4::IDENTITY, &mut plant);
+            let name = mesh.name().unwrap_or_default().to_string();
+            finish(plant)
+                .map(|p| (name.clone(), p))
+                .map_err(|e| format!("{name}: {e}"))
+        })
+        .collect()
+}
+
+/// Append the triangles of `mesh`, placed by `at`.
+fn read_mesh(mesh: &gltf::Mesh, blob: Option<&[u8]>, at: Mat4, plant: &mut Plant) {
+    for primitive in mesh.primitives() {
+        if primitive.mode() != gltf::mesh::Mode::Triangles {
+            continue;
+        }
+        let reader = primitive.reader(|buffer| match buffer.source() {
+            gltf::buffer::Source::Bin => blob,
+            gltf::buffer::Source::Uri(_) => None,
+        });
+        let Some(positions) = reader.read_positions() else {
+            continue;
+        };
+        let base = plant.positions.len() as u32;
+        plant
+            .positions
+            .extend(positions.map(|p| at.transform_point3(Vec3::from(p))));
+        let count = plant.positions.len() - base as usize;
+        let normal_matrix = Mat3::from_mat4(at).inverse().transpose();
+        match reader.read_normals() {
+            Some(n) => plant
+                .normals
+                .extend(n.map(|n| (normal_matrix * Vec3::from(n)).normalize_or(Vec3::Y))),
+            None => plant.normals.extend(std::iter::repeat_n(Vec3::ZERO, count)),
+        }
+        let factor = primitive
+            .material()
+            .pbr_metallic_roughness()
+            .base_color_factor();
+        match reader.read_colors(0) {
+            Some(c) => plant.colors.extend(
+                c.into_rgba_f32()
+                    .map(|c| std::array::from_fn(|k| c[k] * factor[k])),
+            ),
+            None => plant.colors.extend(std::iter::repeat_n(factor, count)),
+        }
+        let flip = at.determinant() < 0.0;
+        match reader.read_indices() {
+            Some(i) => {
+                let i: Vec<u32> = i.into_u32().collect();
+                for t in i.chunks_exact(3) {
+                    let t = if flip {
+                        [t[0], t[2], t[1]]
+                    } else {
+                        [t[0], t[1], t[2]]
+                    };
+                    plant.indices.extend(t.map(|i| base + i));
                 }
-                None => {
-                    for t in (0..count as u32 / 3).map(|t| t * 3) {
-                        let t = if flip {
-                            [t, t + 2, t + 1]
-                        } else {
-                            [t, t + 1, t + 2]
-                        };
-                        plant.indices.extend(t.map(|i| base + i));
-                    }
+            }
+            None => {
+                for t in (0..count as u32 / 3).map(|t| t * 3) {
+                    let t = if flip {
+                        [t, t + 2, t + 1]
+                    } else {
+                        [t, t + 1, t + 2]
+                    };
+                    plant.indices.extend(t.map(|i| base + i));
                 }
             }
         }
     }
+}
+
+/// Check what was read and fill in missing normals.
+fn finish(mut plant: Plant) -> Result<Plant, String> {
     if plant.indices.is_empty() {
         return Err("no triangles".into());
     }

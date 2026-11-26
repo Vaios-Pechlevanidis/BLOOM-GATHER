@@ -13,6 +13,12 @@
 //! Each bed is drawn in pieces, each one merged, wind-swayed mesh, rebuilt
 //! only when one of its flowers is picked or the player comes near or
 //! leaves.
+//!
+//! The beds' soil is built from a model of a stone-framed garden bed
+//! (`assets/beds/soil.glb`, see `scripts/bed_soil.py`): its start piece, its
+//! middle piece repeated as often as the bed is long, and its end piece,
+//! laid over the terrain; finely modelled near the player, coarse further
+//! away.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
@@ -57,6 +63,14 @@ const NEAR: f32 = 7.0;
 const MIDDLE: f32 = 18.0;
 const SLACK: f32 = 2.0;
 
+/// Pieces of bed closer than this (metres) get the finely modelled soil;
+/// they switch back beyond `SOIL_NEAR + SLACK`.
+const SOIL_NEAR: f32 = 8.0;
+
+/// The soil model's surface sits this far above the terrain (metres), which
+/// stays underneath as backing.
+const SOIL_LIFT: f32 = 0.012;
+
 /// Plants of a modelled species stand this much of their width apart, so
 /// each stands on its own with soil between the leaves.
 const SPACING: f32 = 1.3;
@@ -85,6 +99,84 @@ struct Chunk {
     built_with: usize,
     detail: usize,
     entity: Option<Entity>,
+    /// Pieces of the soil model laid in this piece of bed.
+    soil: Vec<SoilPlacement>,
+    /// Whether the soil mesh is the fine one.
+    soil_near: bool,
+    soil_entity: Option<Entity>,
+}
+
+/// The pieces of the bed soil model: start, middle and end, each fine
+/// ("near") and coarse ("far"), as made by `scripts/bed_soil.py`.
+struct Soil {
+    /// `[near, far][start, middle, end]`.
+    pieces: [[Plant; 3]; 2],
+    /// Length each piece covers along the bed (model units).
+    lengths: [f32; 3],
+    /// The model's width (model units).
+    width: f32,
+}
+
+impl Soil {
+    fn load() -> Option<Self> {
+        let bytes = imported::bed_model("soil")?;
+        let named = match imported::parse_named(bytes) {
+            Ok(n) => n,
+            Err(e) => {
+                warn!("Bed soil model unreadable: {e}");
+                return None;
+            }
+        };
+        let mut pieces: [[Option<Plant>; 3]; 2] = Default::default();
+        let (mut lengths, mut width) = ([0.0f32; 3], 0.0f32);
+        for (name, plant) in named {
+            // "<piece> <detail> length=<units> width=<units>"
+            let words: Vec<&str> = name.split_whitespace().collect();
+            let value = |key: &str| {
+                words
+                    .iter()
+                    .find_map(|w| w.strip_prefix(key)?.parse::<f32>().ok())
+            };
+            let piece = ["start", "middle", "end"]
+                .iter()
+                .position(|p| words.first() == Some(p));
+            let detail = ["near", "far"].iter().position(|d| words.get(1) == Some(d));
+            let (Some(piece), Some(detail), Some(length), Some(w)) =
+                (piece, detail, value("length="), value("width="))
+            else {
+                warn!("Bed soil model: unexpected piece {name:?}");
+                continue;
+            };
+            lengths[piece] = length;
+            width = w;
+            pieces[detail][piece] = Some(plant);
+        }
+        let [near, far] = pieces;
+        let all = |p: [Option<Plant>; 3]| -> Option<[Plant; 3]> {
+            let [a, b, c] = p;
+            Some([a?, b?, c?])
+        };
+        let pieces = [all(near)?, all(far)?];
+        (width > 0.0 && lengths.iter().all(|&l| l > 0.0)).then_some(Self {
+            pieces,
+            lengths,
+            width,
+        })
+    }
+}
+
+/// One piece of the soil model laid on a bed.
+#[derive(Clone, Copy)]
+struct SoilPlacement {
+    /// 0 start, 1 middle, 2 end.
+    piece: usize,
+    /// Where the piece begins: the bed's centre line and the piece's south
+    /// end (metres).
+    x: f32,
+    z: f32,
+    /// Model units to metres, and the extra stretch along the bed.
+    scale: f32,
+    stretch: f32,
 }
 
 /// The models a species' decorative blooms copy, finest first: the full
@@ -117,6 +209,9 @@ struct Carpet {
     material: Option<Handle<WindMaterial>>,
     /// Per species: the models its decorative blooms copy, if any.
     clumps: Option<Vec<Option<Clump>>>,
+    /// The bed soil model (outer `None`: not loaded yet).
+    soil: Option<Option<Soil>>,
+    soil_material: Option<Handle<StandardMaterial>>,
     since: f32,
 }
 
@@ -135,6 +230,7 @@ fn keep_carpet(
     cameras: Query<&GlobalTransform, With<super::MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
+    mut plain_materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let Some(session) = session else { return };
     let key = (session.generation, scene.region);
@@ -147,12 +243,13 @@ fn keep_carpet(
             .map(|s| Clump::load(s, scale))
             .collect()
     });
+    let soil = carpet.soil.get_or_insert_with(Soil::load).as_ref();
     if carpet.key != Some(key) || scene.is_changed() {
         for e in &old {
             commands.entity(e).despawn();
         }
         carpet.key = Some(key);
-        carpet.chunks = lay_out(&scene, &content, clumps);
+        carpet.chunks = lay_out(&scene, &content, clumps, soil);
         carpet.since = f32::MAX;
         let blooms = carpet.chunks.iter().flat_map(|c| &c.blooms);
         let (count, modelled) = blooms.fold((0, 0), |(n, m), b| {
@@ -163,6 +260,15 @@ fn keep_carpet(
             "Laid out {count} decorative blooms ({modelled} modelled) in {} pieces of bed",
             carpet.chunks.len()
         );
+        if carpet.soil_material.is_none() {
+            carpet.soil_material = Some(plain_materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                perceptual_roughness: 0.92,
+                reflectance: 0.12,
+                cull_mode: None,
+                ..default()
+            }));
+        }
         if carpet.material.is_none() {
             carpet.material = Some(materials.add(wind_material(
                 StandardMaterial {
@@ -183,12 +289,42 @@ fn keep_carpet(
     }
     carpet.since = 0.0;
     let material = carpet.material.clone().expect("made above");
+    let soil_material = carpet.soil_material.clone().expect("made above");
     let eye = cameras
         .single()
         .ok()
         .map(|c| Vec2::new(c.translation().x, c.translation().z));
     let region = scene.region;
     for chunk in &mut carpet.chunks {
+        if let Some(soil) = soil.filter(|_| !chunk.soil.is_empty()) {
+            let distance = eye.map_or(f32::MAX, |e| e.distance(chunk.centre));
+            let near = if chunk.soil_near {
+                distance < SOIL_NEAR + SLACK
+            } else {
+                distance < SOIL_NEAR
+            };
+            if chunk.soil_entity.is_none() || near != chunk.soil_near {
+                chunk.soil_near = near;
+                if let Some(e) = chunk.soil_entity.take() {
+                    commands.entity(e).despawn();
+                }
+                let mesh = soil_mesh(&chunk.soil, soil, near, &scene);
+                chunk.soil_entity = Some(
+                    commands
+                        .spawn((
+                            SceneEntity,
+                            BedCarpet,
+                            Mesh3d(meshes.add(mesh)),
+                            MeshMaterial3d(soil_material.clone()),
+                            NotShadowCaster,
+                        ))
+                        .id(),
+                );
+            }
+        }
+        if chunk.blooms.is_empty() {
+            continue;
+        }
         let unpicked = chunk
             .owners
             .iter()
@@ -243,7 +379,12 @@ fn keep_carpet(
 /// neat staggered rows around its pickable flowers, the plants just far
 /// enough apart not to grow into each other; other beds get a dense random
 /// carpet of simple blooms.
-fn lay_out(scene: &RegionScene, content: &Content, clumps: &[Option<Clump>]) -> Vec<Chunk> {
+fn lay_out(
+    scene: &RegionScene,
+    content: &Content,
+    clumps: &[Option<Clump>],
+    soil: Option<&Soil>,
+) -> Vec<Chunk> {
     let (Some(plan), Some(def)) = (
         scene.layout.fields.as_ref(),
         content.regions[scene.region]
@@ -284,6 +425,13 @@ fn lay_out(scene: &RegionScene, content: &Content, clumps: &[Option<Clump>]) -> 
                 ..default()
             })
             .collect();
+        if let Some(soil) = soil {
+            for place in lay_soil(soil, bed.x, bed.z0, bed.z1, plan.bed_width) {
+                let length = soil.lengths[place.piece] * place.scale * place.stretch;
+                let k = (((place.z + length / 2.0 - bed.z0) / length) * pieces as f32) as usize;
+                chunks[k.min(pieces - 1)].soil.push(place);
+            }
+        }
         let mut add = |p: Vec2, bloom: Bloom| {
             let k = (((p.y - bed.z0) / length) * pieces as f32) as usize;
             let chunk = &mut chunks[k.min(pieces - 1)];
@@ -369,9 +517,83 @@ fn lay_out(scene: &RegionScene, content: &Content, clumps: &[Option<Clump>]) -> 
                 );
             }
         }
-        out.extend(chunks.into_iter().filter(|c| !c.blooms.is_empty()));
+        out.extend(
+            chunks
+                .into_iter()
+                .filter(|c| !c.blooms.is_empty() || !c.soil.is_empty()),
+        );
     }
     out
+}
+
+/// Cover a bed (`x`: centre line, `z0..z1`, `width` across) with the soil
+/// model: the start piece, the middle piece as often as fits, the end
+/// piece, the middle ones stretched a little to fill the bed exactly.
+fn lay_soil(soil: &Soil, x: f32, z0: f32, z1: f32, width: f32) -> Vec<SoilPlacement> {
+    let scale = width / soil.width;
+    let [start, middle, end] = soil.lengths.map(|l| l * scale);
+    let length = z1 - z0;
+    let room = length - start - end;
+    let count = (room / middle).round().max(0.0) as usize;
+    let (cap_stretch, middle_stretch) = if count == 0 {
+        (length / (start + end), 1.0)
+    } else {
+        (1.0, room / (count as f32 * middle))
+    };
+    let mut out = Vec::with_capacity(count + 2);
+    let mut z = z0;
+    let mut put = |piece: usize, stretch: f32, z: &mut f32| {
+        out.push(SoilPlacement {
+            piece,
+            x,
+            z: *z,
+            scale,
+            stretch,
+        });
+        *z += soil.lengths[piece] * scale * stretch;
+    };
+    put(0, cap_stretch, &mut z);
+    for _ in 0..count {
+        put(1, middle_stretch, &mut z);
+    }
+    put(2, cap_stretch, &mut z);
+    out
+}
+
+/// The soil of one piece of bed: its placed model pieces laid over the
+/// terrain (each vertex follows the ground beneath it).
+fn soil_mesh(placed: &[SoilPlacement], soil: &Soil, near: bool, scene: &RegionScene) -> Mesh {
+    let terrain = &scene.layout.terrain;
+    let detail = usize::from(!near);
+    let mut m = Builder::default();
+    for place in placed {
+        let model = &soil.pieces[detail][place.piece];
+        let base = m.positions.len() as u32;
+        for ((p, n), c) in model
+            .positions
+            .iter()
+            .zip(&model.normals)
+            .zip(&model.colors)
+        {
+            let at = Vec2::new(
+                place.x + p.x * place.scale,
+                place.z + p.z * place.scale * place.stretch,
+            );
+            let y = terrain.height_at(at) + p.y * place.scale + SOIL_LIFT;
+            m.positions.push([at.x, y, at.y]);
+            m.normals.push(n.to_array());
+            m.colors.push([c[0], c[1], c[2], 1.0]);
+        }
+        m.indices.extend(model.indices.iter().map(|i| base + i));
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, m.positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, m.normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, m.colors)
+    .with_inserted_indices(Indices::U32(m.indices))
 }
 
 #[derive(Default)]
@@ -877,4 +1099,48 @@ fn barn_mesh() -> Mesh {
         move |_| wall,
     );
     m.build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_bed_soil_model_loads() {
+        let soil = Soil::load().expect("assets/beds/soil.glb with all six pieces");
+        assert!(soil.width > 0.0);
+        for detail in &soil.pieces {
+            for piece in detail {
+                assert!(!piece.indices.is_empty());
+            }
+        }
+        // The fine pieces are the finer ones.
+        let triangles = |d: usize| soil.pieces[d][1].indices.len();
+        assert!(triangles(0) > triangles(1));
+    }
+
+    #[test]
+    fn soil_covers_a_bed_exactly_whatever_its_length() {
+        let soil = Soil::load().expect("soil model");
+        for length in [0.4, 1.0, 1.7, 9.3, 22.6] {
+            let placed = lay_soil(&soil, 3.0, 10.0, 10.0 + length, 1.2);
+            assert_eq!(
+                placed.first().map(|p| p.piece),
+                Some(0),
+                "starts with the start"
+            );
+            assert_eq!(placed.last().map(|p| p.piece), Some(2), "ends with the end");
+            let mut z = 10.0;
+            for p in &placed {
+                assert!((p.z - z).abs() < 1e-4, "pieces follow on without gaps");
+                assert!((p.x - 3.0).abs() < 1e-6);
+                z += soil.lengths[p.piece] * p.scale * p.stretch;
+            }
+            assert!((z - (10.0 + length)).abs() < 1e-3, "{length}: ends at {z}");
+            // The middle pieces are hardly stretched on long beds.
+            if length > 5.0 {
+                assert!(placed.iter().all(|p| (p.stretch - 1.0).abs() < 0.1));
+            }
+        }
+    }
 }

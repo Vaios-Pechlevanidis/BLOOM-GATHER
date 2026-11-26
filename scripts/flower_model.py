@@ -221,30 +221,46 @@ def smooth_normals(positions, triangles):
 
 
 def write_glb(path: pathlib.Path, positions, normals, colours, triangles):
-    p = positions.astype(np.float32)
-    n = normals.astype(np.float32)
-    c = np.c_[colours, np.ones(len(colours))].astype(np.float32)
-    i = triangles.astype(np.uint32).reshape(-1)
-    chunks = [p.tobytes(), n.tobytes(), c.tobytes(), i.tobytes()]
-    views, offset = [], 0
-    for k, chunk in enumerate(chunks):
-        view = {"buffer": 0, "byteOffset": offset, "byteLength": len(chunk)}
-        view["target"] = 34963 if k == 3 else 34962
-        views.append(view)
-        offset += len(chunk)
+    write_glb_meshes(path, [(None, positions, normals, colours, triangles)])
+
+
+def write_glb_meshes(path: pathlib.Path, meshes):
+    """One node and mesh per (name, positions, normals, colours, triangles)."""
+    chunks, views, accessors, doc_meshes = [], [], [], []
+    offset = 0
+
+    def add(data: bytes, target: int) -> int:
+        nonlocal offset
+        views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(data), "target": target})
+        chunks.append(data)
+        offset += len(data)
+        return len(views) - 1
+
+    for name, positions, normals, colours, triangles in meshes:
+        p = positions.astype(np.float32)
+        n = normals.astype(np.float32)
+        c = np.c_[colours, np.ones(len(colours))].astype(np.float32)
+        i = triangles.astype(np.uint32).reshape(-1)
+        base = len(accessors)
+        accessors += [
+            {"bufferView": add(p.tobytes(), 34962), "componentType": 5126, "count": len(p),
+             "type": "VEC3", "min": p.min(0).tolist(), "max": p.max(0).tolist()},
+            {"bufferView": add(n.tobytes(), 34962), "componentType": 5126, "count": len(n), "type": "VEC3"},
+            {"bufferView": add(c.tobytes(), 34962), "componentType": 5126, "count": len(c), "type": "VEC4"},
+            {"bufferView": add(i.tobytes(), 34963), "componentType": 5125, "count": len(i), "type": "SCALAR"},
+        ]
+        mesh = {"primitives": [{"attributes": {"POSITION": base, "NORMAL": base + 1, "COLOR_0": base + 2},
+                                "indices": base + 3}]}
+        if name is not None:
+            mesh["name"] = name
+        doc_meshes.append(mesh)
     doc = {
-        "asset": {"version": "2.0", "generator": "Bloom & Gather scripts/flower_model.py"},
+        "asset": {"version": "2.0", "generator": "Bloom & Gather scripts"},
         "scene": 0,
-        "scenes": [{"nodes": [0]}],
-        "nodes": [{"mesh": 0}],
-        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "COLOR_0": 2}, "indices": 3}]}],
-        "accessors": [
-            {"bufferView": 0, "componentType": 5126, "count": len(p), "type": "VEC3",
-             "min": p.min(0).tolist(), "max": p.max(0).tolist()},
-            {"bufferView": 1, "componentType": 5126, "count": len(n), "type": "VEC3"},
-            {"bufferView": 2, "componentType": 5126, "count": len(c), "type": "VEC4"},
-            {"bufferView": 3, "componentType": 5125, "count": len(i), "type": "SCALAR"},
-        ],
+        "scenes": [{"nodes": list(range(len(doc_meshes)))}],
+        "nodes": [{"mesh": k} for k in range(len(doc_meshes))],
+        "meshes": doc_meshes,
+        "accessors": accessors,
         "bufferViews": views,
         "buffers": [{"byteLength": offset}],
     }

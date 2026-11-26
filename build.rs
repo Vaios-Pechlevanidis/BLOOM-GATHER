@@ -1,20 +1,20 @@
-//! Embeds the flower pictures (`assets/flowers/*.png`) and models
-//! (`assets/flowers/*.glb`) into the binary, like every other asset of the
-//! game, so a release needs no assets folder. Adding or changing one
-//! triggers a rebuild.
+//! Embeds the flower pictures (`assets/flowers/*.png`), flower models
+//! (`assets/flowers/*.glb`) and flower bed models (`assets/beds/*.glb`) into
+//! the binary, like every other asset of the game, so a release needs no
+//! assets folder. Adding or changing one triggers a rebuild.
 
 use std::{env, fs, path::Path};
 
 fn main() {
     let root = env::var("CARGO_MANIFEST_DIR").expect("set by cargo");
-    let dir = Path::new(&root).join("assets/flowers");
-    println!("cargo:rerun-if-changed={}", dir.display());
-
     let mut out = String::new();
-    for (name, extension, what) in [
-        ("FILES", "png", "Painted flower pictures"),
-        ("MODELS", "glb", "Flower models"),
+    for (folder, name, extension, what) in [
+        ("flowers", "FILES", "png", "Painted flower pictures"),
+        ("flowers", "MODELS", "glb", "Flower models"),
+        ("beds", "BEDS", "glb", "Flower bed models"),
     ] {
+        let dir = Path::new(&root).join("assets").join(folder);
+        println!("cargo:rerun-if-changed={}", dir.display());
         let mut files: Vec<_> = fs::read_dir(&dir)
             .map(|entries| {
                 entries
