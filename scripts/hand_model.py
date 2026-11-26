@@ -10,14 +10,13 @@ as assets/hands/<name>.glb:
     end of the sleeve
   * split into its connected pieces: the largest is saved as the mesh
     "hand", the rest (a handle the hand holds) as "stick"
-  * subdivided until it has about `--triangles` triangles, then the colours
-    of the texture baked into vertex colours (the hand is seen up close; the
-    finer mesh keeps nails, knit ridges and the cuff crisp without a texture
-    to ship)
+  * the colours of its texture baked into vertex colours (no texture to
+    ship); a coarse model is first subdivided towards `--triangles` so the
+    nails, knit and cuff stay crisp up close
   * positions, normals, colours and indices only
 
 Usage: scripts/hand_model.py <model.fbx> <name> --forward=X,Y,Z --up=X,Y,Z [--mirror]
-       [--length 0.3] [--texture <png>] [--triangles 24000]
+       [--length 0.3] [--texture <png>] [--triangles 4000]
 Example (see assets/hands/README.md for the shipped hands):
   scripts/hand_model.py ~/Downloads/Cozy_Hand_Clean_Fingers.fbx open \
       --forward=0.064,-0.439,0.896 --up=-0.409,0.801,0.437 --mirror
@@ -260,7 +259,8 @@ def main() -> None:
     ap.add_argument("--mirror", action="store_true", help="the model is a left hand")
     ap.add_argument("--length", type=float, default=0.3, help="metres from fingertips to sleeve end")
     ap.add_argument("--texture", type=pathlib.Path, help="base colour (default: the PNG next to the model)")
-    ap.add_argument("--triangles", type=int, default=24000, help="subdivide up to about this many")
+    ap.add_argument("--triangles", type=int, default=4000,
+                    help="subdivide up to about this many (finer colours, but more to draw)")
     args = ap.parse_args()
 
     texture = args.texture or next(args.model.parent.glob("*.png"), None)
