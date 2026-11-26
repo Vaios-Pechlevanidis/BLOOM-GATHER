@@ -1,7 +1,7 @@
 //! Embeds the flower pictures (`assets/flowers/*.png`), flower models
 //! (`assets/flowers/*.glb`), flower bed models (`assets/beds/*.glb`), the
-//! lawn (`assets/lawn/*.glb`) and the tree (`assets/trees/*.glb`) into
-//! the binary, like every other asset of the game, so a release needs no
+//! lawn (`assets/lawn/*.glb`), the tree (`assets/trees/*.glb`) and the
+//! first-person hands (`assets/hands/*.glb`) into the binary, like every other asset of the game, so a release needs no
 //! assets folder. Adding or changing one triggers a rebuild.
 
 use std::{env, fs, path::Path};
@@ -15,6 +15,7 @@ fn main() {
         ("beds", "BEDS", "glb", "Flower bed models"),
         ("lawn", "LAWN", "glb", "Lawn models"),
         ("trees", "TREES", "glb", "Tree models"),
+        ("hands", "HANDS", "glb", "First-person hand models"),
     ] {
         let dir = Path::new(&root).join("assets").join(folder);
         println!("cargo:rerun-if-changed={}", dir.display());

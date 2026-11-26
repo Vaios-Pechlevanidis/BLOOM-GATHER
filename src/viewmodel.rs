@@ -9,7 +9,10 @@
 //! Each has its own action animation, played when a pick actually happens:
 //! reach-and-pick, snip, scoop, continuous sweep, and a long pull.
 //!
-//! Models are temporary procedural art (see TODO.md).
+//! The hands are models from `assets/hands` (`scripts/hand_model.py`): an
+//! open hand, a loose grip for the scissors and the hand rake (holding the
+//! rake's own handle) and a fist round the cart rake's long pole. Without
+//! them, and for the tools themselves, the models are procedural.
 
 use std::f32::consts::{FRAC_PI_2, PI};
 
@@ -20,6 +23,7 @@ use bevy::prelude::*;
 use bloom_core::data::HarvestMode;
 use bloom_core::game::GameEvent;
 
+use crate::flowers::imported::{self, Plant};
 use crate::game::{AppState, Content, EventsForwarded, GameEventMsg, PlayState, Session, Settings};
 use crate::player::Player;
 use crate::rendering::meshes::{hash3, lin, mix, MeshBuilder};
@@ -94,11 +98,18 @@ impl Model {
 struct ViewRoot;
 
 #[derive(Component)]
-struct ToolModel(Model);
+struct ToolModel {
+    model: Model,
+    /// Rest pose in view space.
+    rest: Transform,
+}
 
-/// Scissor blade (rotates for the snip).
+/// Scissor blade: turns about the screw, from `base`, for the snip.
 #[derive(Component)]
-struct Blade(f32);
+struct Blade {
+    side: f32,
+    base: Quat,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Action {
@@ -168,10 +179,10 @@ fn spawn_viewmodel(
         cam.spawn((ViewRoot, Transform::IDENTITY, Visibility::Hidden))
             .with_children(|root| {
                 for model in Model::ALL {
-                    let (body, blades) = build(model);
+                    let Built { body, blade, rest } = build(model);
                     let mut e = root.spawn((
-                        ToolModel(model),
-                        model.rest(),
+                        ToolModel { model, rest },
+                        rest,
                         Visibility::Hidden,
                         Mesh3d(meshes.add(body)),
                         MeshMaterial3d(material.clone()),
@@ -179,13 +190,16 @@ fn spawn_viewmodel(
                         NotShadowCaster,
                         NotShadowReceiver,
                     ));
-                    if let Some(blade) = blades {
-                        let blade = meshes.add(blade);
+                    if let Some(Blades { mesh, screw, base }) = blade {
+                        let blade = meshes.add(mesh);
                         e.with_children(|m| {
                             for side in [1.0f32, -1.0] {
                                 m.spawn((
-                                    Blade(side),
-                                    Transform::from_xyz(0.0, 0.004 * side, -0.075),
+                                    Blade { side, base },
+                                    Transform::from_translation(
+                                        screw + base * Vec3::Y * 0.004 * side,
+                                    )
+                                    .with_rotation(base),
                                     Mesh3d(blade.clone()),
                                     MeshMaterial3d(material.clone()),
                                     layer(),
@@ -320,15 +334,15 @@ fn animate(
     }
 
     for (model, mut transform, mut visibility) in &mut models {
-        *visibility = if model.0 == shown {
+        *visibility = if model.model == shown {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
-        if model.0 != shown {
+        if model.model != shown {
             continue;
         }
-        let rest = model.0.rest();
+        let rest = model.rest;
         let bob = Vec3::new(
             anim.bob_phase.sin() * bob_amount,
             -(anim.bob_phase * 2.0).sin().abs() * bob_amount,
@@ -352,21 +366,25 @@ fn animate(
                 Vec3::new(0.0, 0.03, 0.14) * reach,
                 Quat::from_rotation_x(-0.45 * reach),
             ),
-            None if model.0 == Model::Rake && aim.sweeping => {
+            None if model.model == Model::Rake && aim.sweeping => {
                 let s = anim.sweep_phase.sin();
                 (
-                    Vec3::new(s * 0.07, -0.02, -0.04),
-                    Quat::from_rotation_y(s * 0.45) * Quat::from_rotation_x(-0.25),
+                    // Mostly sideways: turning further would show the
+                    // open end of the sleeve.
+                    Vec3::new(s * 0.06, -0.02, -0.04),
+                    Quat::from_rotation_y(s * 0.2) * Quat::from_rotation_x(-0.15),
                 )
             }
             None => (Vec3::ZERO, Quat::IDENTITY),
         };
         let goal = Transform::from_translation(rest.translation + bob + sway + offset)
-            .with_rotation(rest.rotation * tilt * Quat::from_rotation_z(anim.sway.x * 2.0));
+            .with_rotation(rest.rotation * tilt * Quat::from_rotation_z(anim.sway.x * 2.0))
+            .with_scale(rest.scale);
         // Ease towards the goal so poses blend smoothly.
         let ease = 1.0 - (-22.0 * dt).exp();
         transform.translation = transform.translation.lerp(goal.translation, ease);
         transform.rotation = transform.rotation.slerp(goal.rotation, ease);
+        transform.scale = goal.scale;
     }
 
     // Scissor blades: open, snapping shut mid-snip.
@@ -375,7 +393,7 @@ fn animate(
         _ => 0.32,
     };
     for (blade, mut transform) in &mut blades {
-        transform.rotation = Quat::from_rotation_y(open * blade.0 * 0.5);
+        transform.rotation = blade.base * Quat::from_rotation_y(open * blade.side * 0.5);
     }
 }
 
@@ -461,26 +479,181 @@ fn hand(b: &mut MeshBuilder, curl: f32) {
     blob(b, t1, Vec3::splat(0.011), Quat::IDENTITY, skin_paint);
 }
 
-/// Returns the model and, for scissors, one blade mesh (spawned twice).
-fn build(model: Model) -> (Mesh, Option<Mesh>) {
+/// A hand from `assets/hands/<name>.glb`: the hand itself and, if it holds
+/// one, the handle (both in view-model space: fingers towards −Z, the back
+/// of the hand up, a right hand).
+struct HandModel {
+    hand: Mesh,
+    stick: Option<Stick>,
+}
+
+/// A straight handle held in the hand.
+struct Stick {
+    mesh: Mesh,
+    /// The ends of its axis: the one in the hand and the free one.
+    held: Vec3,
+    free: Vec3,
+    radius: f32,
+}
+
+fn hand_model(name: &str) -> Option<HandModel> {
+    let parts = match imported::parse_named(imported::hand_model(name)?) {
+        Ok(parts) => parts,
+        Err(e) => {
+            warn!("Hand model {name} unreadable: {e}");
+            return None;
+        }
+    };
+    let mut hand = None;
+    let mut stick = None;
+    for (part, plant) in parts {
+        match part.as_str() {
+            "hand" => hand = Some(plant.into_mesh()),
+            "stick" => stick = Some(Stick::measure(plant)),
+            _ => {}
+        }
+    }
+    Some(HandModel { hand: hand?, stick })
+}
+
+impl Stick {
+    /// Find the axis of a roughly cylindrical handle.
+    fn measure(plant: Plant) -> Stick {
+        let p = &plant.positions;
+        let n = p.len().max(1) as f32;
+        let centre = p.iter().sum::<Vec3>() / n;
+        let farthest = |from: Vec3| {
+            p.iter()
+                .copied()
+                .max_by(|a, b| {
+                    a.distance_squared(from)
+                        .total_cmp(&b.distance_squared(from))
+                })
+                .unwrap_or(from)
+        };
+        let a = farthest(centre);
+        let dir = (a - farthest(a)).normalize_or(Vec3::NEG_Z);
+        let along = |q: Vec3| (q - centre).dot(dir);
+        let (low, high) = p.iter().fold((f32::MAX, f32::MIN), |(l, h), q| {
+            (l.min(along(*q)), h.max(along(*q)))
+        });
+        // Each end: the middle of the points around its cap.
+        let end = |t: f32| {
+            let cap: Vec<Vec3> = p
+                .iter()
+                .copied()
+                .filter(|q| (along(*q) - t).abs() < (high - low) * 0.03)
+                .collect();
+            cap.iter().sum::<Vec3>() / cap.len().max(1) as f32
+        };
+        let (a, b) = (end(low), end(high));
+        // The hand is round the origin.
+        let (held, free) = if a.length() < b.length() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        let axis = (free - held).normalize_or(Vec3::NEG_Z);
+        let radius = p
+            .iter()
+            .map(|q| (*q - held).reject_from_normalized(axis).length())
+            .sum::<f32>()
+            / n;
+        Stick {
+            mesh: plant.into_mesh(),
+            held,
+            free,
+            radius,
+        }
+    }
+}
+
+/// The rotation turning +X towards `x` and +Z towards `z` (made square to `x`).
+fn frame(x: Vec3, z: Vec3) -> Quat {
+    let x = x.normalize();
+    let z = z.reject_from_normalized(x).normalize();
+    Quat::from_mat3(&Mat3::from_cols(x, z.cross(x), z))
+}
+
+/// Both scissor blades share one mesh, turning about the screw.
+struct Blades {
+    mesh: Mesh,
+    screw: Vec3,
+    /// The blades point along this rotation's −Z.
+    base: Quat,
+}
+
+struct Built {
+    body: Mesh,
+    blade: Option<Blades>,
+    rest: Transform,
+}
+
+fn build(model: Model) -> Built {
     let mut b = MeshBuilder::default();
     let wood = lin(Color::srgb_u8(150, 112, 80));
     let wood_light = lin(Color::srgb_u8(190, 150, 110));
     let metal = lin(Color::srgb_u8(170, 176, 182));
     let metal_dark = lin(Color::srgb_u8(118, 124, 132));
+    let sage = lin(Color::srgb_u8(132, 160, 116));
     let wood_paint = move |p: Vec3| mix(wood, wood_light, hash3(p * 30.0) * 0.25 + 0.5);
     let mut blade = None;
+    let mut rest = model.rest();
     match model {
-        Model::Hand => hand(&mut b, 0.6),
-        Model::Scissors => {
-            hand(&mut b, 0.95);
-            // Sage handle loops in the grip.
-            let sage = lin(Color::srgb_u8(132, 160, 116));
-            for x in [-0.014f32, 0.014] {
-                let t = Transform::from_xyz(x, 0.012, -0.03)
-                    .with_rotation(Quat::from_rotation_x(FRAC_PI_2));
-                b.add(&Mesh::from(Torus::new(0.008, 0.016)), t, move |_| sage);
+        Model::Hand => match hand_model("open") {
+            Some(h) => {
+                b.add_coloured(&h.hand, Transform::IDENTITY);
+                rest = Transform::from_xyz(0.18, -0.18, -0.36).with_rotation(Quat::from_euler(
+                    EulerRot::YXZ,
+                    0.45,
+                    0.2,
+                    -0.35,
+                ));
             }
+            None => hand(&mut b, 0.6),
+        },
+        Model::Scissors => {
+            // Where the scissors sit in the grip and which way they point.
+            let (screw, base) = match hand_model("grip") {
+                Some(HandModel {
+                    hand,
+                    stick: Some(stick),
+                }) => {
+                    b.add_coloured(&hand, Transform::IDENTITY);
+                    rest = Transform::from_xyz(0.19, -0.17, -0.38)
+                        .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.4, 0.0, -0.3))
+                        .with_scale(Vec3::splat(0.9));
+                    let axis = (stick.free - stick.held).normalize();
+                    // Sage handles through the fist, to the screw just past it.
+                    let screw = stick.held + axis * 0.1;
+                    let side = axis.cross(Vec3::Y).normalize_or(Vec3::X) * 0.006;
+                    for s in [side, -side] {
+                        cyl(&mut b, stick.held + s, screw + s, 0.0065, move |_| sage);
+                    }
+                    let t = Transform::from_translation(screw - axis * 0.012).with_rotation(
+                        Quat::from_rotation_arc(Vec3::Y, axis.cross(Vec3::Y).normalize_or(Vec3::X)),
+                    );
+                    b.add(&Mesh::from(Torus::new(0.006, 0.013)), t, move |_| sage);
+                    blob(
+                        &mut b,
+                        screw,
+                        Vec3::splat(0.005),
+                        Quat::IDENTITY,
+                        move |_| metal_dark,
+                    );
+                    (screw, frame(axis.cross(Vec3::Y), -axis))
+                }
+                _ => {
+                    hand(&mut b, 0.95);
+                    // Sage handle loops in the grip.
+                    for x in [-0.014f32, 0.014] {
+                        let t = Transform::from_xyz(x, 0.012, -0.03)
+                            .with_rotation(Quat::from_rotation_x(FRAC_PI_2));
+                        b.add(&Mesh::from(Torus::new(0.008, 0.016)), t, move |_| sage);
+                    }
+                    (Vec3::new(0.0, 0.0, -0.075), Quat::IDENTITY)
+                }
+            };
             let mut bl = MeshBuilder::default();
             let t =
                 Transform::from_xyz(0.0, 0.0, -0.045).with_scale(Vec3::new(0.009, 0.003, 0.055));
@@ -489,7 +662,11 @@ fn build(model: Model) -> (Mesh, Option<Mesh>) {
                 t,
                 move |p| mix(metal_dark, metal, p.x * 0.5 + 0.5),
             );
-            blade = Some(bl.build());
+            blade = Some(Blades {
+                mesh: bl.build(),
+                screw,
+                base,
+            });
         }
         Model::Basket => {
             let wicker = lin(Color::srgb_u8(196, 156, 104));
@@ -536,58 +713,138 @@ fn build(model: Model) -> (Mesh, Option<Mesh>) {
             }
         }
         Model::Rake => {
-            hand(&mut b, 1.0);
             // Hand rake: short handle in the fist, small fan of tines ahead.
+            let (end, axis) = match hand_model("grip") {
+                Some(HandModel {
+                    hand,
+                    stick: Some(stick),
+                }) => {
+                    b.add_coloured(&hand, Transform::IDENTITY);
+                    b.add_coloured(&stick.mesh, Transform::IDENTITY);
+                    // Nearly level: tilting the handle down would swing
+                    // the sleeve up into view, so the tines bend down.
+                    rest = Transform::from_xyz(0.21, -0.2, -0.42)
+                        .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, 0.15, -0.3))
+                        .with_scale(Vec3::splat(0.9));
+                    (stick.free, (stick.free - stick.held).normalize())
+                }
+                _ => {
+                    hand(&mut b, 1.0);
+                    let from = Vec3::new(0.0, 0.0, 0.05);
+                    let end = Vec3::new(0.0, -0.08, -0.22);
+                    cyl(&mut b, from, end, 0.012, wood_paint);
+                    (end, (end - from).normalize())
+                }
+            };
+            // Across the handle, level; the tines curl down and forward.
+            let across = axis.cross(Vec3::Y).normalize_or(Vec3::X);
+            let side = across.cross(axis).normalize();
+            let down = if side.y > 0.0 { -side } else { side };
             cyl(
                 &mut b,
-                Vec3::new(0.0, 0.0, 0.05),
-                Vec3::new(0.0, -0.08, -0.22),
-                0.012,
-                wood_paint,
-            );
-            cyl(
-                &mut b,
-                Vec3::new(-0.06, 0.0, -0.22),
-                Vec3::new(0.06, 0.0, -0.22),
+                end - across * 0.06,
+                end + across * 0.06,
                 0.006,
                 move |_| metal_dark,
             );
             for k in 0..7 {
-                let x = -0.06 + k as f32 * 0.02;
-                cyl(
-                    &mut b,
-                    Vec3::new(x, 0.0, -0.22),
-                    Vec3::new(x * 1.2, -0.035, -0.27),
-                    0.0035,
-                    move |_| metal,
-                );
+                let at = end + across * (-0.06 + k as f32 * 0.02);
+                let spread = across * (k as f32 - 3.0) * 0.004;
+                let bend = at + down * 0.02 + axis * 0.03 + spread;
+                cyl(&mut b, at, bend, 0.0035, move |_| metal);
+                let tip = bend + down * 0.045 + axis * 0.005;
+                cyl(&mut b, bend, tip, 0.0035, move |_| metal);
             }
         }
-        Model::Cart => {
-            // The cart's long, wide rake, held low to the right and reaching
-            // well out ahead (no hand: the grip is below the frame).
-            let handle_end = Vec3::new(-0.12, -0.3, -1.25);
-            cyl(
-                &mut b,
-                Vec3::new(0.02, -0.02, 0.1),
-                handle_end,
-                0.016,
-                wood_paint,
-            );
-            let left = handle_end + Vec3::new(-0.28, 0.0, 0.02);
-            let right = handle_end + Vec3::new(0.28, 0.0, -0.02);
-            cyl(&mut b, left, right, 0.012, wood_paint);
-            for k in 0..12 {
-                let at = left.lerp(right, k as f32 / 11.0);
+        Model::Cart => match hand_model("fist") {
+            Some(HandModel {
+                hand,
+                stick: Some(stick),
+            }) => {
+                // A fist round the long, wide rake's pole, the arm coming in
+                // from the right and the pole reaching well out ahead.
+                b.add_coloured(&hand, Transform::IDENTITY);
+                let scale = 0.65;
+                // The pole crosses the fist (along +X with the back of the
+                // hand up): turn it ahead, the forearm (+Z) to the right.
+                let pole = (stick.free - stick.held).normalize();
+                let forward = if pole.x >= 0.0 { pole } else { -pole };
+                let mid = (stick.held + stick.free) / 2.0;
+                let rotation = frame(Vec3::new(-0.1, -0.25, -1.0), Vec3::new(1.0, -0.6, 0.05))
+                    * frame(forward, Vec3::Z).inverse();
+                rest = Transform::from_xyz(0.19, -0.19, -0.36)
+                    .with_rotation(rotation)
+                    .with_scale(Vec3::splat(scale));
+                // In metres of view space, through the fist.
+                let to_model = |v: Vec3| rotation.inverse() * v / scale;
+                let handle_end = mid + forward * (1.3 / scale);
                 cyl(
                     &mut b,
-                    at,
-                    at + Vec3::new(0.0, -0.07, -0.03),
-                    0.005,
-                    move |_| metal,
+                    // Behind the fist, out of the frame.
+                    mid - forward * (0.3 / scale),
+                    handle_end,
+                    stick.radius,
+                    wood_paint,
                 );
+                let level = to_model((rotation * forward).cross(Vec3::Y).normalize() * 0.28);
+                let down = to_model(Vec3::new(0.0, -0.07, -0.03));
+                let (left, right) = (handle_end - level, handle_end + level);
+                cyl(&mut b, left, right, 0.012 / scale, wood_paint);
+                for k in 0..12 {
+                    let at = left.lerp(right, k as f32 / 11.0);
+                    cyl(&mut b, at, at + down, 0.005 / scale, move |_| metal);
+                }
+            }
+            _ => {
+                // The cart's long, wide rake, held low to the right and
+                // reaching well out ahead (the grip is below the frame).
+                let handle_end = Vec3::new(-0.12, -0.3, -1.25);
+                cyl(
+                    &mut b,
+                    Vec3::new(0.02, -0.02, 0.1),
+                    handle_end,
+                    0.016,
+                    wood_paint,
+                );
+                let left = handle_end + Vec3::new(-0.28, 0.0, 0.02);
+                let right = handle_end + Vec3::new(0.28, 0.0, -0.02);
+                cyl(&mut b, left, right, 0.012, wood_paint);
+                for k in 0..12 {
+                    let at = left.lerp(right, k as f32 / 11.0);
+                    cyl(
+                        &mut b,
+                        at,
+                        at + Vec3::new(0.0, -0.07, -0.03),
+                        0.005,
+                        move |_| metal,
+                    );
+                }
+            }
+        },
+    }
+    Built {
+        body: b.build(),
+        blade,
+        rest,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shipped_hands_load_with_their_handles() {
+        for (name, holds) in [("open", false), ("grip", true), ("fist", true)] {
+            let model = hand_model(name).unwrap_or_else(|| panic!("assets/hands/{name}.glb"));
+            assert_eq!(model.stick.is_some(), holds, "{name}");
+            if let Some(stick) = model.stick {
+                let length = stick.held.distance(stick.free);
+                assert!((0.1..0.6).contains(&length), "{name}: {length}");
+                assert!((0.005..0.05).contains(&stick.radius), "{name}");
+                // The held end is the one nearer the hand.
+                assert!(stick.held.length() < stick.free.length(), "{name}");
             }
         }
     }
-    (b.build(), blade)
 }

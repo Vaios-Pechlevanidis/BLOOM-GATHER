@@ -191,7 +191,9 @@ profiling ever shows a need.
   (`src/rendering/beds.rs`). The meadow near the player is laid with tiles of
   a modelled lawn (`assets/lawn/lawn.glb`, cut by `scripts/lawn_tile.py`;
   `src/rendering/lawn.rs`). Every tree is a modelled one
-  (`assets/trees/tree.glb`, used by `meshes::tree_variants`).
+  (`assets/trees/tree.glb`, used by `meshes::tree_variants`). The
+  first-person hands are modelled too (`assets/hands/*.glb`, prepared by
+  `scripts/hand_model.py`, used by `src/viewmodel.rs`).
 
 ## 7. Flower world (implemented in Phase B)
 
@@ -229,7 +231,9 @@ profiling ever shows a need.
   updated this frame) rather than `GlobalTransform`, which would lag a frame.
 * **Viewmodel:** a second `Camera3d` (order 1, no clear, own depth) parented
   to the main camera renders render layer 1 only, so hands and tools never
-  clip into the world. The sun is on both layers. Models and poses are
+  clip into the world. The sun is on both layers. The hands are models from
+  `assets/hands` (open hand, a loose grip for scissors and hand rake, a fist
+  round the cart rake's pole); the tools in them and the poses are
   procedural; animations are driven by real game events (a pick happened),
   not by key presses.
 

@@ -29,6 +29,28 @@ impl MeshBuilder {
     /// Append `mesh` transformed by `transform`, colouring each vertex with
     /// `paint(local_position)`.
     pub fn add(&mut self, mesh: &Mesh, transform: Transform, paint: impl Fn(Vec3) -> LinearRgba) {
+        self.add_with(mesh, transform, |_, local| paint(local).to_f32_array());
+    }
+
+    /// Append `mesh` transformed by `transform`, keeping its own vertex
+    /// colours (white where it has none).
+    pub fn add_coloured(&mut self, mesh: &Mesh, transform: Transform) {
+        let colors = match mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
+            Some(VertexAttributeValues::Float32x4(c)) => c.clone(),
+            _ => Vec::new(),
+        };
+        self.add_with(mesh, transform, |i, _| {
+            let c = colors.get(i).copied().unwrap_or([1.0; 4]);
+            [c[0], c[1], c[2], 1.0]
+        });
+    }
+
+    fn add_with(
+        &mut self,
+        mesh: &Mesh,
+        transform: Transform,
+        color: impl Fn(usize, Vec3) -> [f32; 4],
+    ) {
         let Some(VertexAttributeValues::Float32x3(positions)) =
             mesh.attribute(Mesh::ATTRIBUTE_POSITION)
         else {
@@ -40,13 +62,13 @@ impl MeshBuilder {
         };
         let base = self.positions.len() as u32;
         let inv_scale = transform.scale.recip();
-        for (p, n) in positions.iter().zip(&normals) {
+        for (i, (p, n)) in positions.iter().zip(&normals).enumerate() {
             let local = Vec3::from(*p);
             self.positions.push(transform.transform_point(local).into());
             // Inverse-transpose for non-uniform scale: divide, rotate, renormalise.
             let normal = (transform.rotation * (Vec3::from(*n) * inv_scale)).normalize_or_zero();
             self.normals.push(normal.into());
-            self.colors.push(paint(local).to_f32_array());
+            self.colors.push(color(i, local));
         }
         match mesh.indices() {
             Some(indices) => self.indices.extend(indices.iter().map(|i| base + i as u32)),

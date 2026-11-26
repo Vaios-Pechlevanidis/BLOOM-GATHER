@@ -336,7 +336,8 @@ model, see `assets/flowers/README.md`)
 - Landmarks, workshop cottage and furniture, bouquets, glints, butterflies, bees, clouds: procedural meshes
 - Gates, bridges, lanterns, water surfaces, mushrooms, glow plants, light shafts, petals, fireflies,
   stars and moon: procedural meshes
-- First-person hand and tools: procedural meshes in `src/viewmodel.rs`
+- First-person tools (scissors, basket, rake tines, cart rake): procedural meshes in `src/viewmodel.rs`;
+  the hands are models (`assets/hands/README.md`)
 - Terrain: vertex colours only (no textures)
 - Water: flat translucent surfaces (no waves or reflections)
 - UI font: Bevy's built-in monospace (lacks glyphs such as `·` and `°`; keep UI strings ASCII)

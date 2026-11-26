@@ -72,6 +72,14 @@ pub fn bed_model(name: &str) -> Option<&'static [u8]> {
         .map(|(_, b)| *b)
 }
 
+/// A first-person hand model from `assets/hands/<name>.glb`, if there is one.
+pub fn hand_model(name: &str) -> Option<&'static [u8]> {
+    super::embedded::HANDS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, b)| *b)
+}
+
 fn plant(species: &FlowerSpecies, name: &str) -> Option<Plant> {
     let bytes = super::embedded::MODELS
         .iter()
