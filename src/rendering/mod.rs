@@ -12,6 +12,7 @@ pub mod daylight;
 mod grass;
 mod landmarks;
 mod lawn;
+mod look;
 pub mod meshes;
 mod scene;
 mod scenery;
@@ -43,6 +44,7 @@ impl Plugin for RenderingPlugin {
             bouquets::BouquetsPlugin,
             beds::BedsPlugin,
             scenery::SceneryPlugin,
+            look::LookPlugin,
         ));
     }
 }
