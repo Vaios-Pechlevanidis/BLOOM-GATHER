@@ -271,13 +271,43 @@ fn terrain_chunk(
 
 pub const TREE_MODEL_HEIGHT: f32 = 6.0;
 
+/// A copy of a tree model with its leaves (the greenish vertex colours)
+/// recoloured by `f`; bark stays as it is.
+fn tint_leaves(tree: &Mesh, f: impl Fn(Vec3) -> Vec3) -> Mesh {
+    let mut out = tree.clone();
+    if let Some(VertexAttributeValues::Float32x4(colors)) = out.attribute_mut(Mesh::ATTRIBUTE_COLOR)
+    {
+        for c in colors.iter_mut() {
+            let v = Vec3::new(c[0], c[1], c[2]);
+            if v.y > v.x * 1.05 && v.y > v.z {
+                let t = f(v);
+                c[0] = t.x;
+                c[1] = t.y;
+                c[2] = t.z;
+            }
+        }
+    }
+    out
+}
+
 /// Four tree silhouettes: round oak, tall poplar, a green tree dotted with
 /// blooms, and a tree in full blossom (canopy in the accent colour). If the
 /// game ships a tree model, all four are that model.
 pub fn tree_variants(palette: &RegionPalette) -> [Mesh; 4] {
     // A modelled tree (`assets/trees/tree.glb`) replaces all of them.
     if let Some(tree) = crate::flowers::imported::tree_mesh(TREE_MODEL_HEIGHT) {
-        return [tree.clone(), tree.clone(), tree.clone(), tree];
+        // Three leaf colours so a row of trees isn't one tree repeated, and
+        // the blossom tree in the region's accent colour.
+        let blossom = lin(color(palette.accent));
+        return [
+            tree.clone(),
+            tint_leaves(&tree, |c| c * Vec3::new(1.14, 1.08, 0.8)),
+            tint_leaves(&tree, |c| c * Vec3::new(0.8, 0.9, 0.98)),
+            tint_leaves(&tree, |c| {
+                let b = Vec3::new(blossom.red, blossom.green, blossom.blue);
+                c.lerp(b * (0.6 + c.length()), 0.6)
+            }),
+        ];
     }
     let bark_dark = lin(Color::srgb_u8(104, 80, 62));
     let bark_light = lin(Color::srgb_u8(146, 114, 86));

@@ -219,7 +219,13 @@ fn ensure_scene(
             MeshMaterial3d(tree_material.clone()),
             Transform::from_xyz(tree.position.x, tree.base - 0.15, tree.position.y)
                 .with_rotation(Quat::from_rotation_y(tree.yaw))
-                .with_scale(Vec3::splat(tree.height / TREE_MODEL_HEIGHT)),
+                .with_scale({
+                    // Some crowns broader, some slimmer.
+                    let h = tree.height / TREE_MODEL_HEIGHT;
+                    let w = 1.0
+                        + 0.18 * meshes::hash3(Vec3::new(tree.position.y, 1.3, tree.position.x));
+                    Vec3::new(h * w, h, h * w)
+                }),
         ));
     }
     let rock_meshes = meshes::rock_variants(&palette).map(|m| meshes.add(m));

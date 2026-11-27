@@ -281,10 +281,16 @@ fn spawn_grass(
                 }
                 z += SPACING;
             }
-            if let Some(mesh) = b.into_mesh() {
+            if let Some(mut mesh) = b.into_mesh() {
+                // Placed at its own middle: the dithered fade measures from
+                // the mesh's origin, not its bounding box.
+                let middle = lo + Vec2::splat(CHUNK / 2.0);
+                let origin = Vec3::new(middle.x, 0.0, middle.y);
+                mesh.translate_by(-origin);
                 commands.spawn((
                     SceneEntity,
                     GrassChunk,
+                    Transform::from_translation(origin),
                     Mesh3d(meshes.add(mesh)),
                     MeshMaterial3d(material.clone()),
                     NotShadowCaster,

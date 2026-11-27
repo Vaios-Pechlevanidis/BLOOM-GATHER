@@ -56,9 +56,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.color = vec4<f32>(vertex.color.rgb, 1.0);
     @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_in.instance_index;
+    // Fade by each vertex's own distance (not the mesh origin's): a chunk
+    // of grass then thins out blade by blade with distance instead of
+    // dissolving all at once as a square.
     @if(VISIBILITY_RANGE_DITHER)
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
-        vertex_in.instance_index, world_from_local[3]);
+        vertex_in.instance_index, world);
 
     return out;
 }

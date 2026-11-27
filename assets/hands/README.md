@@ -10,7 +10,10 @@ The player's hands, in a cream knitted sleeve with a sage cuff:
   (the game draws the long pole and the rake head through the fist).
 
 Each file has a mesh `hand` and, for the grips, a mesh `stick` (the handle;
-the game finds its axis). Models are embedded into the game at build time:
+the game finds its axis). The models end a short way behind the cuff; the
+game carries the sleeve on as a knitted forearm in the sleeve's own colour
+(`extend_sleeve` in `src/viewmodel.rs`), so no open sleeve end shows when the
+hand reaches forward. Models are embedded into the game at build time:
 rebuild after changing one. Without a file the game draws its simple
 procedural hand instead (`src/viewmodel.rs`).
 

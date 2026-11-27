@@ -12,6 +12,7 @@
 //! those edges it is cut triangle by triangle, so they look natural.
 
 use bevy::asset::RenderAssetUsages;
+use bevy::camera::visibility::VisibilityRange;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -39,7 +40,7 @@ pub fn has_lawn() -> bool {
 }
 
 /// Tiles per chunk side.
-const CHUNK_TILES: usize = 8;
+const CHUNK_TILES: usize = 4;
 /// Chunks are dropped this much beyond the lawn's reach (metres), so
 /// walking along the edge doesn't rebuild them over and over.
 const SLACK: f32 = 6.0;
@@ -52,6 +53,13 @@ fn reach(q: Quality) -> f32 {
         Quality::Medium => 8.0,
         Quality::High => 9.0,
     }
+}
+
+/// Around the end of its reach the lawn thins out blade by blade (dithered,
+/// per vertex in the wind shader) into the terrain instead of ending in a
+/// line: over this share of the reach.
+fn fade(reach: f32) -> f32 {
+    reach * 0.35
 }
 
 /// The lawn tile, in its own colours.
@@ -176,24 +184,35 @@ fn keep_lawn(
     let Ok(camera) = cameras.single() else { return };
     let eye = Vec2::new(camera.translation().x, camera.translation().z);
     let reach = reach(quality);
+    let fade = fade(reach);
     for chunk in &mut lawn.chunks {
         let distance = chunk.centre.distance(eye);
-        if chunk.entity.is_none() && distance < reach {
-            let Some(mesh) = build(&chunk.tiles, model, &scene.layout) else {
+        if chunk.entity.is_none() && distance < reach + fade / 2.0 {
+            let Some(mut mesh) = build(&chunk.tiles, model, &scene.layout) else {
                 continue;
             };
+            // Placed at its own middle: the dithered fade measures from
+            // the mesh's origin.
+            let origin = Vec3::new(chunk.centre.x, 0.0, chunk.centre.y);
+            mesh.translate_by(-origin);
             chunk.entity = Some(
                 commands
                     .spawn((
                         SceneEntity,
                         LawnMesh,
+                        Transform::from_translation(origin),
                         Mesh3d(meshes.add(mesh)),
                         MeshMaterial3d(material.clone()),
                         NotShadowCaster,
+                        VisibilityRange {
+                            start_margin: 0.0..0.0,
+                            end_margin: (reach - fade / 2.0)..(reach + fade / 2.0),
+                            use_aabb: true,
+                        },
                     ))
                     .id(),
             );
-        } else if distance > reach + SLACK {
+        } else if distance > reach + fade / 2.0 + SLACK {
             if let Some(e) = chunk.entity.take() {
                 commands.entity(e).despawn();
             }
@@ -223,7 +242,17 @@ fn grows(layout: &RegionLayout, p: Vec2) -> bool {
         || layout
             .landmarks
             .iter()
-            .any(|l| l.position.distance(p) < l.footprint))
+            .any(|l| l.position.distance(p) < lawn_clearance(l)))
+}
+
+/// How close to a landmark the lawn grows: right up to a lantern's foot
+/// (its footprint keeps flowers and props further away, which would leave a
+/// bald patch round every post), otherwise its whole footprint.
+fn lawn_clearance(l: &bloom_core::world::layout::Landmark) -> f32 {
+    match l.kind {
+        bloom_core::world::layout::LandmarkKind::Lantern => 0.2,
+        _ => l.footprint,
+    }
 }
 
 /// Tiles of `side` metres over the walkable area (up to the fence), in
@@ -294,10 +323,11 @@ fn build(tiles: &[Tile], model: &LawnModel, layout: &RegionLayout) -> Option<Mes
         {
             let local = turn * Vec3::new(p.x, 0.0, p.z);
             let at = tile.at + Vec2::new(local.x, local.z);
-            let y = layout.terrain.height_at(at) + p.y - 0.01;
+            let patch = Patch::at(at);
+            let y = layout.terrain.height_at(at) + p.y * patch.height - 0.01;
             positions.push([at.x, y, at.y]);
             normals.push((turn * *n).to_array());
-            colors.push(*c);
+            colors.push(patch.tint(*c));
         }
         for t in tile_model.indices.chunks_exact(3) {
             if tile.partial {
@@ -316,6 +346,17 @@ fn build(tiles: &[Tile], model: &LawnModel, layout: &RegionLayout) -> Option<Mes
             indices.extend(t.iter().map(|&i| base + i));
         }
     }
+    for tile in tiles {
+        add_wildflowers(
+            tile,
+            model.side,
+            layout,
+            &mut positions,
+            &mut normals,
+            &mut colors,
+            &mut indices,
+        );
+    }
     if indices.is_empty() {
         return None;
     }
@@ -331,9 +372,154 @@ fn build(tiles: &[Tile], model: &LawnModel, layout: &RegionLayout) -> Option<Mes
     )
 }
 
+/// Smooth value noise in 0..1, about one feature per `scale` metres.
+fn noise(p: Vec2, scale: f32, seed: f32) -> f32 {
+    let q = p / scale;
+    let i = q.floor();
+    let f = q - i;
+    let h = |x: f32, y: f32| {
+        let v = ((i.x + x) * 127.1 + (i.y + y) * 311.7 + seed * 74.7).sin() * 43_758.547;
+        v.fract().abs()
+    };
+    let u = f * f * (Vec2::splat(3.0) - 2.0 * f);
+    let (a, b, c, d) = (h(0.0, 0.0), h(1.0, 0.0), h(0.0, 1.0), h(1.0, 1.0));
+    a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y
+}
+
+/// How the lawn grows at a spot: patches of longer, lusher grass and of
+/// shorter, sun-dried grass, so the meadow isn't one even carpet.
+struct Patch {
+    /// Blade height factor.
+    height: f32,
+    /// 0 lush, 1 dry.
+    dry: f32,
+    /// Darker where the grass is thick.
+    shade: f32,
+}
+
+impl Patch {
+    fn at(p: Vec2) -> Self {
+        let tall = noise(p, 2.6, 1.0) * 0.7 + noise(p, 0.9, 2.0) * 0.3;
+        let dry = noise(p, 4.5, 3.0);
+        let dry = ((dry - 0.45) * 2.2).clamp(0.0, 1.0);
+        Self {
+            height: 0.72 + 0.75 * tall * tall,
+            dry: dry * (1.0 - 0.6 * tall),
+            shade: 0.88 + 0.16 * noise(p, 1.3, 4.0),
+        }
+    }
+
+    /// The tile's colour (alpha: sway weight) for this patch.
+    fn tint(&self, c: [f32; 4]) -> [f32; 4] {
+        // Sun-dried grass: yellower and lighter.
+        let dry = Vec3::new(1.32, 1.08, 0.78);
+        let k = Vec3::ONE.lerp(dry, self.dry * 0.55) * self.shade;
+        [c[0] * k.x, c[1] * k.y, c[2] * k.z, c[3]]
+    }
+}
+
+/// A few tiny meadow flowers (daisies, buttercups, clover heads) in the
+/// lawn, thicker in some patches than others. Pure decoration: far smaller
+/// than anything that can be picked.
+fn add_wildflowers(
+    tile: &Tile,
+    side: f32,
+    layout: &RegionLayout,
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    colors: &mut Vec<[f32; 4]>,
+    indices: &mut Vec<u32>,
+) {
+    let density = noise(tile.at, 3.3, 5.0);
+    let density = ((density - 0.5) * 2.0).max(0.0);
+    let mut rng = SplitMix64::new(
+        (tile.at.x * 1000.0) as i64 as u64 ^ ((tile.at.y * 1000.0) as i64 as u64).rotate_left(29),
+    );
+    let count = (density * density * 4.0 + rng.next_f32()) as usize;
+    let srgb = |r: u8, g: u8, b: u8| Color::srgb_u8(r, g, b).to_linear().to_f32_array();
+    let kinds: [([f32; 4], [f32; 4], f32); 3] = [
+        // Daisy: white petals round a yellow eye.
+        (srgb(246, 244, 236), srgb(240, 196, 60), 0.022),
+        // Buttercup.
+        (srgb(250, 214, 52), srgb(236, 170, 30), 0.016),
+        // Clover head.
+        (srgb(226, 170, 206), srgb(206, 140, 184), 0.014),
+    ];
+    let stem = srgb(70, 112, 40);
+    for _ in 0..count {
+        let at = tile.at + (Vec2::new(rng.next_f32(), rng.next_f32()) - 0.5) * side;
+        if !grows(layout, at) {
+            continue;
+        }
+        let (petal, eye, radius) = kinds[rng.below(3) as usize];
+        let ground = layout.terrain.height_at(at);
+        let height = (0.07 + 0.07 * rng.next_f32()) * Patch::at(at).height;
+        let lean = Vec2::from_angle(rng.range_f32(0.0, std::f32::consts::TAU)) * 0.02;
+        let top = Vec3::new(at.x + lean.x, ground + height, at.y + lean.y);
+        // Stem: a thin crossed pair of quads.
+        for dir in [Vec3::X, Vec3::Z] {
+            let base = positions.len() as u32;
+            let w = dir * 0.0025;
+            let root = Vec3::new(at.x, ground - 0.01, at.y);
+            for (p, sway) in [
+                (root - w, 0.0),
+                (root + w, 0.0),
+                (top + w, 1.0),
+                (top - w, 1.0),
+            ] {
+                positions.push(p.to_array());
+                normals.push(dir.cross(Vec3::Y).to_array());
+                colors.push([stem[0], stem[1], stem[2], sway]);
+            }
+            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
+        // Head: a little fan facing up, the eye in the middle.
+        let base = positions.len() as u32;
+        positions.push((top + Vec3::Y * 0.004).to_array());
+        normals.push([0.0, 1.0, 0.0]);
+        colors.push([eye[0], eye[1], eye[2], 1.0]);
+        const RIM: u32 = 7;
+        let spin = rng.range_f32(0.0, std::f32::consts::TAU);
+        for k in 0..RIM {
+            let a = spin + k as f32 / RIM as f32 * std::f32::consts::TAU;
+            let o = Vec2::from_angle(a) * radius;
+            positions.push((top + Vec3::new(o.x, -0.002, o.y)).to_array());
+            normals.push([0.0, 1.0, 0.0]);
+            colors.push([petal[0], petal[1], petal[2], 1.0]);
+        }
+        for k in 0..RIM {
+            indices.extend_from_slice(&[base, base + 1 + (k + 1) % RIM, base + 1 + k]);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn noise_is_smooth_and_in_range() {
+        let mut last = noise(Vec2::ZERO, 2.0, 1.0);
+        for i in 1..400 {
+            let n = noise(Vec2::new(i as f32 * 0.01, 0.3), 2.0, 1.0);
+            assert!((0.0..=1.0).contains(&n));
+            assert!((n - last).abs() < 0.05, "no jumps");
+            last = n;
+        }
+    }
+
+    #[test]
+    fn patches_vary_but_stay_grass() {
+        let patches: Vec<Patch> = (0..200)
+            .map(|i| Patch::at(Vec2::new(i as f32 * 0.7, i as f32 * 0.3)))
+            .collect();
+        let (lo, hi) = patches.iter().fold((f32::MAX, f32::MIN), |(l, h), p| {
+            (l.min(p.height), h.max(p.height))
+        });
+        assert!(lo >= 0.7 && hi <= 1.5 && hi - lo > 0.3, "{lo}..{hi}");
+        assert!(patches.iter().any(|p| p.dry > 0.2));
+        assert!(patches.iter().any(|p| p.dry == 0.0));
+    }
 
     #[test]
     fn the_lawn_model_loads() {

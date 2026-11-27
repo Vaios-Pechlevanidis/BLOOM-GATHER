@@ -506,14 +506,103 @@ fn hand_model(name: &str) -> Option<HandModel> {
     };
     let mut hand = None;
     let mut stick = None;
-    for (part, plant) in parts {
+    for (part, mut plant) in parts {
         match part.as_str() {
-            "hand" => hand = Some(plant.into_mesh()),
+            "hand" => {
+                extend_sleeve(&mut plant);
+                hand = Some(plant.into_mesh());
+            }
             "stick" => stick = Some(Stick::measure(plant)),
             _ => {}
         }
     }
     Some(HandModel { hand: hand?, stick })
+}
+
+/// How far the forearm runs on past the end of the modelled sleeve (metres).
+const FOREARM: f32 = 0.5;
+
+/// The hand models end a hand's length behind the wrist, in an open sleeve
+/// end that shows whenever the hand reaches forward. Carry the sleeve on as
+/// a knitted forearm that runs back out of view: an elliptical tube that
+/// starts inside the modelled sleeve (no seam), follows its axis and widens
+/// slightly towards the elbow, in the sleeve's own colour.
+fn extend_sleeve(plant: &mut Plant) {
+    let p = &plant.positions;
+    if p.is_empty() {
+        return;
+    }
+    let back = p.iter().fold(f32::MIN, |m, q| m.max(q.z));
+    let slice = |from: f32, to: f32| -> Vec<usize> {
+        (0..p.len())
+            .filter(|&i| (back - from..=back - to).contains(&p[i].z))
+            .collect()
+    };
+    let centre = |idx: &[usize]| idx.iter().map(|&i| p[i]).sum::<Vec3>() / idx.len().max(1) as f32;
+    // Inside the sleeve, a little before its end, and right at the end.
+    let inner = slice(0.06, 0.025);
+    let end = slice(0.02, 0.0);
+    if inner.len() < 8 || end.is_empty() {
+        return;
+    }
+    let start = centre(&inner);
+    let axis = ((centre(&end) - start).normalize_or(Vec3::Z) + Vec3::Z).normalize();
+    // Frame round the axis: `side` stays level, `up` towards the back of
+    // the hand.
+    let side = Vec3::Y.cross(axis).normalize_or(Vec3::X);
+    let up = axis.cross(side);
+    let (mut rx, mut ry) = (0.0f32, 0.0f32);
+    for &i in &inner {
+        let d = p[i] - start;
+        rx = rx.max(d.dot(side).abs());
+        ry = ry.max(d.dot(up).abs());
+    }
+    // The knit's light ribs: the brighter half of the sleeve's colours (the
+    // darker ones are the baked grooves between the ribs).
+    let mut colours: Vec<Vec3> = inner
+        .iter()
+        .map(|&i| {
+            let c = plant.colors[i];
+            Vec3::new(c[0], c[1], c[2])
+        })
+        .collect();
+    colours.sort_by(|a, b| a.element_sum().total_cmp(&b.element_sum()));
+    let light = &colours[colours.len() / 2..];
+    let colour = light.iter().sum::<Vec3>() / light.len() as f32;
+    // Just inside the sleeve where it starts, so it never pokes through.
+    let (rx, ry) = (rx * 0.95, ry * 0.95);
+
+    const AROUND: usize = 28;
+    const ALONG: usize = 8;
+    let first = plant.positions.len() as u32;
+    for j in 0..=ALONG {
+        let t = j as f32 / ALONG as f32;
+        let at = start + axis * (t * (FOREARM + (back - start.z)));
+        let grow = 1.0 + 0.15 * t;
+        for k in 0..AROUND {
+            let a = k as f32 / AROUND as f32 * std::f32::consts::TAU;
+            let (s, c) = a.sin_cos();
+            let offset = side * (c * rx * grow) + up * (s * ry * grow);
+            plant.positions.push(at + offset);
+            // Normal of the ellipse at this point.
+            let n = (side * (c / rx) + up * (s / ry)).normalize_or(up);
+            plant.normals.push(n);
+            // Knitted ribs along the arm.
+            let rib = 0.86 + 0.14 * (a * 9.0).cos().abs();
+            let c = colour * rib;
+            plant.colors.push([c.x, c.y, c.z, 1.0]);
+        }
+    }
+    for j in 0..ALONG as u32 {
+        for k in 0..AROUND as u32 {
+            let k1 = (k + 1) % AROUND as u32;
+            let a = first + j * AROUND as u32;
+            let b = a + AROUND as u32;
+            plant
+                .indices
+                .extend_from_slice(&[a + k, b + k, a + k1, a + k1, b + k, b + k1]);
+        }
+    }
 }
 
 impl Stick {
@@ -845,6 +934,33 @@ mod tests {
                 // The held end is the one nearer the hand.
                 assert!(stick.held.length() < stick.free.length(), "{name}");
             }
+        }
+    }
+
+    #[test]
+    fn the_sleeve_runs_on_out_of_view() {
+        for name in ["open", "grip", "fist"] {
+            let model = hand_model(name).unwrap();
+            let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+                model.hand.attribute(Mesh::ATTRIBUTE_POSITION)
+            else {
+                panic!("{name}: positions");
+            };
+            // The model ends 0.15 m behind its middle; the forearm carries on.
+            let back = p.iter().fold(f32::MIN, |m, q| m.max(q[2]));
+            assert!(back > 0.15 + FOREARM * 0.8, "{name}: {back}");
+            // Still a sleeve, not a sail: no wider than a forearm round its
+            // own axis (which may lean a little to follow the sleeve).
+            let ring: Vec<Vec3> = p
+                .iter()
+                .map(|q| Vec3::from(*q))
+                .filter(|q| (q.z - 0.4).abs() < 0.04)
+                .collect();
+            let centre = ring.iter().sum::<Vec3>() / ring.len() as f32;
+            let wide = ring
+                .iter()
+                .fold(0.0f32, |m, q| m.max((*q - centre).truncate().length()));
+            assert!((0.02..0.12).contains(&wide), "{name}: {wide}");
         }
     }
 }
